@@ -58,5 +58,31 @@ export const assignGafcoreAccountType = createServerFn({ method: "POST" })
       return { ok: true, role: "demo" as const };
     }
 
+    /** Usuario normal: si saldo 0 y nunca hubo movimientos, otorgar 10 de bienvenida (evita filas 0 por re-registro / trigger). */
+    if (accountType === "user") {
+      const { data: creditRow } = await supabaseAdmin
+        .from("user_credits")
+        .select("balance")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const bal = creditRow?.balance ?? 0;
+      if (bal === 0) {
+        const { count, error: countErr } = await supabaseAdmin
+          .from("credit_transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
+        if (countErr) throw new Error(countErr.message);
+        if (!count) {
+          const { error: rpcErr } = await supabaseAdmin.rpc("add_credits", {
+            p_user_id: userId,
+            p_amount: 10,
+            p_reason: "welcome_grant",
+            p_metadata: {},
+          });
+          if (rpcErr) throw new Error(rpcErr.message);
+        }
+      }
+    }
+
     return { ok: true, role: "user" as const };
   });

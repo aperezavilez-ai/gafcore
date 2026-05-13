@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { GafCoreIDE } from "@/components/gafcore/GafCoreIDE";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useServerFn } from "@tanstack/react-start";
+import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 
 export const Route = createFileRoute("/gafcore_/app")({
   component: GafCoreAppPage,
@@ -14,10 +16,29 @@ export const Route = createFileRoute("/gafcore_/app")({
 
 function GafCoreAppPage() {
   const { user, loading: authLoading } = useAuth();
+  const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   // Reintento defensivo: tras un login con full reload, getSession puede tardar
   // unos ms en hidratar desde localStorage. Hasta confirmar, mostramos loader.
   const [graceChecking, setGraceChecking] = useState(true);
   const [hasSession, setHasSession] = useState(false);
+
+  /** Asegura créditos de bienvenida si el backend los dejó en 0 (p. ej. cuenta ya existía). */
+  useEffect(() => {
+    if (authLoading || graceChecking) return;
+    if (!user?.id && !hasSession) return;
+    void (async () => {
+      const id = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
+      if (!id) return;
+      const k = `gafcore_welcome_sync_v1_${id}`;
+      if (typeof window !== "undefined" && sessionStorage.getItem(k)) return;
+      if (typeof window !== "undefined") sessionStorage.setItem(k, "1");
+      try {
+        await assignUserWelcome({ data: { accountType: "user" } });
+      } catch {
+        if (typeof window !== "undefined") sessionStorage.removeItem(k);
+      }
+    })();
+  }, [authLoading, graceChecking, user?.id, hasSession, assignUserWelcome]);
 
   useEffect(() => {
     if (authLoading) return;
