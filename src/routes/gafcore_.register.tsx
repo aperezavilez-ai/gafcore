@@ -1,3 +1,4 @@
+/** Confirmación por correo: solo en Supabase (Auth → Email → “Confirm email”). El cliente no la apaga. */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, Check } from "lucide-react";

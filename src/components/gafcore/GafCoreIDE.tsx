@@ -134,6 +134,17 @@ export function GafCoreIDE() {
       ? 100
       : Math.max(0, Math.min(100, (balance / monthlyAllowance) * 100));
 
+  /** Texto corto junto al historial: plan ya va aparte; esto son solo créditos. */
+  const toolbarCreditsLine = isAdmin
+    ? "∞"
+    : creditsLoading
+      ? "…"
+      : isFairUseCreadorPlan || isUnlimitedDaily
+        ? "Ilimitado"
+        : monthlyAllowance > 0
+          ? `${balance.toLocaleString()}/${monthlyAllowance.toLocaleString()}`
+          : `${balance.toLocaleString()} créd.`;
+
   const refreshProjects = async () => {
     const list = await listProjects();
     setProjects(list);
@@ -203,6 +214,10 @@ export function GafCoreIDE() {
     setPreviewKey((k) => k + 1);
     toast.success("Preview recargado");
   };
+
+  useEffect(() => {
+    if (!isAdmin && secretsOpen) setSecretsOpen(false);
+  }, [isAdmin, secretsOpen]);
 
   useEffect(() => {
     (async () => {
@@ -551,7 +566,7 @@ export function GafCoreIDE() {
               </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
-          <div className="ml-1 flex min-w-0 max-w-[200px] items-center gap-1.5">
+          <div className="ml-1 flex min-w-0 max-w-[min(320px,calc(100vw-420px))] items-center gap-1.5">
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
@@ -560,23 +575,26 @@ export function GafCoreIDE() {
             >
               <History className="h-4 w-4" />
             </button>
-            <span
-              className="truncate text-[11px] font-semibold leading-tight text-foreground"
-              title={planDisplayLabel}
+            <div
+              className="min-w-0 leading-tight"
+              title={`${planDisplayLabel} — ${creditsLabel}`}
             >
-              {planDisplayLabel}
-            </span>
+              <div className="truncate text-[11px] font-semibold text-foreground">{planDisplayLabel}</div>
+              <div className="truncate text-[10px] font-medium tabular-nums text-muted-foreground">
+                {isAdmin ? "Créditos: ilimitados" : `Créditos: ${toolbarCreditsLine}`}
+              </div>
+            </div>
           </div>
-          {isAdmin && (
+          {isAdmin ? (
             <button
               type="button"
               onClick={() => setSecretsOpen(true)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Secretos del proyecto"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Secretos del proyecto (solo administración)"
             >
               <KeyRound className="h-4 w-4" />
             </button>
-          )}
+          ) : null}
           {isAdmin && (
             <button
               onClick={async () => {
@@ -831,7 +849,7 @@ export function GafCoreIDE() {
           setPreviewKey((k) => k + 1);
         }}
       />
-      <SecretsDialog open={secretsOpen} onOpenChange={setSecretsOpen} />
+      {isAdmin ? <SecretsDialog open={secretsOpen} onOpenChange={setSecretsOpen} /> : null}
       <ConnectorsDialog open={connectorsOpen} onOpenChange={setConnectorsOpen} />
       <GafCoreAnalyticsDialog open={analyticsOpen} onOpenChange={setAnalyticsOpen} userId={user?.id} />
       <GafCoreAuthDialog open={authOpen} onOpenChange={setAuthOpen} initialMode={authMode} />

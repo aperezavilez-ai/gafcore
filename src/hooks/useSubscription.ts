@@ -70,15 +70,23 @@ export function useSubscription(userId: string | undefined) {
     };
 
     const fetchAdmin = () => {
-      supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .eq("role", "admin")
-        .maybeSingle()
-        .then(({ data }) => {
-          setIsAdmin(!!data);
+      void (async () => {
+        const { data: rpcAdmin, error: rpcErr } = await supabase.rpc("has_role", {
+          _user_id: userId,
+          _role: "admin",
         });
+        if (!rpcErr && typeof rpcAdmin === "boolean") {
+          setIsAdmin(rpcAdmin);
+          return;
+        }
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userId)
+          .eq("role", "admin")
+          .maybeSingle();
+        setIsAdmin(!!data);
+      })();
     };
 
     fetchSub();
@@ -97,7 +105,17 @@ export function useSubscription(userId: string | undefined) {
           table: "subscriptions",
           filter: `user_id=eq.${userId}`,
         },
-        () => fetchSub()
+        () => fetchSub(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_roles",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => fetchAdmin(),
       )
       .subscribe();
 
