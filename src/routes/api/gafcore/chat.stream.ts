@@ -15,6 +15,7 @@ import {
   type ProjFile,
 } from "@/lib/gafcore-chat.shared";
 import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
+import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 
 /**
  * POST /api/gafcore/chat/stream
@@ -77,28 +78,31 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
           );
         }
 
-        const { data: credit, error: creditErr } = await supabaseAdmin.rpc("consume_credits", {
-          p_user_id: userId,
-          p_amount: COST_PER_REQUEST,
-          p_reason: "gafcore_chat_stream",
-          p_metadata: {
-            instruction_len: data.instruction.length,
-            model,
-            ctx_files: ctxFiles.length,
-            subset,
-          } as never,
-        });
-        if (creditErr) {
-          return new Response(JSON.stringify({ error: "credits_error" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
+        const skipCredits = await isGafcoreAdminUser(userId);
+        if (!skipCredits) {
+          const { data: credit, error: creditErr } = await supabaseAdmin.rpc("consume_credits", {
+            p_user_id: userId,
+            p_amount: COST_PER_REQUEST,
+            p_reason: "gafcore_chat_stream",
+            p_metadata: {
+              instruction_len: data.instruction.length,
+              model,
+              ctx_files: ctxFiles.length,
+              subset,
+            } as never,
           });
-        }
-        if (!(credit as any)?.ok) {
-          return new Response(JSON.stringify({ error: "insufficient_credits" }), {
-            status: 402,
-            headers: { "Content-Type": "application/json" },
-          });
+          if (creditErr) {
+            return new Response(JSON.stringify({ error: "credits_error" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if (!(credit as { ok?: boolean } | null)?.ok) {
+            return new Response(JSON.stringify({ error: "insufficient_credits" }), {
+              status: 402,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
         }
 
         const upstream = await postChatCompletions({
@@ -109,12 +113,14 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
         });
 
         if (!upstream.ok) {
-          await supabaseAdmin.rpc("add_credits", {
-            p_user_id: userId,
-            p_amount: COST_PER_REQUEST,
-            p_reason: "gafcore_chat_stream_refund",
-            p_metadata: { status: upstream.status } as never,
-          });
+          if (!skipCredits) {
+            await supabaseAdmin.rpc("add_credits", {
+              p_user_id: userId,
+              p_amount: COST_PER_REQUEST,
+              p_reason: "gafcore_chat_stream_refund",
+              p_metadata: { status: upstream.status } as never,
+            });
+          }
           const t = await upstream.text().catch(() => "");
           return new Response(JSON.stringify({ error: "upstream", detail: t.slice(0, 400) }), {
             status: upstream.status >= 400 ? upstream.status : 502,
@@ -123,12 +129,14 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
         }
 
         if (!upstream.body) {
-          await supabaseAdmin.rpc("add_credits", {
-            p_user_id: userId,
-            p_amount: COST_PER_REQUEST,
-            p_reason: "gafcore_chat_stream_refund",
-            p_metadata: { reason: "no_body" } as never,
-          });
+          if (!skipCredits) {
+            await supabaseAdmin.rpc("add_credits", {
+              p_user_id: userId,
+              p_amount: COST_PER_REQUEST,
+              p_reason: "gafcore_chat_stream_refund",
+              p_metadata: { reason: "no_body" } as never,
+            });
+          }
           return new Response(JSON.stringify({ error: "no_stream_body" }), {
             status: 502,
             headers: { "Content-Type": "application/json" },

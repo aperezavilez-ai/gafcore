@@ -109,8 +109,9 @@ export function GafCoreIDE() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [usersOpen, setUsersOpen] = useState(false);
-  const [userStats, setUserStats] = useState<{ registered: number; paid: number; active: number } | null>(null);
+  const [userStats, setUserStats] = useState<{ registered: number; connected: number; active24h: number } | null>(null);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [projectFolder, setProjectFolder] = useState<string>(() => {
     if (typeof window === "undefined") return "src";
     return localStorage.getItem("gafcore_project_folder") ?? "src";
@@ -600,10 +601,12 @@ export function GafCoreIDE() {
               onClick={async () => {
                 setUsersOpen(true);
                 setUsersLoading(true);
+                setUsersError(null);
                 try {
                   const stats = await getUserStats();
                   setUserStats(stats);
                 } catch (err) {
+                  setUsersError("No se pudieron cargar las estadísticas");
                   toast.error("No se pudieron cargar las estadísticas");
                   console.error(err);
                 } finally {
@@ -860,10 +863,14 @@ export function GafCoreIDE() {
             <DialogTitle>Estadísticas de usuarios</DialogTitle>
             <DialogDescription>Resumen de la actividad en la plataforma.</DialogDescription>
           </DialogHeader>
-          {usersLoading || !userStats ? (
+          {usersLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
+          ) : usersError ? (
+            <p className="py-2 text-sm text-muted-foreground">{usersError}</p>
+          ) : !userStats ? (
+            <p className="py-2 text-sm text-muted-foreground">Aun no hay datos disponibles.</p>
           ) : (
             <div className="grid grid-cols-3 gap-3 py-2">
               <div className="rounded-lg border p-3 text-center">
@@ -871,11 +878,11 @@ export function GafCoreIDE() {
                 <div className="mt-1 text-[11px] text-muted-foreground">Registrados</div>
               </div>
               <div className="rounded-lg border p-3 text-center">
-                <div className="text-2xl font-bold">{userStats.paid.toLocaleString()}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">Pagaron</div>
+                <div className="text-2xl font-bold">{userStats.connected.toLocaleString()}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">Conectados (30 min)</div>
               </div>
               <div className="rounded-lg border p-3 text-center">
-                <div className="text-2xl font-bold">{userStats.active.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{userStats.active24h.toLocaleString()}</div>
                 <div className="mt-1 text-[11px] text-muted-foreground">Activos (24h)</div>
               </div>
             </div>

@@ -6,6 +6,7 @@ import { jsonOk, jsonError, requireApiAuth, requireScope } from "./-_auth";
 import { enforceRateLimit, AI_LIMIT } from "./-_ratelimit";
 import { MODEL_FAST } from "@/lib/gafcore-chat.shared";
 import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
+import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 
 const BodySchema = z.object({
   prompt: z.string().min(1).max(8000),
@@ -50,16 +51,18 @@ export const Route = createFileRoute("/api/v1/ai/generate")({
           return jsonError(500, "ai_not_configured", "AI is not configured (set OPENROUTER_API_KEY or OPENAI_API_KEY).");
         }
 
-        // Cobrar créditos antes de llamar al modelo
-        const { data: credit, error: cErr } = await supabaseAdmin.rpc("consume_credits", {
-          p_user_id: auth.userId,
-          p_amount: COST,
-          p_reason: "api_v1_ai_generate",
-          p_metadata: { module },
-        });
-        if (cErr) return jsonError(500, "credits_error", "Could not verify credits.");
-        if (!(credit as any)?.ok) {
-          return jsonError(402, "insufficient_credits", "Not enough credits to perform this request.");
+        const skipCredits = await isGafcoreAdminUser(auth.userId);
+        if (!skipCredits) {
+          const { data: credit, error: cErr } = await supabaseAdmin.rpc("consume_credits", {
+            p_user_id: auth.userId,
+            p_amount: COST,
+            p_reason: "api_v1_ai_generate",
+            p_metadata: { module },
+          });
+          if (cErr) return jsonError(500, "credits_error", "Could not verify credits.");
+          if (!(credit as { ok?: boolean } | null)?.ok) {
+            return jsonError(402, "insufficient_credits", "Not enough credits to perform this request.");
+          }
         }
 
         const messages = [
@@ -80,13 +83,14 @@ export const Route = createFileRoute("/api/v1/ai/generate")({
         });
 
         if (!res.ok) {
-          // Reembolso si la llamada falla
-          await supabaseAdmin.rpc("add_credits", {
-            p_user_id: auth.userId,
-            p_amount: COST,
-            p_reason: "api_v1_ai_generate_refund",
-            p_metadata: { status: res.status },
-          });
+          if (!skipCredits) {
+            await supabaseAdmin.rpc("add_credits", {
+              p_user_id: auth.userId,
+              p_amount: COST,
+              p_reason: "api_v1_ai_generate_refund",
+              p_metadata: { status: res.status },
+            });
+          }
           if (res.status === 429) return jsonError(429, "ai_rate_limited", "AI rate limit reached.");
           if (res.status === 402)
             return jsonError(402, "ai_credits_exhausted", "AI provider credits exhausted.");

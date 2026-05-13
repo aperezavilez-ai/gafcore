@@ -18,6 +18,7 @@ import {
   type ProjFile,
 } from "@/lib/gafcore-chat.shared";
 import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
+import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -57,25 +58,28 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       return { reply: cached.reply, files: cached.files, balance: bal };
     }
 
-    const { data: credit, error: creditErr } = await supabaseAdmin.rpc("consume_credits", {
-      p_user_id: context.userId,
-      p_amount: COST_PER_REQUEST,
-      p_reason: "gafcore_chat",
-      p_metadata: {
-        instruction_len: data.instruction.length,
-        model,
-        ctx_files: ctxFiles.length,
-        subset,
-      } as never,
-    });
-    if (creditErr) {
-      console.error("consume_credits error:", creditErr);
-      throw new Error("No se pudo verificar tu saldo de créditos.");
-    }
-    if (!(credit as any)?.ok) {
-      const err: any = new Error("INSUFFICIENT_CREDITS");
-      err.code = "INSUFFICIENT_CREDITS";
-      throw err;
+    const skipCredits = await isGafcoreAdminUser(context.userId);
+    if (!skipCredits) {
+      const { data: credit, error: creditErr } = await supabaseAdmin.rpc("consume_credits", {
+        p_user_id: context.userId,
+        p_amount: COST_PER_REQUEST,
+        p_reason: "gafcore_chat",
+        p_metadata: {
+          instruction_len: data.instruction.length,
+          model,
+          ctx_files: ctxFiles.length,
+          subset,
+        } as never,
+      });
+      if (creditErr) {
+        console.error("consume_credits error:", creditErr);
+        throw new Error("No se pudo verificar tu saldo de créditos.");
+      }
+      if (!(credit as { ok?: boolean } | null)?.ok) {
+        const err: Error & { code?: string } = new Error("INSUFFICIENT_CREDITS");
+        err.code = "INSUFFICIENT_CREDITS";
+        throw err;
+      }
     }
 
     const res = await postChatCompletions({
@@ -85,12 +89,14 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     });
 
     if (!res.ok) {
-      await supabaseAdmin.rpc("add_credits", {
-        p_user_id: context.userId,
-        p_amount: COST_PER_REQUEST,
-        p_reason: "gafcore_chat_refund",
-        p_metadata: { status: res.status } as never,
-      });
+      if (!skipCredits) {
+        await supabaseAdmin.rpc("add_credits", {
+          p_user_id: context.userId,
+          p_amount: COST_PER_REQUEST,
+          p_reason: "gafcore_chat_refund",
+          p_metadata: { status: res.status } as never,
+        });
+      }
       const t = await res.text().catch(() => "");
       console.error("AI gateway error:", res.status, t);
       if (res.status === 429) throw new Error("Límite alcanzado, intenta en un momento.");

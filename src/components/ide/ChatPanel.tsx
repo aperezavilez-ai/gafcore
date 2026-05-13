@@ -34,6 +34,7 @@ import type { FileItem } from "@/components/ide/CodeEditor";
 import { CreditsOutModal } from "@/components/CreditsOutModal";
 import { supabase } from "@/integrations/supabase/client";
 import { useCredits } from "@/hooks/useCredits";
+import { useSubscription } from "@/hooks/useSubscription";
 import { Coins } from "lucide-react";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
@@ -224,6 +225,7 @@ export function ChatPanel({
 
 
   const { balance, isUnlimitedDaily, loading: creditsLoading, refresh: refreshCredits } = useCredits(user?.id);
+  const { isAdmin } = useSubscription(user?.id);
 
   const toggleMic = () => {
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -389,7 +391,7 @@ export function ChatPanel({
   const send = async (text?: string) => {
     const raw = (text ?? input).trim();
     if (!raw) return;
-    if (!isUnlimitedDaily && !creditsLoading && user?.id && balance <= 0) {
+    if (!isAdmin && !isUnlimitedDaily && !creditsLoading && user?.id && balance <= 0) {
       toast.error("No tienes créditos. Compra un paquete para seguir usando la IA.");
       setCreditsOut(true);
       return;
@@ -571,7 +573,7 @@ export function ChatPanel({
           <Coins className="h-3 w-3 text-amber-400" />
           {creditsLoading ? (
             <span className="text-muted-foreground">…</span>
-          ) : isUnlimitedDaily ? (
+          ) : isAdmin || isUnlimitedDaily ? (
             <span>Ilimitado</span>
           ) : (
             <>
