@@ -899,7 +899,7 @@ export function ChatPanel({
           errMsg.includes("ai_not_configured") ||
           /AI.*no.*configurad/i.test(errMsg);
         const friendly = aiCfg
-          ? "El asistente de IA no encuentra clave en el servidor. En local: crea o edita **.env.local** (o `.env`) en la **raíz del proyecto** con `OPENROUTER_API_KEY`, `OPENAI_API_KEY` o la pareja `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY`, guarda y **reinicia** el servidor de desarrollo (`bun run dev` / `npm run dev`). En producción, define las mismas variables en el panel del host (p. ej. Vercel)."
+          ? "El asistente de IA no encuentra clave en el servidor. En local: crea o edita **.env.local** (o `.env`) en la **raíz del proyecto** con `OPENROUTER_API_KEY`, `OPENAI_API_KEY` o la pareja `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY`, guarda y **reinicia** el servidor (`cmd /c \"npm run dev\"` si PowerShell bloquea npm). Ejecuta `npm run gafcore:doctor` para ver qué falta. En producción, define las mismas variables en el host (p. ej. Vercel)."
           : (error?.message ?? "No pude responder en este momento. Inténtalo de nuevo.");
         if (aiCfg) toast.error("IA no configurada", { duration: 12_000 });
         setMessages((m) => [
