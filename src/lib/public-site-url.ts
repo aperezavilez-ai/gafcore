@@ -8,6 +8,11 @@ export function getPublicSiteOrigin(): string {
   if (fromEnv && (fromEnv.startsWith("http://") || fromEnv.startsWith("https://"))) {
     return fromEnv.replace(/\/$/, "");
   }
-  if (import.meta.env.DEV) return "http://localhost:8080";
+  if (import.meta.env.DEV) {
+    if (typeof window !== "undefined" && window.location?.origin) {
+      return window.location.origin.replace(/\/$/, "");
+    }
+    return "http://127.0.0.1:8080";
+  }
   return "https://gafcore.com";
 }

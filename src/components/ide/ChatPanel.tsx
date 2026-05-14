@@ -48,6 +48,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
+import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
 import { Coins } from "lucide-react";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
@@ -93,6 +94,33 @@ async function readSseJsonPayload(
     reader.releaseLock();
   }
   return full;
+}
+
+/** Mensajes claros para códigos devueltos por POST /api/gafcore/chat/stream (evita “IA no conecta” genérico). */
+function describeGafcoreStreamFailure(message: string): string | null {
+  if (message.startsWith("UPSTREAM:")) {
+    const st = Number(message.slice("UPSTREAM:".length));
+    if (st === 401 || st === 403) {
+      return "El backend no pudo autenticarse con el proveedor de IA (clave incorrecta o revocada). En producción, quien administra el despliegue debe revisar OPENROUTER_API_KEY, OPENAI_API_KEY o AI_CHAT_COMPLETIONS_URL + AI_API_KEY en el panel del host.";
+    }
+    if (st === 429) {
+      return "El proveedor de IA está limitando peticiones. Espera unos minutos y vuelve a intentarlo.";
+    }
+    if (st === 402) {
+      return "El proveedor de IA (OpenRouter/OpenAI) indica falta de saldo o facturación en esa cuenta. Los créditos que ves en GafCore autorizan el uso en la app; el servidor también necesita una clave y saldo válidos en el proveedor.";
+    }
+    if (st >= 500) {
+      return "El proveedor de IA respondió con un error temporal. Inténtalo de nuevo en unos minutos.";
+    }
+    return "El proveedor de IA rechazó la solicitud. Si ocurre a menudo, revisa modelos y límites en el panel del proveedor.";
+  }
+  if (message === "CREDITS_VERIFY_FAILED") {
+    return "No pudimos verificar tus créditos en el servidor. Recarga la página. Si persiste, puede haber un fallo de base de datos o de configuración del backend (clave de servicio).";
+  }
+  if (message === "NO_STREAM_BODY") {
+    return "La IA no devolvió contenido utilizable en esta respuesta. Prueba de nuevo o acorta la petición.";
+  }
+  return null;
 }
 
 const SUGGESTIONS = [
@@ -715,14 +743,14 @@ export function ChatPanel({
         ? "Usa la imagen de referencia adjunta en los archivos del proyecto."
         : "");
     if (!coreText && pendingSnapshot.length === 0) return;
-    /** El servidor vuelve 402 si no hay saldo; no bloquear aquí con saldo 0 si el cupo mensual aún no se reflejó en `balance` (evita “la IA no hace nada” sin mensaje útil). */
+    /** Bloquear si no alcanza 1 crédito: el denominador de la UI puede ser 10 aunque `balance` sea 0 (plan gratis), y antes no se bloqueaba y el error del proveedor parecía “fallo de conexión”. */
     const noQuota =
       !isAdmin &&
       !isUnlimitedDaily &&
+      !isFairUseCreadorPlan &&
       !creditsLoading &&
       !!user?.id &&
-      balance <= 0 &&
-      displayMonthly <= 0;
+      balance < COST_PER_REQUEST;
     if (noQuota) {
       toast.error("No tienes créditos de IA. Recarga o elige un plan.", { duration: 6000 });
       setCreditsOut(true);
@@ -789,6 +817,9 @@ export function ChatPanel({
             else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
             else if (ej?.error === "invalid_body")
               errCode = "Petición inválida (revisa el texto o archivos).";
+            else if (ej?.error === "upstream") errCode = `UPSTREAM:${res.status}`;
+            else if (ej?.error === "credits_error") errCode = "CREDITS_VERIFY_FAILED";
+            else if (ej?.error === "no_stream_body") errCode = "NO_STREAM_BODY";
             else if (typeof ej?.error === "string") errCode = ej.error;
             else if (res.status === 500 && ej?.detail)
               errCode = `Error del servidor: ${String(ej.detail).slice(0, 200)}`;
@@ -898,9 +929,10 @@ export function ChatPanel({
           errMsg === "AI_NO_CONFIGURADA" ||
           errMsg.includes("ai_not_configured") ||
           /AI.*no.*configurad/i.test(errMsg);
+        const streamHint = describeGafcoreStreamFailure(msg);
         const friendly = aiCfg
           ? "El asistente de IA no encuentra clave en el servidor. En local: crea o edita **.env.local** (o `.env`) en la **raíz del proyecto** con `OPENROUTER_API_KEY`, `OPENAI_API_KEY` o la pareja `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY`, guarda y **reinicia** el servidor (`cmd /c \"npm run dev\"` si PowerShell bloquea npm). Ejecuta `npm run gafcore:doctor` para ver qué falta. En producción, define las mismas variables en el host (p. ej. Vercel)."
-          : (error?.message ?? "No pude responder en este momento. Inténtalo de nuevo.");
+          : (streamHint ?? error?.message ?? "No pude responder en este momento. Inténtalo de nuevo.");
         if (aiCfg) toast.error("IA no configurada", { duration: 12_000 });
         setMessages((m) => [
           ...m,

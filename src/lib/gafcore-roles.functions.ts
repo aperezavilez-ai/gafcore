@@ -73,6 +73,34 @@ export const assignGafcoreAccountType = createServerFn({ method: "POST" })
 
     /** Usuario normal: plan gratis = 10 créditos alineados; reparar monthly_allowance en 0; bienvenida si saldo 0 sin movimientos. */
     if (accountType === "user") {
+      /** No aplicar lógica de “plan gratis” a cuentas admin: el trigger de signup puede dejar 25/25 y el bloque de abajo lo bajaría a 10 y quitaría el cupo ilimitado (monthly_allowance ≥ 1000 en consume_credits). */
+      const { data: adminRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+      if (adminRole) {
+        const { data: ucRow } = await supabaseAdmin
+          .from("user_credits")
+          .select("balance")
+          .eq("user_id", userId)
+          .maybeSingle();
+        const bal = Math.max(Number(ucRow?.balance ?? 0), 1000);
+        const { error: adminUcErr } = await supabaseAdmin.from("user_credits").upsert(
+          {
+            user_id: userId,
+            balance: bal,
+            monthly_allowance: 1000,
+            daily_limit: 1000,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+        if (adminUcErr) throw new Error(adminUcErr.message);
+        return { ok: true, role: "admin" as const };
+      }
+
       const env = getStripeEnvironment();
       const { data: sub, error: subErr } = await supabaseAdmin
         .from("subscriptions")
@@ -94,7 +122,7 @@ export const assignGafcoreAccountType = createServerFn({ method: "POST" })
       const { data: ucBal } = await supabaseAdmin.from("user_credits").select("balance").eq("user_id", userId).maybeSingle();
       const initialBal = ucBal?.balance ?? 0;
 
-      /** Sin suscripción activa y sin movimientos: el trigger de signup suele dejar 25; producto = 10 créditos gratis. */
+      /** Sin suscripción activa y sin movimientos: cuentas antiguas podían quedar en 25; el producto gratis = 10 créditos. */
       if (!subOk && (txCount ?? 0) === 0 && initialBal === 25) {
         const { error: normErr } = await supabaseAdmin
           .from("user_credits")

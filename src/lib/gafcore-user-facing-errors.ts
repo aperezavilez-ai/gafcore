@@ -22,7 +22,7 @@ export function sanitizeUserFacingAiText(text: string): string {
     return "El generador de IA no está configurado en el servidor. Inténtalo más tarde.";
   }
   if (lower === "upstream" || lower === "credits_error" || lower === "no_stream_body") {
-    return "No se pudo completar la solicitud al servicio de IA. Inténtalo de nuevo en unos minutos.";
+    return "No se pudo completar la solicitud al servicio de IA. Si tienes saldo en GafCore y sigue fallando, suele ser clave o cuota del proveedor (OpenRouter/OpenAI) en el servidor.";
   }
   if (/^http \d{3}$/i.test(t)) {
     return "El servicio de IA respondió con un error. Inténtalo de nuevo en unos minutos.";

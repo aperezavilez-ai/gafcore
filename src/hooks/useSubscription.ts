@@ -54,45 +54,61 @@ export function useSubscription(userId: string | undefined) {
   const env = getStripeEnvironment();
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
+    if (!userId) {
+      setSubscription(null);
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
 
-    const fetchSub = () => {
-      supabase
-        .from("subscriptions")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("environment", env)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => {
-          setSubscription(data as Subscription | null);
-          setLoading(false);
-        });
-    };
+    let cancelled = false;
 
-    const fetchAdmin = () => {
-      void (async () => {
-        const { data: rpcAdmin, error: rpcErr } = await supabase.rpc("has_role", {
-          _user_id: userId,
-          _role: "admin",
-        });
-        if (!rpcErr && typeof rpcAdmin === "boolean") {
-          setIsAdmin(rpcAdmin);
-          return;
+    async function resolveIsAdmin(uid: string): Promise<boolean> {
+      const { data: rpcAdmin, error: rpcErr } = await supabase.rpc("has_role", {
+        _user_id: uid,
+        _role: "admin",
+      });
+      if (!rpcErr && typeof rpcAdmin === "boolean") return rpcAdmin;
+      if (rpcErr) console.warn("[useSubscription] has_role:", rpcErr.message);
+      const { data, error: roleErr } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", uid)
+        .eq("role", "admin")
+        .maybeSingle();
+      if (roleErr) console.warn("[useSubscription] user_roles:", roleErr.message);
+      return !!data;
+    }
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [subRes, adminFlag] = await Promise.all([
+          supabase
+            .from("subscriptions")
+            .select("*")
+            .eq("user_id", userId)
+            .eq("environment", env)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          resolveIsAdmin(userId),
+        ]);
+        if (cancelled) return;
+        const { data: subData, error: subErr } = subRes;
+        if (subErr) {
+          console.warn("[useSubscription] subscriptions:", subErr.message);
+          setSubscription(null);
+        } else {
+          setSubscription(subData as Subscription | null);
         }
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", userId)
-          .eq("role", "admin")
-          .maybeSingle();
-        setIsAdmin(!!data);
-      })();
+        setIsAdmin(adminFlag);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
 
-    fetchSub();
-    fetchAdmin();
+    void load();
 
     // Realtime updates. Use a unique topic per hook instance because this hook
     // can be mounted more than once on dashboard pages.
@@ -107,7 +123,7 @@ export function useSubscription(userId: string | undefined) {
           table: "subscriptions",
           filter: `user_id=eq.${userId}`,
         },
-        () => fetchSub(),
+        () => void load(),
       )
       .on(
         "postgres_changes",
@@ -117,11 +133,14 @@ export function useSubscription(userId: string | undefined) {
           table: "user_roles",
           filter: `user_id=eq.${userId}`,
         },
-        () => fetchAdmin(),
+        () => void load(),
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [userId, env]);
 
   const subActive = !!subscription && (
