@@ -12,8 +12,7 @@
     "format": "prettier --write .",
     "purge-users": "node scripts/delete-users-except-admin.mjs",
     "gafcore:doctor": "node scripts/check-gafcore-setup.mjs",
-    "gafcore:push": "node scripts/gafcore-push-github.mjs",
-    "gafcore:sync-recovery-email": "node scripts/sync-supabase-recovery-email.mjs"
+    "gafcore:push": "node scripts/gafcore-push-github.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

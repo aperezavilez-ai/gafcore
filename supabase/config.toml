@@ -1,14 +1,1 @@
 project_id = "hbfbqqwetaynblmkezeu"
-
-# Plantilla de recuperación (GoTrue). Tras cambiar esto, sincroniza al proyecto remoto:
-#   node scripts/sync-supabase-recovery-email.mjs
-# o pega el HTML en Dashboard → Authentication → Emails → Reset password.
-#
-# Para que el remitente deje de mostrarse como “Supabase” y salga “GafCore”:
-# Dashboard → Authentication → SMTP (Resend, SendGrid, etc.):
-#   Sender name = GafCore
-#   Sender email = noreply@tudominio.com (dominio verificado en el proveedor).
-
-[auth.email.template.recovery]
-subject = "GafCore — enlace para nueva contraseña"
-content_path = "./templates/recovery.html"

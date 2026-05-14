@@ -34,6 +34,7 @@ import { Route as ApiV1OpenapiJsonRouteImport } from './routes/api/v1/openapi.js
 import { Route as ApiV1KeysIdRouteImport } from './routes/api/v1/keys.$id'
 import { Route as ApiV1AiGenerateRouteImport } from './routes/api/v1/ai.generate'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
+import { Route as ApiPublicGafcoreSupportFaqRouteImport } from './routes/api/public/gafcore.support-faq'
 import { Route as ApiPublicBillingCheckRouteImport } from './routes/api/public/billing.check'
 import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/chat.stream'
 
@@ -163,6 +164,12 @@ const ApiPublicPaymentsWebhookRoute =
     path: '/api/public/payments/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicGafcoreSupportFaqRoute =
+  ApiPublicGafcoreSupportFaqRouteImport.update({
+    id: '/api/public/gafcore/support-faq',
+    path: '/api/public/gafcore/support-faq',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicBillingCheckRoute = ApiPublicBillingCheckRouteImport.update({
   id: '/api/public/billing/check',
   path: '/api/public/billing/check',
@@ -198,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
+  '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
@@ -227,6 +235,7 @@ export interface FileRoutesByTo {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
+  '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
@@ -257,6 +266,7 @@ export interface FileRoutesById {
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
+  '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
@@ -288,6 +298,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/gafcore/chat/stream'
     | '/api/public/billing/check'
+    | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
@@ -317,6 +328,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/gafcore/chat/stream'
     | '/api/public/billing/check'
+    | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
@@ -346,6 +358,7 @@ export interface FileRouteTypes {
     | '/gafcore_/settings/project'
     | '/api/gafcore/chat/stream'
     | '/api/public/billing/check'
+    | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
@@ -376,6 +389,7 @@ export interface RootRouteChildren {
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
   ApiGafcoreChatStreamRoute: typeof ApiGafcoreChatStreamRoute
   ApiPublicBillingCheckRoute: typeof ApiPublicBillingCheckRoute
+  ApiPublicGafcoreSupportFaqRoute: typeof ApiPublicGafcoreSupportFaqRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiV1AiGenerateRoute: typeof ApiV1AiGenerateRoute
   ApiV1OpenapiJsonRoute: typeof ApiV1OpenapiJsonRoute
@@ -558,6 +572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/gafcore/support-faq': {
+      id: '/api/public/gafcore/support-faq'
+      path: '/api/public/gafcore/support-faq'
+      fullPath: '/api/public/gafcore/support-faq'
+      preLoaderRoute: typeof ApiPublicGafcoreSupportFaqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/billing/check': {
       id: '/api/public/billing/check'
       path: '/api/public/billing/check'
@@ -611,6 +632,7 @@ const rootRouteChildren: RootRouteChildren = {
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
   ApiGafcoreChatStreamRoute: ApiGafcoreChatStreamRoute,
   ApiPublicBillingCheckRoute: ApiPublicBillingCheckRoute,
+  ApiPublicGafcoreSupportFaqRoute: ApiPublicGafcoreSupportFaqRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiV1AiGenerateRoute: ApiV1AiGenerateRoute,
   ApiV1OpenapiJsonRoute: ApiV1OpenapiJsonRoute,

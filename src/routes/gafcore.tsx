@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckoutExperience } from "@/components/CheckoutExperience";
+import { GafcoreContactSupportDialog } from "@/components/GafcoreContactSupportDialog";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/I18nProvider";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
@@ -110,6 +111,7 @@ function GafCoreLanding() {
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   const { theme, setTheme } = useGafcoreTheme();
   const [checkoutPriceId, setCheckoutPriceId] = useState<string | null>(null);
+  const [contactOpen, setContactOpen] = useState(false);
 
   /** Tras verificar correo: URL con ?pick_plan=1 → tabla de planes (añadir en Supabase Auth URL redirects). */
   useEffect(() => {
@@ -183,10 +185,17 @@ function GafCoreLanding() {
             >G</div>
             <span className="text-lg font-bold" style={{ color: "var(--gc-fg)" }}>GafCore</span>
           </Link>
-          <nav className="hidden md:flex items-center gap-6 text-sm gc-muted">
+          <nav className="flex flex-1 flex-wrap items-center justify-center gap-4 text-sm gc-muted md:gap-6">
             <a href="#producto" className="hover:opacity-80">{t("gc.nav.product")}</a>
             <a href="#planes" className="hover:opacity-80">{t("gc.nav.pricing")}</a>
             <a href="#empresa" className="hover:opacity-80">{t("gc.nav.company")}</a>
+            <button
+              type="button"
+              onClick={() => setContactOpen(true)}
+              className="bg-transparent p-0 font-inherit hover:opacity-80"
+            >
+              {t("gc.nav.contact")}
+            </button>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
             <LanguageSwitcher variant="compact" />
@@ -514,6 +523,8 @@ function GafCoreLanding() {
           })()}
         </DialogContent>
       </Dialog>
+
+      <GafcoreContactSupportDialog open={contactOpen} onOpenChange={setContactOpen} />
     </div>
   );
 }
