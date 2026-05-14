@@ -33,6 +33,9 @@ dist-ssr
 
 .vercel
 
+# Supabase CLI cache (no versionar)
+supabase/.temp/
+
 # Cursor / local workspace (nested git breaks `git add`)
 .workspace/
 
