@@ -107,7 +107,7 @@ export function LivePreview({ files }: { files: FileItem[] }) {
         deferredFiles.map((f) => ({ name: f.name, content: f.content })),
       );
       let html = repairHtmlMedia(htmlFile.content, assetMap);
-      html = applyPicsumFallbacksInHtml(html);
+      html = applyAllMediaRepairs(html, mediaContextHint);
       html = injectPreviewFallbackScript(html);
       return html
         .replace("</head>", `<style>${css}</style></head>`)
