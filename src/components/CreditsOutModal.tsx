@@ -52,7 +52,10 @@ export function CreditsOutModal({ open, onOpenChange, userId, userEmail, reason 
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-3xl">
+      <DialogContent
+        positionVariant={checkoutPriceId ? "stripe-safe" : "default"}
+        className="bg-zinc-950 border-white/10 text-white max-w-3xl"
+      >
         {!checkoutPriceId ? (
           <>
             <DialogHeader>
@@ -123,7 +126,7 @@ export function CreditsOutModal({ open, onOpenChange, userId, userEmail, reason 
                 Pago seguro procesado por Stripe.
               </DialogDescription>
             </DialogHeader>
-            <div className="max-h-[70vh] overflow-y-auto rounded-xl bg-white p-2">
+            <div className="min-h-[min(420px,50vh)] overflow-visible rounded-xl bg-white p-2">
               <StripeEmbeddedCheckout
                 priceId={checkoutPriceId}
                 userId={userId}

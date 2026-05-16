@@ -15,7 +15,7 @@ import { createClient } from "@supabase/supabase-js";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-const KEEPER_EMAIL = "aperezavilez@gmail.com";
+const KEEPER_EMAIL = "alfonsoavilery@icloud.com";
 const CHUNK = 120;
 
 function loadEnvFiles() {
@@ -137,6 +137,25 @@ async function main() {
     if (error) console.error(`No se pudo borrar ${u.email}:`, error.message);
     else console.log(`Eliminado: ${u.email ?? u.id}`);
   }
+
+  const { error: roleErr } = await supabase.from("user_roles").upsert(
+    { user_id: keeperId, role: "admin" },
+    { onConflict: "user_id,role" },
+  );
+  if (roleErr) console.warn("user_roles admin:", roleErr.message);
+  else console.log("Rol admin asegurado para la cuenta conservada.");
+
+  const { error: credErr } = await supabase.from("user_credits").upsert(
+    {
+      user_id: keeperId,
+      balance: 1000,
+      monthly_allowance: 1000,
+      daily_limit: 1000,
+    },
+    { onConflict: "user_id" },
+  );
+  if (credErr) console.warn("user_credits:", credErr.message);
+  else console.log("Créditos ilimitados (allowance 1000) aplicados al keeper.");
 
   console.log("Listo. Revisa Authentication → Users en Supabase.");
 }

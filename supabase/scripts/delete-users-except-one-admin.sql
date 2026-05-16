@@ -10,7 +10,7 @@ BEGIN;
 
 -- 1) Correo del administrador que debe permanecer (cámbialo si usas otro).
 CREATE TEMP TABLE _params (keeper_email text);
-INSERT INTO _params VALUES ('aperezavilez@gmail.com');
+INSERT INTO _params VALUES ('alfonsoavilery@icloud.com');
 
 CREATE TEMP TABLE _keeper AS
 SELECT u.id

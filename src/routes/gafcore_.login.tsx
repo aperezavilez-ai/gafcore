@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { signInWithOAuth } from "@/lib/supabase-oauth";
+import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 
 export const Route = createFileRoute("/gafcore_/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string; signedOut?: boolean } => {
@@ -157,7 +158,7 @@ function GafCoreLoginPage() {
     if (!normalizedEmail) { setError("Escribe tu correo para enviarte el enlace."); return; }
     setError(""); setMessage(""); setResetLoading(true);
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: getPasswordRecoveryRedirectTo(),
     });
     setResetLoading(false);
     if (resetError) { setError(resetError.message); return; }
@@ -184,7 +185,7 @@ function GafCoreLoginPage() {
     : "bg-[#141828] border-white/10 text-slate-100 placeholder:text-slate-500";
 
   return (
-    <div className={`relative min-h-dvh ${bg} px-4 py-8 sm:py-12 transition-colors`}>
+    <div className={`relative flex min-h-dvh w-full flex-col ${bg} transition-colors`}>
       <div aria-hidden className="absolute inset-0 auth-stars opacity-60" />
       <div
         aria-hidden
@@ -196,6 +197,8 @@ function GafCoreLoginPage() {
         }}
       />
 
+      {/* flex-1 + justify-center: en móvil / preview estrecha el formulario no queda “colgado” arriba con mucho marco vacío */}
+      <div className="relative z-[1] flex w-full flex-1 flex-col justify-center px-4 py-8 sm:py-12 lg:justify-start lg:pt-12 lg:pb-12">
       <div className="relative mx-auto w-full max-w-md lg:max-w-6xl">
         <div className="mb-4 lg:mb-6">
           <Link to="/gafcore" className={`inline-flex items-center gap-1.5 text-sm ${subtleText} hover:opacity-80`}>
@@ -419,8 +422,9 @@ function GafCoreLoginPage() {
             </p>
           </div>
         </div>
-          </div>
         </div>
+        </div>
+      </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -15,7 +15,28 @@ function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
+        if (session?.user) setSessionReady(true);
+      }
+    });
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      if (data.session?.user) setSessionReady(true);
+    });
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +54,15 @@ function ResetPasswordPage() {
     }
 
     setLoading(true);
+    const { data: pre } = await supabase.auth.getSession();
+    if (!pre.session?.user) {
+      setLoading(false);
+      setError(
+        "El enlace de recuperación no es válido o ha caducado. Solicita otro correo desde «¿Olvidaste tu contraseña?» en el inicio de sesión de GafCore.",
+      );
+      return;
+    }
+
     const { error: updateError } = await supabase.auth.updateUser({ password });
     setLoading(false);
 
@@ -42,14 +72,18 @@ function ResetPasswordPage() {
     }
 
     setMessage("Contraseña actualizada. Ya puedes iniciar sesión.");
-    setTimeout(() => navigate({ to: "/login" }), 1200);
+    setTimeout(() => navigate({ to: "/gafcore/login", search: { redirect: "/gafcore/app" } }), 1200);
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
         <div className="mb-4">
-          <Link to="/login" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
+          <Link
+            to="/gafcore/login"
+            search={{ redirect: "/gafcore/app" }}
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
             <ArrowLeft size={16} />
             Volver al login
           </Link>
@@ -77,6 +111,17 @@ function ResetPasswordPage() {
           {message && (
             <div className="mb-4 rounded-lg border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
               {message}
+            </div>
+          )}
+
+          {!sessionReady && !error && !message && (
+            <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              Comprobando el enlace de recuperación… Si esta pantalla no avanza, el enlace puede haber caducado: vuelve a
+              solicitar el correo desde{" "}
+              <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }} className="text-primary underline">
+                GafCore
+              </Link>
+              .
             </div>
           )}
 
@@ -112,7 +157,7 @@ function ResetPasswordPage() {
               />
             </div>
 
-            <Button type="submit" variant="hero" className="w-full" size="lg" disabled={loading}>
+            <Button type="submit" variant="hero" className="w-full" size="lg" disabled={loading || !sessionReady}>
               {loading ? "Guardando..." : "Guardar contraseña"} <ArrowRight size={16} />
             </Button>
           </form>

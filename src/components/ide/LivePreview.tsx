@@ -1,5 +1,12 @@
-import { useMemo } from "react";
+import { useDeferredValue, useMemo } from "react";
 import type { FileItem } from "./CodeEditor";
+import {
+  buildAssetUrlMap,
+  injectPreviewFallbackScript,
+  PREVIEW_IMG_FALLBACK_SCRIPT,
+  repairHtmlMedia,
+  applyPicsumFallbacksInHtml,
+} from "@/lib/gafcore-media.shared";
 
 const ESM = "https://esm.sh";
 
@@ -77,12 +84,14 @@ function rewriteImports(
 }
 
 export function LivePreview({ files }: { files: FileItem[] }) {
+  /** Durante streaming de la IA, prioriza fluidez del IDE antes que cada frame del preview. */
+  const deferredFiles = useDeferredValue(files);
   const srcDoc = useMemo(() => {
-    const jsFiles = files.filter((f) => isJsModule(f.name));
-    const cssFiles = files.filter((f) => isCss(f.name));
+    const jsFiles = deferredFiles.filter((f) => isJsModule(f.name));
+    const cssFiles = deferredFiles.filter((f) => isCss(f.name));
 
     // If no JS modules at all → fall back to plain HTML preview
-    const htmlFile = files.find((f) => f.name.endsWith(".html"));
+    const htmlFile = deferredFiles.find((f) => f.name.endsWith(".html"));
     const hasReactEntry = jsFiles.some((f) =>
       /(^|\/)(main|index|App)\.(jsx?|tsx?)$/i.test(f.name),
     );
@@ -90,7 +99,13 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     if (!hasReactEntry && htmlFile) {
       const css = cssFiles.map((f) => f.content).join("\n");
       const js = jsFiles.map((f) => f.content).join("\n");
-      return htmlFile.content
+      const assetMap = buildAssetUrlMap(
+        deferredFiles.map((f) => ({ name: f.name, content: f.content })),
+      );
+      let html = repairHtmlMedia(htmlFile.content, assetMap);
+      html = applyPicsumFallbacksInHtml(html);
+      html = injectPreviewFallbackScript(html);
+      return html
         .replace("</head>", `<style>${css}</style></head>`)
         .replace("</body>", `<script>${js}<\/script></body>`);
     }
@@ -106,11 +121,14 @@ export function LivePreview({ files }: { files: FileItem[] }) {
 
     // Build a virtual module map: app:filename -> blob URL of (Babel-transpiled at runtime) module
     const cssNames = cssFiles.map((f) => f.name);
+    const assetMap = buildAssetUrlMap(
+      deferredFiles.map((f) => ({ name: f.name, content: f.content })),
+    );
 
     // Encode each module as its source string; the iframe transpiles + blob-URLs them.
     const modulesPayload = jsFiles.map((f) => ({
       name: f.name,
-      code: rewriteImports(f.content, f.name, jsFiles, cssNames),
+      code: rewriteImports(repairHtmlMedia(f.content, assetMap), f.name, jsFiles, cssNames),
     }));
 
     const cssPayload = cssFiles.map((f) => f.content).join("\n");
@@ -304,9 +322,10 @@ export function LivePreview({ files }: { files: FileItem[] }) {
   }
 })();
 </script>
+${PREVIEW_IMG_FALLBACK_SCRIPT}
 </body>
 </html>`;
-  }, [files]);
+  }, [deferredFiles]);
 
   return (
     <div className="flex h-full flex-col bg-background">

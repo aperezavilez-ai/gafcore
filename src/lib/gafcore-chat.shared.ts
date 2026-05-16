@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  extractVisionImageParts,
+  filesContextForModel,
+  type GafcoreChatMessage,
+} from "@/lib/gafcore-media.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -32,6 +37,16 @@ Pilares (aplícalos en cada cambio):
 3) **Arquitectura escalable**: al crecer UI o features, orienta a **Atomic Design** bajo \`src/components/\` (\`atoms\`, \`molecules\`, \`organisms\`, \`templates\` o equivalente ya usado en el repo). Evita un solo archivo monolítico cuando el cambio lo permite.
 4) **Razonamiento de alta calidad**: piensa como modelo clase GPT-4o / Claude 3.5 (correctitud, menos idas y vueltas): el diff debe ser coherente con imports, rutas y tipos existentes.
 5) **Rendimiento (p. ej. despliegue en Vercel)**: menos JS innecesario, componentes acotados, evita dependencias pesadas sin motivo; lazy solo cuando tenga sentido claro.
+6) **Vista previa del IDE GafCore (iframe, sin servidor de estáticos)**: el código se ejecuta en el navegador del usuario, no hay carpeta \`public/\` mágica salvo que **añadas** esos archivos al delta.
+   - **Imágenes**: prioriza \`https://picsum.photos/seed/<tema-en-ingles>/1280/720\` (fiable en preview) o Unsplash con URL real. Si en contexto hay \`assets/…\` con imagen de referencia del usuario, usa \`src="assets/nombre-exacto.jpg"\` tal cual. No inventes \`image_5.png\` ni rutas sin archivo en contexto. Incluye \`alt\` descriptivo en cada \`<img>\`.
+   - **Layout**: pon \`alt\` útil y tamaños (\`width\`/\`height\` o contenedor \`aspect-*\` en Tailwind) para evitar saltos de layout. Evita animaciones o sombras pesadas en decenas de tarjetas a la vez.
+   - **E‑commerce / catálogos**: grids simples responsive (grid + gap), pocas fuentes externas; si hay muchos productos, paginación o “mostrar 6–8” con botón, no cientos de nodos sin necesidad.
+   - **Fidelidad a briefings visuales**: si el usuario pide **galería, collage, grid de N imágenes, hero de dos columnas, CTAs duales, secciones premium**, impleméntalo **literalmente** en la misma respuesta: \`grid\`/\`flex\` con \`gap\`, \`grid-cols-*\`, \`min-h-*\` o \`aspect-*\`, textos jerárquicos (h1/h2/p), botones con estilos distintos (relleno + outline) y **varias** URLs https de imagen coherentes con el tema. **No sustituyas** eso por una fila de iconitos o un bloque de texto genérico: es incumplimiento del encargo.
+7) **Alcance y excelencia operativa (GafCore)**:
+   - **Alcance**: “delta mínimo” significa **no tocar** rutas, auth ni carpetas que no guarden relación con el pedido; **no** significa entregar una UI pobre cuando el usuario pidió riqueza visual. Si hace falta un componente o sección grande en un solo archivo para cumplir el diseño, hazlo (sin reestructurar masivamente el repo si no se pide).
+   - **Robustez**: anticipa fallos habituales (imports inexistentes, JSON mal cerrado, rutas de archivo inválidas) y evítalos en la primera respuesta.
+   - **UI**: contraste legible, estados hover/focus visibles, \`aria-*\` en controles interactivos cuando aporten; formularios con \`label\` asociado a \`input\`.
+   - **Salida**: el razonamiento detallado no debe aparecer fuera del campo \`reply\`; nunca texto antes o después del objeto JSON raíz.
 
 Formato de salida (obligatorio):
 Responde SIEMPRE en JSON puro con esta forma exacta:
@@ -130,16 +145,44 @@ export function selectContextFiles(instruction: string, files: ProjFile[]): Proj
   return out;
 }
 
+/** Modelo con visión cuando hay imágenes de referencia adjuntas. */
+export function pickVisionModel(deep: string = MODEL_DEEP): string {
+  const u = deep.toLowerCase();
+  if (u.includes("gpt-4o")) return deep;
+  if (u.includes("gemini")) return deep;
+  if (u.includes("claude")) return deep;
+  return MODEL_DEEP;
+}
+
 export function pickModel(
   instruction: string,
   fast: string = MODEL_FAST,
   deep: string = MODEL_DEEP,
+  hasVisionImages = false,
 ): string {
+  if (hasVisionImages) return pickVisionModel(deep);
   const t = instruction.trim();
+  /** Explícito en el IDE (toggle o texto): fuerza modelo profundo antes que “modo chat”. */
+  if (/^\[modo profundo\]/i.test(t) || /^\[modo deep\]/i.test(t)) return deep;
   if (/^\[modo chat\]/i.test(t)) return fast;
-  if (t.length < 380 && !/refactor|migrat|architect|error|bug|despliegue|optimiza|seguridad|typescript|eslint|performance/i.test(t)) {
-    return fast;
-  }
+
+  /** Pide calidad visual / maquetación: el modelo “fast” suele dejar UI pobre o URLs de imagen inválidas en el preview del IDE. */
+  const wantsDeepUi =
+    /p[aá]gina|landing|dise[ñn]o|dise[ñn]a|maquet|componente|ui\b|layout|hero|secci[oó]n|estilo|tailwind|css|tema|foto|im[áa]gen|im[áa]genes|imagenes|e-?commerce|tienda|venta|cat[áa]logo|navbar|footer|responsive|accesibilidad|animaci|preview|zapato|tenis|ropa|producto|galer[ií]a|collage|rejilla|mosaico|cuadr[íi]cula|bento|showcase|portafolio|portfolio|presupuesto|cotizaci[oó]n|cta\b|mockup|figma|tipograf|jerarqu[ií]a|hiperreal|fotograf|coating|pintura|fachada|edificio|comercial|residencial|premium|marca|branding|wireframe|maqueta|alta\s*calidad|resoluci|llamada\s+a\s+la\s+acci[oó]n/i.test(
+      t,
+    ) ||
+    /\bpage\b|\bdashboard\b|\bform\b|\bshop\b|\bgallery\b|\bcarousel\b|\bmasonry\b|\bcard\b|\bhero\b|\bgrid\b|\blastings\b|\bcollage\b|\bcta\b|\bnavbar\b|\bfooter\b|\bsection\b|\blayout\b|\bhigh[-\s]?resolution\b|\bpixel\s*perfect\b/i.test(
+      t,
+    );
+
+  const wantsDeepTech =
+    /refactor|migraci[oó]n|migrat|architect|error|bug|despliegue|optimiza|seguridad|typescript|eslint|performance/i.test(
+      t,
+    );
+
+  if (wantsDeepUi || wantsDeepTech) return deep;
+  if (t.length >= 420) return deep;
+  if (t.length < 260) return fast;
   return deep;
 }
 
@@ -227,27 +270,41 @@ export function buildGafcoreMessages(
   data: GafcoreChatBody,
   resolvedModel?: string,
 ): {
-  messages: Array<{ role: string; content: string }>;
+  messages: GafcoreChatMessage[];
   model: string;
   subset: boolean;
   ctxFiles: ProjFile[];
 } {
-  const model = resolvedModel ?? pickModel(data.instruction);
-  const ctxFiles = selectContextFiles(data.instruction, data.files as ProjFile[]);
+  const allFiles = data.files as ProjFile[];
+  const visionImages = extractVisionImageParts(allFiles);
+  const hasVision = visionImages.length > 0;
+  const model =
+    resolvedModel ?? pickModel(data.instruction, MODEL_FAST, MODEL_DEEP, hasVision);
+  const ctxFiles = selectContextFiles(data.instruction, allFiles);
   const subset =
-    ctxFiles.length < data.files.length ||
-    totalChars(ctxFiles) < totalChars(data.files as ProjFile[]) * 0.88;
+    ctxFiles.length < allFiles.length ||
+    totalChars(ctxFiles) < totalChars(allFiles) * 0.88;
   const subsetNote = subset
-    ? "\n\n(Nota interna: solo se listan archivos de contexto seleccionados por tamaño/relevancia. Devuelve en \"files\" únicamente deltas: archivos nuevos o modificados.)"
+    ? '\n\n(Nota interna: solo se listan archivos de contexto seleccionados por tamaño/relevancia. Devuelve en "files" únicamente deltas: archivos nuevos o modificados.)'
     : "";
-  const filesContext = JSON.stringify(ctxFiles);
-  const messages = [
+  const filesContext = JSON.stringify(filesContextForModel(ctxFiles));
+  const textBlock = `Archivos de contexto:\n${filesContext}\n\nInstrucción:\n${data.instruction}${subsetNote}`;
+
+  const userContent: GafcoreChatMessage["content"] =
+    hasVision && visionImages.length > 0
+      ? [
+          { type: "text", text: textBlock },
+          ...visionImages.map((img) => ({
+            type: "image_url" as const,
+            image_url: { url: img.url },
+          })),
+        ]
+      : textBlock;
+
+  const messages: GafcoreChatMessage[] = [
     { role: "system", content: GAFCORE_SYSTEM },
-    ...data.history,
-    {
-      role: "user",
-      content: `Archivos de contexto:\n${filesContext}\n\nInstrucción:\n${data.instruction}${subsetNote}`,
-    },
+    ...data.history.map((h) => ({ role: h.role, content: h.content })),
+    { role: "user", content: userContent },
   ];
   return { messages, model, subset, ctxFiles };
 }

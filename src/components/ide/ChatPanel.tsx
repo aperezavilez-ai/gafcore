@@ -25,6 +25,8 @@ import {
   ChevronRight,
   ChevronDown,
   Paperclip,
+  Coins,
+  Brain,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,6 +43,8 @@ import type { ChatMsg } from "@/lib/openaiChat";
 import { gafcoreChat } from "@/lib/gafcore-chat.functions";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { validateGafcoreSources } from "@/lib/gafcore-validate.functions";
+import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
+import { repairGafcoreProjectMedia } from "@/lib/gafcore-media.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { CreditsOutModal } from "@/components/CreditsOutModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,7 +53,6 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
-import { Coins } from "lucide-react";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -220,6 +223,14 @@ export function ChatPanel({
   const [pendingComposerImages, setPendingComposerImages] = useState<PendingComposerImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"build" | "chat">("build");
+  const [deepModel, setDeepModel] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("gafcore_ide_deep_model") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [visualEditOn, setVisualEditOn] = useState(false);
   const [recording, setRecording] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -236,6 +247,14 @@ export function ChatPanel({
   const abortControllerRef = useRef<AbortController | null>(null);
   const freeCreditsRescueDone = useRef(false);
   const freeCreditsRescueUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("gafcore_ide_deep_model", deepModel ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [deepModel]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -714,6 +733,7 @@ export function ChatPanel({
 
   const callGafcoreChat = useServerFn(gafcoreChat);
   const callValidateSources = useServerFn(validateGafcoreSources);
+  const callEnrichMedia = useServerFn(enrichGafcoreMedia);
 
   const mergeGeneratedFiles = (
     currentFiles: FileItem[],
@@ -756,12 +776,18 @@ export function ChatPanel({
       setCreditsOut(true);
       return;
     }
-    const prefix = visualEditOn
-      ? "[Edición visual] Enfócate solo en cambios de UI/estilos sin tocar lógica. "
-      : mode === "chat"
+    const deepPrefix =
+      deepModel && mode === "build"
+        ? "[modo profundo] Prioriza análisis cuidadoso, UI cuidada y código robusto; la salida sigue siendo solo el JSON del contrato. "
+        : "";
+    const chatPrefix =
+      mode === "chat"
         ? "[Modo chat] Responde sin generar código a menos que se solicite explícitamente. "
         : "";
-    const instruction = prefix + coreText + pendingRef;
+    const visualPrefix = visualEditOn
+      ? "[Edición visual] Enfócate solo en cambios de UI/estilos sin tocar lógica. "
+      : "";
+    const instruction = deepPrefix + chatPrefix + visualPrefix + coreText + pendingRef;
     if (!instruction.trim() || loading) return;
     const myEpoch = ++requestEpochRef.current;
     setInput("");
@@ -882,14 +908,34 @@ export function ChatPanel({
           const snippet = raw.slice(0, 60);
           void createSnapshot(files, `auto: ${snippet}`);
         } catch {}
-        const merged = mergeGeneratedFiles(files, result.files);
+        let outFiles = repairGafcoreProjectMedia(
+          result.files,
+          files.map((f) => ({ name: f.name, content: f.content, language: f.language })),
+        );
+        try {
+          const enriched = await callEnrichMedia({
+            data: {
+              files: outFiles,
+              projectFiles: files.map((f) => ({
+                name: f.name,
+                content: f.content,
+                language: f.language,
+              })),
+              instruction,
+            },
+          });
+          if (enriched?.files?.length) outFiles = enriched.files;
+        } catch {
+          /* reparación local ya aplicada */
+        }
+        const merged = mergeGeneratedFiles(files, outFiles);
         setFiles(merged);
-        void syncFilesToDb(result.files);
+        void syncFilesToDb(outFiles);
         onCodeGenerated?.();
 
         try {
           const v = await callValidateSources({
-            data: result.files.map((f) => ({ name: f.name, content: f.content })),
+            data: outFiles.map((f) => ({ name: f.name, content: f.content })),
           });
           if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
             setLastError(v.errors.map((e) => `${e.name}: ${e.message}`).join("\n"));
@@ -1146,7 +1192,13 @@ export function ChatPanel({
                 send();
               }
             }}
-            placeholder="Pide a la IA que cree o modifique algo…"
+            placeholder={
+              mode === "chat"
+                ? "Pide a la IA que cree o modifique algo…"
+                : deepModel
+                  ? "Modelo profundo activo: describe el cambio con detalle…"
+                  : "Pide a la IA que cree o modifique algo… (opcional: escribe [modo profundo] al inicio o activa el interruptor)"
+            }
             rows={3}
             className="block w-full resize-none border-0 bg-transparent px-3.5 pt-3 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none min-h-[64px] max-h-[320px] overflow-y-auto"
           />
@@ -1248,6 +1300,36 @@ export function ChatPanel({
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setDeepModel((v) => {
+                    const next = !v;
+                    toast[next ? "success" : "message"](
+                      next
+                        ? "Modelo profundo: más calidad y detalle (puede tardar un poco más)."
+                        : "Modelo profundo desactivado.",
+                    );
+                    return next;
+                  });
+                }}
+                disabled={mode === "chat"}
+                className={
+                  "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 " +
+                  (deepModel
+                    ? "border-primary bg-primary/10 text-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.2)] ring-1 ring-primary"
+                    : "border-border bg-background text-foreground hover:bg-muted")
+                }
+                title={
+                  mode === "chat"
+                    ? "Modelo profundo solo en modo Construir"
+                    : "Activa el modelo más capaz (más lento/caro). También puedes escribir [modo profundo] al inicio del mensaje."
+                }
+              >
+                <Brain className="h-3 w-3" />
+                Profundo
+                {deepModel && <span className="ml-0.5 text-[10px]">ON</span>}
+              </button>
               <button
                 type="button"
                 onClick={() => {

@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Supabase → SQL Editor (rol proyecto / postgres). Idempotente.
 --
--- Objetivo: cuenta **aperezavilez@gmail.com** → rol `admin` + créditos ilimitados
+-- Objetivo: cuenta **alfonsoavilery@icloud.com** → rol `admin` + créditos ilimitados
 -- (balance/cupo altos; `consume_credits` no descuenta si monthly_allowance >= 1000).
 --
 -- Plan gratis (resto de usuarios): **10 créditos** al registrarse (`handle_new_user`)
@@ -16,7 +16,7 @@ BEGIN;
 
 CREATE TEMP TABLE _bootstrap_admin_email (email text);
 INSERT INTO _bootstrap_admin_email VALUES
-  ('aperezavilez@gmail.com');
+  ('alfonsoavilery@icloud.com');
 
 DO $$
 DECLARE

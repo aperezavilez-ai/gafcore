@@ -62,7 +62,12 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
         const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
         const { messages, model, subset, ctxFiles } = buildGafcoreMessages(
           data,
-          pickModel(data.instruction, fast, deep),
+          pickModel(
+            data.instruction,
+            fast,
+            deep,
+            data.files.some((f) => f.content.trim().startsWith("data:image/")),
+          ),
         );
         const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
         const cached = cacheGet(cacheKey);

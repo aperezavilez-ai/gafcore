@@ -110,6 +110,9 @@ create table if not exists public.projects (
   updated_at timestamptz not null default now()
 );
 
+-- Table may have been created earlier in the dashboard without `user_id`; RLS below requires it.
+alter table public.projects add column if not exists user_id uuid;
+
 create table if not exists public.project_files (
   id uuid not null default gen_random_uuid() primary key,
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -254,6 +257,10 @@ alter table public.payout_accounts enable row level security;
 alter table public.payout_transactions enable row level security;
 alter table public.generations enable row level security;
 
+-- Replacing policies first defined in 20260508000000_create_profiles.sql (admin-aware select).
+drop policy if exists "Users can view own profile" on public.profiles;
+drop policy if exists "Users can insert own profile" on public.profiles;
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can view own profile" on public.profiles for select to authenticated using (auth.uid() = user_id or public.has_role(auth.uid(), 'admin'));
 create policy "Users can insert own profile" on public.profiles for insert to authenticated with check (auth.uid() = user_id);
 create policy "Users can update own profile" on public.profiles for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -284,6 +291,10 @@ create policy "Users can manage own releases" on public.releases for all to auth
 create policy "Users can manage own payout accounts" on public.payout_accounts for all to authenticated using (auth.uid() = user_id or public.has_role(auth.uid(), 'admin')) with check (auth.uid() = user_id or public.has_role(auth.uid(), 'admin'));
 create policy "Users can manage own payout transactions" on public.payout_transactions for all to authenticated using (auth.uid() = user_id or public.has_role(auth.uid(), 'admin')) with check (auth.uid() = user_id or public.has_role(auth.uid(), 'admin'));
 
+-- Same policy names as 20260508120000_create_generations.sql; drop before recreate.
+drop policy if exists "users select own generations" on public.generations;
+drop policy if exists "users insert own generations" on public.generations;
+drop policy if exists "users delete own generations" on public.generations;
 create policy "users select own generations" on public.generations for select to authenticated using (auth.uid() = user_id);
 create policy "users insert own generations" on public.generations for insert to authenticated with check (auth.uid() = user_id);
 create policy "users delete own generations" on public.generations for delete to authenticated using (auth.uid() = user_id);

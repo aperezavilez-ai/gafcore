@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { supabase } from "@/integrations/supabase/client";
 import { signInWithOAuth } from "@/lib/supabase-oauth";
 import { AuthCard } from "./AuthCard";
@@ -63,7 +64,7 @@ export function InlineAuthPanel({
         email,
         password,
         options: {
-          emailRedirectTo: window.location.origin + redirectTo,
+          emailRedirectTo: authAbsoluteUrl(redirectTo),
           data: { first_name: firstName, last_name: lastName, artist_name: artistName },
         },
       });

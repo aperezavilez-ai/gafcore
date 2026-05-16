@@ -1,1 +1,24 @@
 project_id = "hbfbqqwetaynblmkezeu"
+
+# Auth: URLs de redirección (recovery, OAuth). Ajusta `site_url` a tu dominio de producción.
+# Aplica al proyecto remoto con: `npx supabase@latest config push` (revisa el diff en el panel).
+[auth]
+site_url = "https://gafcore.com"
+additional_redirect_urls = [
+  "https://gafcore.com",
+  "https://gafcore.com/**",
+  "http://127.0.0.1:8080/**",
+  "http://127.0.0.1:8081/**",
+  "http://localhost:8080/**",
+  "http://localhost:8081/**",
+  "http://127.0.0.1:5173/**",
+  "http://localhost:5173/**",
+]
+
+# Nombre "De:" en el buzón: con el correo por defecto de Supabase suele verse "Supabase".
+# Configura SMTP en Supabase → Authentication → SMTP (Resend, SendGrid, etc.) y pon Sender name = GafCore.
+# Los bloques [auth.email.template.*] solo cambian asunto y HTML del mensaje.
+
+[auth.email.template.recovery]
+subject = "Restablecer contraseña — GafCore"
+content_path = "./templates/recovery.html"

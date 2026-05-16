@@ -29,9 +29,17 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     const stripe = createStripeClient(data.environment);
     const userId = authData.user.id;
 
-    const prices = await stripe.prices.list({ lookup_keys: [data.priceId] });
-    if (!prices.data.length) throw new Error("Price not found");
-    const stripePrice = prices.data[0];
+    let stripePrice: Awaited<ReturnType<typeof stripe.prices.retrieve>>;
+    const byLookup = await stripe.prices.list({ lookup_keys: [data.priceId], limit: 1 });
+    if (byLookup.data.length > 0) {
+      stripePrice = byLookup.data[0];
+    } else if (data.priceId.startsWith("price_")) {
+      stripePrice = await stripe.prices.retrieve(data.priceId);
+    } else {
+      throw new Error(
+        `Precio Stripe no encontrado para «${data.priceId}». Crea en Stripe un precio de pago único con lookup_key exactamente igual a ese id (p. ej. credits_pack_200), o usa el id técnico price_… del precio.`,
+      );
+    }
     const isRecurring = stripePrice.type === "recurring";
 
     const session = await stripe.checkout.sessions.create({

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 import { supabase } from "@/integrations/supabase/client";
 import { signInWithOAuth } from "@/lib/supabase-oauth";
 import { AuthCard } from "@/components/AuthCard";
@@ -62,7 +63,7 @@ function LoginPage() {
     setMessage("");
     setResetLoading(true);
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: getPasswordRecoveryRedirectTo(),
     });
     setResetLoading(false);
 

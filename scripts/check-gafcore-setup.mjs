@@ -115,6 +115,34 @@ if (issues.length === 0) {
   console.log("  1. Supabase → Authentication → URL Configuration → añade tu URL local y producción.");
   console.log("  2. Aplica migraciones: supabase db push (CLI) o SQL Editor con supabase/migrations/.");
   console.log("  3. npm run dev → prueba /gafcore/app; si el chat falla, F12 → Red → chat/stream → campo error.\n");
+
+  const pay = has("VITE_PAYMENTS_CLIENT_TOKEN") ? env.VITE_PAYMENTS_CLIENT_TOKEN.trim() : "";
+  if (pay.startsWith("pk_test_") || pay.startsWith("pk_live_")) {
+    console.log("Stripe (cliente usa clave publicable pk_…):");
+    if (pay.startsWith("pk_test_")) {
+      if (!has("STRIPE_SANDBOX_API_KEY"))
+        console.log("  ⚠ Falta STRIPE_SANDBOX_API_KEY (clave secreta sk_test_… de la misma cuenta).");
+      else console.log("  ✓ STRIPE_SANDBOX_API_KEY presente");
+      if (!has("PAYMENTS_SANDBOX_WEBHOOK_SECRET"))
+        console.log("  ⚠ Falta PAYMENTS_SANDBOX_WEBHOOK_SECRET → los webhooks de test no verificarán firma.");
+      else console.log("  ✓ PAYMENTS_SANDBOX_WEBHOOK_SECRET presente");
+    }
+    if (pay.startsWith("pk_live_")) {
+      if (!has("STRIPE_LIVE_API_KEY"))
+        console.log("  ⚠ Falta STRIPE_LIVE_API_KEY (clave secreta sk_live_… de la misma cuenta).");
+      else console.log("  ✓ STRIPE_LIVE_API_KEY presente");
+      if (!has("PAYMENTS_LIVE_WEBHOOK_SECRET"))
+        console.log("  ⚠ Falta PAYMENTS_LIVE_WEBHOOK_SECRET → los webhooks live no verificarán firma.");
+      else console.log("  ✓ PAYMENTS_LIVE_WEBHOOK_SECRET presente");
+    }
+    console.log(
+      "  Webhook URL (Stripe Dashboard → Developers → Webhooks): POST tu origen público + /api/public/payments/webhook?env=sandbox o ?env=live",
+    );
+    console.log(
+      "  Precios: lookup_key credits_pack_50 … credits_pack_1200 (pago único), o id price_… según payments.functions.\n",
+    );
+  }
+
   process.exit(0);
 }
 

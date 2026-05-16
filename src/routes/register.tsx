@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { supabase } from "@/integrations/supabase/client";
 import { signInWithOAuth } from "@/lib/supabase-oauth";
 import { claimMasterAccess } from "@/lib/server-fns/admin.functions";
@@ -97,7 +98,7 @@ function RegisterPage() {
       email: normalizedEmail,
       password,
       options: {
-        emailRedirectTo: window.location.origin + redirectTo,
+        emailRedirectTo: authAbsoluteUrl(redirectTo),
         data: { first_name: firstName, last_name: lastName, artist_name: artistName },
       },
     });

@@ -19,6 +19,8 @@ import {
 import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
+import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
+import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -37,7 +39,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
     const { messages, model, subset, ctxFiles } = buildGafcoreMessages(
       data,
-      pickModel(data.instruction, fast, deep),
+      pickModel(data.instruction, fast, deep, extractVisionImageParts(data.files as ProjFile[]).length > 0),
     );
 
     const cacheKey = `${context.userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
@@ -139,7 +141,16 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       };
     }
 
-    const safeFiles = validateOutputFiles(parsed.files);
+    let safeFiles = validateOutputFiles(parsed.files);
+    try {
+      safeFiles = await enrichGafcoreOutputFiles(
+        safeFiles,
+        data.files as ProjFile[],
+        data.instruction,
+      );
+    } catch (e) {
+      console.warn("enrichGafcoreOutputFiles:", e);
+    }
     const reply = sanitizeUserFacingAiText(typeof parsed.reply === "string" ? parsed.reply : "Listo.");
 
     cacheSet(cacheKey, { reply, files: safeFiles });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getAuthEmailRedirectOrigin } from "@/lib/auth-email-redirect";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,7 @@ export function GafCoreAuthDialog({ open, onOpenChange, initialMode = "login" }:
         const { error } = await supabase.auth.signUp({
           email: normalizedEmail,
           password: currentPassword,
-          options: { emailRedirectTo: window.location.origin },
+          options: { emailRedirectTo: getAuthEmailRedirectOrigin() },
         });
         if (error && error.message !== "User already registered") throw error;
         if (error?.message === "User already registered") {

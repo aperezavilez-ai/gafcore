@@ -8,6 +8,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { assertGafcoreSignupAllowed } from "@/lib/gafcore-register.functions";
 import { setPlanChoicePending } from "@/lib/gafcore-plan-choice";
+import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { TurnstileWidget, isTurnstileSiteKeyConfigured } from "@/components/TurnstileWidget";
 
 type AccountType = "user" | "demo" | "admin";
@@ -117,7 +118,7 @@ function GafCoreRegisterPage() {
       const signUpPromise = supabase.auth.signUp({
         email: normalizedEmail,
         password: currentPassword,
-        options: { emailRedirectTo: `${window.location.origin}/gafcore?pick_plan=1` },
+        options: { emailRedirectTo: authAbsoluteUrl("/gafcore?pick_plan=1") },
       });
       const timeoutPromise = new Promise<never>((_, reject) => {
         window.setTimeout(() => reject(new Error("La conexión tardó demasiado. Revisa tu internet e intenta de nuevo.")), 18000);
@@ -174,9 +175,7 @@ function GafCoreRegisterPage() {
       }
       setLoading(false);
       setPlanChoicePending(userId);
-      window.location.replace(
-        typeof window !== "undefined" ? `${window.location.origin}${postRegisterPath}` : postRegisterPath,
-      );
+      window.location.replace(authAbsoluteUrl(postRegisterPath));
     } catch (err) {
       setLoading(false);
       setError(err instanceof Error ? err.message : "No se pudo crear la cuenta. Intenta de nuevo.");

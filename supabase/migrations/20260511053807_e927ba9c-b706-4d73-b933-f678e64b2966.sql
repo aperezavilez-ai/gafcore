@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public._app_keys (
 ALTER TABLE public._app_keys ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO public._app_keys (name, value)
-VALUES ('secrets_v1', encode(gen_random_bytes(32), 'base64'))
+VALUES ('secrets_v1', encode(extensions.gen_random_bytes(32), 'base64'))
 ON CONFLICT (name) DO NOTHING;
 
 -- 5. project_secrets encryption
