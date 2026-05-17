@@ -1,10 +1,8 @@
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Stripe } from "@stripe/stripe-js";
 import { toast } from "sonner";
 import { assertCheckoutSecretMatchesPublishableKey, getStripe, getStripeEnvironment } from "@/lib/stripe";
-import { createCheckoutSession } from "@/lib/server-fns/payments.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
@@ -50,7 +48,6 @@ function readClientSecret(value: unknown): string | null {
 }
 
 export function StripeEmbeddedCheckout({ priceId, customerEmail, userId, returnUrl }: Props) {
-  const createCheckout = useServerFn(createCheckoutSession);
   const [stripe, setStripe] = useState<Stripe | null | "pending">("pending");
   const [stripeInitError, setStripeInitError] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -82,26 +79,42 @@ export function StripeEmbeddedCheckout({ priceId, customerEmail, userId, returnU
     if (!accessToken) throw new Error("Tu sesión expiró. Inicia sesión de nuevo para suscribirte.");
 
     try {
-      const response = await createCheckout({
-        data: {
+      const checkoutReturnUrl =
+        returnUrl ||
+        `${window.location.origin}/gafcore/app?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+
+      const res = await fetch("/api/gafcore/checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
           priceId,
           customerEmail,
-          userId,
-          returnUrl:
-            returnUrl || `${window.location.origin}/gafcore/app?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+          returnUrl: checkoutReturnUrl,
           environment: getStripeEnvironment(),
-          accessToken,
-        },
+        }),
       });
-      const secret = readClientSecret(response);
+
+      let payload: unknown;
+      try {
+        payload = await res.json();
+      } catch {
+        throw new Error("Respuesta inválida del servidor de pago.");
+      }
+
+      if (!res.ok) {
+        const errMsg =
+          payload && typeof payload === "object" && "error" in payload
+            ? String((payload as { error: unknown }).error)
+            : `Error ${res.status}`;
+        throw new Error(errMsg);
+      }
+
+      const secret = readClientSecret(payload);
       if (!secret) {
-        const hint =
-          response && typeof response === "object"
-            ? Object.keys(response as object).join(", ") || "respuesta vacía"
-            : typeof response;
-        throw new Error(
-          `El servidor no devolvió clientSecret del checkout (${hint}). Haz push del repo y redeploy en Vercel.`,
-        );
+        throw new Error("El servidor no devolvió client_secret del checkout.");
       }
       assertCheckoutSecretMatchesPublishableKey(secret);
       setCheckoutError(null);
@@ -112,7 +125,7 @@ export function StripeEmbeddedCheckout({ priceId, customerEmail, userId, returnU
       toast.error("No se pudo iniciar el pago con Stripe", { description: msg });
       throw e;
     }
-  }, [createCheckout, customerEmail, priceId, returnUrl, userId]);
+  }, [customerEmail, priceId, returnUrl, userId]);
 
   const checkoutOptions = useMemo(() => ({ fetchClientSecret }), [fetchClientSecret]);
 

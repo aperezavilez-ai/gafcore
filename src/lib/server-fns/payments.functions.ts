@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { type StripeEnv, createStripeClient } from "@/lib/stripe.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { createEmbeddedCheckoutClientSecret } from "@/lib/stripe-checkout.server";
 
 const PRICE_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -26,67 +27,14 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(data.accessToken);
     if (authError || !authData.user) throw new Error("Unauthorized");
 
-    const stripe = createStripeClient(data.environment);
-    const userId = authData.user.id;
-
-    let stripePrice: Awaited<ReturnType<typeof stripe.prices.retrieve>>;
-    const byLookup = await stripe.prices.list({ lookup_keys: [data.priceId], limit: 1 });
-    if (byLookup.data.length > 0) {
-      stripePrice = byLookup.data[0];
-    } else if (data.priceId.startsWith("price_")) {
-      stripePrice = await stripe.prices.retrieve(data.priceId);
-    } else {
-      throw new Error(
-        `Precio Stripe no encontrado para «${data.priceId}». Crea en Stripe un precio de pago único con lookup_key exactamente igual a ese id (p. ej. credits_pack_200), o usa el id técnico price_… del precio.`,
-      );
-    }
-    const isRecurring = stripePrice.type === "recurring";
-
-    let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
-    try {
-      session = await stripe.checkout.sessions.create({
-        line_items: [{ price: stripePrice.id, quantity: 1 }],
-        mode: isRecurring ? "subscription" : "payment",
-        ui_mode: "embedded_page",
-        return_url: data.returnUrl,
-        ...((data.customerEmail || authData.user.email) && {
-          customer_email: data.customerEmail || authData.user.email,
-        }),
-        metadata: { userId, gafcorePriceId: data.priceId },
-        ...(isRecurring && {
-          subscription_data: { metadata: { userId } },
-        }),
-        ...(!isRecurring && {
-          payment_intent_data: {
-            metadata: { userId, gafcorePriceId: data.priceId },
-          },
-        }),
-      });
-    } catch (err) {
-      const stripeMsg =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message?: string }).message)
-          : String(err);
-      console.error("[createCheckoutSession] Stripe:", stripeMsg);
-      throw new Error(
-        stripeMsg.includes("No such price") || stripeMsg.includes("lookup_key")
-          ? `Precio «${data.priceId}» no existe en Stripe (${data.environment}). Ejecuta npm run gafcore:stripe-bootstrap y redeploy.`
-          : `Stripe no pudo crear el checkout: ${stripeMsg}`,
-      );
-    }
-
-    const cs = session.client_secret?.trim();
-    if (!cs) {
-      console.error("[createCheckoutSession] missing client_secret", {
-        sessionId: session.id,
-        uiMode: session.ui_mode,
-        environment: data.environment,
-      });
-      throw new Error(
-        "Stripe no devolvió client_secret (sesión embedded_page). Haz push del código y redeploy en Vercel.",
-      );
-    }
-    /** `cs` evita posibles filtros de serialización sobre claves que contienen «secret». */
+    const cs = await createEmbeddedCheckoutClientSecret({
+      priceId: data.priceId,
+      customerEmail: data.customerEmail,
+      returnUrl: data.returnUrl,
+      environment: data.environment,
+      userId: authData.user.id,
+      userEmail: authData.user.email,
+    });
     return { cs, clientSecret: cs };
   });
 
