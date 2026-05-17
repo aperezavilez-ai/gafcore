@@ -13,6 +13,7 @@ const root = process.cwd();
 const live = process.argv.includes("--live");
 
 function loadEnv() {
+  /** Archivos del repo tienen prioridad sobre variables viejas en la sesión de PowerShell. */
   const env = { ...process.env };
   for (const name of [".env", ".env.local", ".env.development"]) {
     const p = resolve(root, name);
@@ -26,7 +27,7 @@ function loadEnv() {
       let v = t.slice(eq + 1).trim();
       if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
         v = v.slice(1, -1);
-      if (!env[k]) env[k] = v;
+      if (v) env[k] = v;
     }
   }
   return env;
@@ -53,11 +54,15 @@ const SUBSCRIPTION_PLANS = [
   { lookup_key: "plan_creador_monthly", name: "GafCore Label", amount: 29900 },
 ];
 
-const CREDIT_PACKS = [
-  { lookup_key: "credits_pack_50", name: "GafCore 50 créditos", amount: 1000 },
-  { lookup_key: "credits_pack_100", name: "GafCore 100 créditos", amount: 2000 },
-  { lookup_key: "credits_pack_200", name: "GafCore 200 créditos", amount: 4000 },
-];
+/** Misma rejilla que CreditsOutModal: 50…1200 créditos, $10 por cada 50. */
+const CREDIT_PACKS = Array.from({ length: 24 }, (_, i) => {
+  const credits = (i + 1) * 50;
+  return {
+    lookup_key: `credits_pack_${credits}`,
+    name: `GafCore ${credits} créditos`,
+    amount: (i + 1) * 1000,
+  };
+});
 
 async function stripe(path, body) {
   const res = await fetch(`https://api.stripe.com/v1${path}`, {
@@ -119,6 +124,16 @@ async function ensureOneTimePrice({ lookup_key, name, amount }) {
 }
 
 console.log(`\n=== GafCore — bootstrap Stripe (${live ? "LIVE" : "TEST"}) ===\n`);
+const mode = secret.startsWith("sk_test_")
+  ? "sk_test_"
+  : secret.startsWith("sk_live_")
+    ? "sk_live_"
+    : "desconocido";
+console.log(`Clave secreta: ${mode} (${secret.length} caracteres, desde .env)\n`);
+if (!live && !secret.startsWith("sk_test_")) {
+  console.error("En sandbox usa STRIPE_SANDBOX_API_KEY=sk_test_… (modo Test en Stripe Dashboard).");
+  process.exit(1);
+}
 
 console.log("Planes (suscripción mensual):");
 for (const p of SUBSCRIPTION_PLANS) {

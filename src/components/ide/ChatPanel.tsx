@@ -1048,11 +1048,11 @@ export function ChatPanel({
           >
             <Coins className="h-3 w-3 text-amber-400" />
             {creditsLoading || subLoading ? (
-              <span className="text-muted-foreground">…</span>
+              <span className="text-foreground/75">…</span>
             ) : isAdmin ? (
               <span className="inline-flex items-center gap-1">
                 <span className="font-semibold text-foreground">Administrador</span>
-                <span className="text-muted-foreground">·</span>
+                <span className="text-foreground/75">·</span>
                 <span>Ilimitado</span>
               </span>
             ) : isFairUseCreadorPlan || isUnlimitedDaily ? (
@@ -1060,9 +1060,9 @@ export function ChatPanel({
             ) : (
               <>
                 <span className="tabular-nums">{balance.toLocaleString()}</span>
-                <span className="text-muted-foreground">/</span>
+                <span className="text-foreground/75">/</span>
                 <span className="tabular-nums">{displayMonthly.toLocaleString()}</span>
-                <span className="text-muted-foreground">créditos</span>
+                <span className="text-foreground/75">créditos</span>
               </>
             )}
             <span className="ml-1 hidden text-[10px] text-primary/80 group-hover:inline">
@@ -1093,7 +1093,7 @@ export function ChatPanel({
               <h2 className="text-[15px] font-semibold tracking-tight">
                 ¿Qué quieres construir hoy?
               </h2>
-              <p className="mt-1 max-w-[260px] text-[12.5px] text-muted-foreground">
+              <p className="mt-1 max-w-[260px] text-[12.5px] text-foreground/80">
                 Describe tu idea y la IA generará el código por ti.
               </p>
               <div className="mt-6 flex w-full max-w-[320px] flex-col gap-2">
@@ -1139,7 +1139,7 @@ export function ChatPanel({
                     </div>
                   </div>
                   {streamChars != null && streamChars > 0 && (
-                    <p className="pl-9 text-[11px] text-muted-foreground">
+                    <p className="pl-9 text-[11px] text-foreground/75">
                       Recibiendo respuesta… ~{Math.max(1, Math.round(streamChars / 1024))} KB texto
                     </p>
                   )}
@@ -1228,7 +1228,7 @@ export function ChatPanel({
                   : "Pide a la IA que cree o modifique algo… (opcional: escribe [modo profundo] al inicio o activa el interruptor)"
             }
             rows={3}
-            className="block w-full resize-none border-0 bg-transparent px-3.5 pt-3 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none min-h-[64px] max-h-[320px] overflow-y-auto"
+            className="block w-full resize-none border-0 bg-transparent px-3.5 pt-3 text-[13px] leading-relaxed text-foreground placeholder:text-foreground/55 focus:outline-none min-h-[64px] max-h-[320px] overflow-y-auto"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
             <div className="flex items-center gap-1.5">
@@ -1250,7 +1250,7 @@ export function ChatPanel({
                 type="button"
                 title="Adjuntar archivo al proyecto"
                 aria-label="Adjuntar archivo al proyecto"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip className="h-3.5 w-3.5" />
@@ -1259,7 +1259,7 @@ export function ChatPanel({
                 type="button"
                 title="Adjuntar imagen (foto)"
                 aria-label="Adjuntar imagen"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground"
                 onClick={() => imageInputRef.current?.click()}
               >
                 <ImageIcon className="h-3.5 w-3.5" />
@@ -1268,7 +1268,7 @@ export function ChatPanel({
                 <DropdownMenuTrigger asChild>
                   <button
                     title="Más opciones"
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground"
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
@@ -1277,7 +1277,7 @@ export function ChatPanel({
                   <DropdownMenuItem onSelect={() => onOpenSettings?.()}>
                     <SettingsIcon className="mr-2 h-4 w-4" />
                     <span className="flex-1">Ajustes</span>
-                    <span className="text-xs text-muted-foreground">Ctrl</span>
+                    <span className="text-xs text-foreground/70">Ctrl</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => onOpenHistory?.()}>
                     <History className="mr-2 h-4 w-4" />
@@ -1300,7 +1300,7 @@ export function ChatPanel({
                   <DropdownMenuItem onSelect={() => onOpenConnectors?.()}>
                     <Plug className="mr-2 h-4 w-4" />
                     <span className="flex-1">Conectores</span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 text-foreground/70" />
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => void handleScreenshot()}>
@@ -1431,7 +1431,7 @@ export function ChatPanel({
                   "flex h-7 w-7 items-center justify-center rounded-full transition " +
                   (recording
                     ? "bg-red-500/15 text-red-500 animate-pulse"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground")
+                    : "text-foreground/75 hover:bg-muted hover:text-foreground")
                 }
               >
                 <Mic className="h-3.5 w-3.5" />

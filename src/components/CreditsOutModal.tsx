@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Coins, Check, Sparkles, Zap, Crown, Flame, Rocket, Gem } from "lucide-react";
 import { StripeEmbeddedCheckout } from "@/components/StripeEmbeddedCheckout";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -111,7 +112,13 @@ export function CreditsOutModal({ open, onOpenChange, userId, userEmail, reason 
                 Cancelar
               </Button>
               <Button
-                onClick={() => setCheckoutPriceId(selected)}
+                onClick={() => {
+                  if (!userId) {
+                    toast.error("Inicia sesión para comprar créditos");
+                    return;
+                  }
+                  setCheckoutPriceId(selected);
+                }}
                 className="bg-gradient-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white border-0"
               >
                 Comprar créditos

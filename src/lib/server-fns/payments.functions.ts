@@ -42,27 +42,52 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     }
     const isRecurring = stripePrice.type === "recurring";
 
-    const session = await stripe.checkout.sessions.create({
-      line_items: [{ price: stripePrice.id, quantity: 1 }],
-      mode: isRecurring ? "subscription" : "payment",
-      ui_mode: "embedded_page",
-      return_url: data.returnUrl,
-      ...((data.customerEmail || authData.user.email) && {
-        customer_email: data.customerEmail || authData.user.email,
-      }),
-      metadata: { userId, gafcorePriceId: data.priceId },
-      ...(isRecurring && {
-        subscription_data: { metadata: { userId } },
-      }),
-      ...(!isRecurring && {
-        payment_intent_data: {
-          metadata: { userId, gafcorePriceId: data.priceId },
-        },
-      }),
-    });
+    let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>;
+    try {
+      session = await stripe.checkout.sessions.create({
+        line_items: [{ price: stripePrice.id, quantity: 1 }],
+        mode: isRecurring ? "subscription" : "payment",
+        ui_mode: "embedded",
+        return_url: data.returnUrl,
+        ...((data.customerEmail || authData.user.email) && {
+          customer_email: data.customerEmail || authData.user.email,
+        }),
+        metadata: { userId, gafcorePriceId: data.priceId },
+        ...(isRecurring && {
+          subscription_data: { metadata: { userId } },
+        }),
+        ...(!isRecurring && {
+          payment_intent_data: {
+            metadata: { userId, gafcorePriceId: data.priceId },
+          },
+        }),
+      });
+    } catch (err) {
+      const stripeMsg =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message?: string }).message)
+          : String(err);
+      console.error("[createCheckoutSession] Stripe:", stripeMsg);
+      throw new Error(
+        stripeMsg.includes("No such price") || stripeMsg.includes("lookup_key")
+          ? `Precio «${data.priceId}» no existe en Stripe (${data.environment}). Ejecuta npm run gafcore:stripe-bootstrap y redeploy.`
+          : `Stripe no pudo crear el checkout: ${stripeMsg}`,
+      );
+    }
 
-    if (!session.client_secret) throw new Error("Checkout session did not return a client secret");
-    return { clientSecret: session.client_secret };
+    const cs = session.client_secret?.trim();
+    if (!cs) {
+      console.error("[createCheckoutSession] missing client_secret", {
+        sessionId: session.id,
+        uiMode: session.ui_mode,
+        environment: data.environment,
+      });
+      throw new Error(
+        "Stripe no devolvió client_secret (¿deploy antiguo sin ui_mode embedded?). Haz push del código y redeploy en Vercel.",
+      );
+    }
+    /** `cs` evita posibles filtros de serialización sobre claves que contienen «secret». */
+    return { cs, clientSecret: cs };
   });
 
 /**

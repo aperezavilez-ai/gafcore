@@ -37,14 +37,17 @@ for (let line of text.split(/\r?\n/)) {
     val = val.slice(1, -1);
   }
   if (!key || val.length === 0) continue;
-  process.stdout.write(`Pushing ${key} …\n`);
-  const r = spawnSync(
-    "npx",
-    ["vercel@latest", "env", "add", key, "production", "--value", val, "--yes", "--force"],
-    { cwd: root, stdio: "inherit", shell: true, env: process.env },
-  );
-  if (r.status !== 0) {
-    process.stderr.write(`Failed for ${key} (exit ${r.status})\n`);
-    process.exit(r.status ?? 1);
+  // Solo Production evita prompts interactivos de "Git branch?" en Preview.
+  const withPreview = process.argv.includes("--preview");
+  const targets = withPreview ? ["production", "preview"] : ["production"];
+  for (const target of targets) {
+    process.stdout.write(`Pushing ${key} → ${target} …\n`);
+    const args = ["vercel@latest", "env", "add", key, target, "--value", val, "--yes", "--force"];
+    if (target === "preview") args.push("--git-branch", "main");
+    const r = spawnSync("npx", args, { cwd: root, stdio: "inherit", shell: true, env: process.env });
+    if (r.status !== 0) {
+      process.stderr.write(`Failed for ${key} (${target}) exit ${r.status}\n`);
+      process.exit(r.status ?? 1);
+    }
   }
 }

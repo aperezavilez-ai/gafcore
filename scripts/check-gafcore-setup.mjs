@@ -109,12 +109,20 @@ for (const k of [
   console.log(`  ${k}: ${mask(k)}`);
 }
 
+if (has("VITE_PUBLIC_SITE_URL")) ok.push("VITE_PUBLIC_SITE_URL");
+else
+  console.log(
+    "\n  ℹ Recomendado en Vercel: VITE_PUBLIC_SITE_URL=https://gafcore.com (enlaces de auth en correo).\n",
+  );
+
 if (issues.length === 0) {
   console.log("\n✓ Variables críticas presentes para Supabase + IA.\n");
-  console.log("Siguientes pasos (manual, panel web):");
-  console.log("  1. Supabase → Authentication → URL Configuration → añade tu URL local y producción.");
-  console.log("  2. Aplica migraciones: supabase db push (CLI) o SQL Editor con supabase/migrations/.");
-  console.log("  3. npm run dev → prueba /gafcore/app; si el chat falla, F12 → Red → chat/stream → campo error.\n");
+  console.log("Automatizable: npm run gafcore:finish   (doctor + Stripe bootstrap)");
+  console.log("Con Vercel CLI: npm run gafcore:finish -- --vercel\n");
+  console.log("Manual (paneles):");
+  console.log("  1. Supabase → Auth → URL Configuration + SMTP (remitente GafCore).");
+  console.log("  2. npx supabase@latest db push  (migraciones).");
+  console.log("  3. Prueba https://gafcore.com/gafcore/app y pago test Stripe.\n");
 
   const pay = has("VITE_PAYMENTS_CLIENT_TOKEN") ? env.VITE_PAYMENTS_CLIENT_TOKEN.trim() : "";
   if (pay.startsWith("pk_test_") || pay.startsWith("pk_live_")) {

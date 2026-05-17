@@ -14,9 +14,11 @@
     "gafcore:doctor": "node scripts/check-gafcore-setup.mjs",
     "gafcore:push": "node scripts/gafcore-push-github.mjs",
     "gafcore:stripe-bootstrap": "node scripts/bootstrap-stripe-gafcore.mjs",
+    "gafcore:stripe-verify": "node scripts/verify-stripe-key.mjs",
     "gafcore:stripe-bootstrap:live": "node scripts/bootstrap-stripe-gafcore.mjs --live",
     "gafcore:vercel-env": "node scripts/push-vercel-env-once.mjs",
-    "gafcore:setup-production": "node scripts/gafcore-setup-production.mjs"
+    "gafcore:setup-production": "node scripts/gafcore-setup-production.mjs",
+    "gafcore:finish": "node scripts/gafcore-finish.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

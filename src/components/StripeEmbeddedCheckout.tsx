@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Stripe } from "@stripe/stripe-js";
 import { toast } from "sonner";
-import { getStripe, getStripeEnvironment } from "@/lib/stripe";
+import { assertCheckoutSecretMatchesPublishableKey, getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { createCheckoutSession } from "@/lib/server-fns/payments.functions";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -14,17 +14,19 @@ interface Props {
   returnUrl?: string;
 }
 
-const CS_RE = /^cs_(test|live)_[A-Za-z0-9]+$/;
+const CS_RE = /^cs_(test|live)_[A-Za-z0-9_-]{8,}$/;
 
 function readClientSecret(value: unknown): string | null {
   if (typeof value === "string") {
-    if (CS_RE.test(value.trim())) return value.trim();
+    const s = value.trim();
+    if (CS_RE.test(s)) return s;
     return null;
   }
   if (!value || typeof value !== "object") return null;
 
   const record = value as Record<string, unknown>;
   const direct =
+    readClientSecret(record.cs) ??
     readClientSecret(record.clientSecret) ??
     readClientSecret(record.client_secret) ??
     readClientSecret(record.data) ??
@@ -51,6 +53,7 @@ export function StripeEmbeddedCheckout({ priceId, customerEmail, userId, returnU
   const createCheckout = useServerFn(createCheckoutSession);
   const [stripe, setStripe] = useState<Stripe | null | "pending">("pending");
   const [stripeInitError, setStripeInitError] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,10 +94,21 @@ export function StripeEmbeddedCheckout({ priceId, customerEmail, userId, returnU
         },
       });
       const secret = readClientSecret(response);
-      if (!secret) throw new Error("El servidor no devolvió clientSecret del checkout.");
+      if (!secret) {
+        const hint =
+          response && typeof response === "object"
+            ? Object.keys(response as object).join(", ") || "respuesta vacía"
+            : typeof response;
+        throw new Error(
+          `El servidor no devolvió clientSecret del checkout (${hint}). Si acabas de configurar Stripe en Vercel, haz push del repo y redeploy (el checkout requiere ui_mode embedded en el servidor).`,
+        );
+      }
+      assertCheckoutSecretMatchesPublishableKey(secret);
+      setCheckoutError(null);
       return secret;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      setCheckoutError(msg);
       toast.error("No se pudo iniciar el pago con Stripe", { description: msg });
       throw e;
     }
@@ -119,6 +133,22 @@ export function StripeEmbeddedCheckout({ priceId, customerEmail, userId, returnU
       >
         <p className="font-medium text-foreground">No se puede mostrar el checkout</p>
         <p className="mt-1 text-muted-foreground">{stripeInitError ?? "Stripe no está disponible."}</p>
+      </div>
+    );
+  }
+
+  if (checkoutError) {
+    return (
+      <div
+        role="alert"
+        className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm"
+      >
+        <p className="font-medium text-foreground">Error al cargar el pago</p>
+        <p className="mt-1 text-muted-foreground">{checkoutError}</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          En Vercel usa pk_test_ y STRIPE_SANDBOX_API_KEY=sk_test_ (misma cuenta test). Luego npm run
+          gafcore:stripe-bootstrap y redeploy.
+        </p>
       </div>
     );
   }

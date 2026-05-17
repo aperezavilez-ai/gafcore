@@ -1,6 +1,7 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, getRouteApi, Link, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,8 @@ const GAFCORE_PLANS_UI = [
   { id: "plan_premium_monthly", price: 99, credits: "350", icon: Crown, highlight: false },
 ] as const;
 
+const gafcoreRouteApi = getRouteApi("/gafcore");
+
 function planNameKey(id: string): string {
   if (id === "free") return "gc.plan.free";
   if (id === "plan_basico_monthly") return "gc.names.starter";
@@ -108,10 +111,17 @@ function GafCoreLanding() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user, loading: authLoading } = useAuth();
+  const { plan: planFromUrl } = gafcoreRouteApi.useSearch();
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   const { theme, setTheme } = useGafcoreTheme();
   const [checkoutPriceId, setCheckoutPriceId] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
+
+  const resolveUserId = useCallback(async (): Promise<string | undefined> => {
+    if (user?.id) return user.id;
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id;
+  }, [user?.id]);
 
   /** Tras verificar correo: URL con ?pick_plan=1 → tabla de planes (añadir en Supabase Auth URL redirects). */
   useEffect(() => {
@@ -149,28 +159,34 @@ function GafCoreLanding() {
   }, [authLoading, user?.id, assignUserWelcome]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const url = new URL(window.location.href);
-    const planParam = url.searchParams.get("plan");
-    if (!planParam) return;
-    url.searchParams.delete("plan");
-    const qs = url.searchParams.toString();
-    window.history.replaceState({}, "", `${url.pathname}${qs ? `?${qs}` : ""}${url.hash}`);
-    if (planParam === "free") {
-      clearPlanChoicePending(user.id);
-      toast.success("Plan gratis: entra al editor con 10 créditos de bienvenida.");
-      navigate({ to: "/gafcore/app" });
-      return;
-    }
-    setCheckoutPriceId(planParam);
-  }, [user?.id, navigate]);
+    if (!planFromUrl) return;
+    void (async () => {
+      const uid = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
+      if (!uid) return;
+      if (planFromUrl === "free") {
+        clearPlanChoicePending(uid);
+        toast.success("Plan gratis: entra al editor con 10 créditos de bienvenida.");
+        navigate({ to: "/gafcore/app", search: {}, replace: true });
+        return;
+      }
+      setCheckoutPriceId(planFromUrl);
+      navigate({ to: "/gafcore", search: {}, hash: "planes", replace: true });
+    })();
+  }, [planFromUrl, user?.id, navigate]);
 
   const choosePlan = (planId: string) => {
-    if (user?.id) {
-      navigate({ to: "/gafcore", search: { plan: planId } });
-      return;
-    }
-    navigate({ to: "/gafcore/register", search: { plan: planId, redirect: `/gafcore?plan=${planId}` } });
+    void (async () => {
+      if (authLoading) {
+        toast.message("Comprobando tu sesión…");
+        return;
+      }
+      const uid = await resolveUserId();
+      if (uid) {
+        setCheckoutPriceId(planId);
+        return;
+      }
+      navigate({ to: "/gafcore/register", search: { plan: planId, redirect: `/gafcore?plan=${planId}` } });
+    })();
   };
 
   return (
@@ -309,17 +325,21 @@ function GafCoreLanding() {
                     ))}
                   </ul>
                   <Button
+                    type="button"
                     onClick={() => {
                       if (plan.id === "free") {
-                        if (user?.id) {
-                          clearPlanChoicePending(user.id);
-                          navigate({ to: "/gafcore/app" });
-                          return;
-                        }
-                        navigate({
-                          to: "/gafcore/register",
-                          search: { plan: "free" },
-                        });
+                        void (async () => {
+                          const uid = await resolveUserId();
+                          if (uid) {
+                            clearPlanChoicePending(uid);
+                            navigate({ to: "/gafcore/app" });
+                            return;
+                          }
+                          navigate({
+                            to: "/gafcore/register",
+                            search: { plan: "free" },
+                          });
+                        })();
                         return;
                       }
                       choosePlan(plan.id);
@@ -497,10 +517,18 @@ function GafCoreLanding() {
       </footer>
 
       <Dialog open={!!checkoutPriceId} onOpenChange={(o) => !o && setCheckoutPriceId(null)}>
-        <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto p-5 sm:p-7">
+        <DialogContent className="z-[100] max-w-5xl max-h-[92vh] overflow-y-auto p-5 sm:p-7">
           <DialogHeader className="sr-only">
             <DialogTitle>{t("gc.checkout.title")}</DialogTitle>
           </DialogHeader>
+          {checkoutPriceId && !user && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              <Link to="/gafcore/login" search={{ redirect: `/gafcore?plan=${checkoutPriceId}` }} className="text-primary underline">
+                Inicia sesión
+              </Link>{" "}
+              para continuar con el pago.
+            </p>
+          )}
           {checkoutPriceId && user && (() => {
             const selected = GAFCORE_PLANS_UI.find((p) => p.id === checkoutPriceId);
             if (!selected) return null;
