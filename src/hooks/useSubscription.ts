@@ -137,9 +137,17 @@ export function useSubscription(userId: string | undefined) {
       )
       .subscribe();
 
+    const onExternalRefresh = () => {
+      void load();
+    };
+    window.addEventListener("gafcore:credits-applied", onExternalRefresh);
+    window.addEventListener("gafcore:credits-refresh", onExternalRefresh);
+
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
+      window.removeEventListener("gafcore:credits-applied", onExternalRefresh);
+      window.removeEventListener("gafcore:credits-refresh", onExternalRefresh);
     };
   }, [userId, env]);
 

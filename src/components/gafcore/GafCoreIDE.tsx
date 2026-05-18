@@ -82,9 +82,11 @@ import { FileSidebar } from "@/components/ide/FileSidebar";
 import { getIdeConfig } from "@/lib/ideConfig";
 import { deployToGithub } from "@/lib/githubDeploy";
 import { PublishDialog } from "@/components/ide/PublishDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
+import { getStripeEnvironment } from "@/lib/stripe";
 import { getUserStats } from "@/lib/admin-users.functions";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { CreditsOutModal } from "@/components/CreditsOutModal";
@@ -167,17 +169,49 @@ export function GafCoreIDE() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    const ok =
-      url.searchParams.get("checkout") === "success" ||
-      url.searchParams.get("credits") === "success";
-    if (!ok) return;
-    url.searchParams.delete("checkout");
-    url.searchParams.delete("credits");
-    url.searchParams.delete("session_id");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    void refreshCredits();
-    window.dispatchEvent(new Event("gafcore:credits-applied"));
-    toast.success("Pago confirmado. Créditos actualizados.");
+    const checkoutOk = url.searchParams.get("checkout") === "success";
+    const creditsOk = url.searchParams.get("credits") === "success";
+    if (!checkoutOk && !creditsOk) return;
+
+    const sessionId = url.searchParams.get("session_id");
+
+    void (async () => {
+      if (checkoutOk && sessionId) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (token) {
+            const res = await fetch("/api/gafcore/checkout-confirm", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                session_id: sessionId,
+                environment: getStripeEnvironment(),
+              }),
+            });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => ({}))) as { error?: string };
+              console.warn("[checkout-confirm]", body.error ?? res.status);
+            }
+          }
+        } catch (e) {
+          console.warn("[checkout-confirm]", e);
+        }
+      }
+
+      url.searchParams.delete("checkout");
+      url.searchParams.delete("credits");
+      url.searchParams.delete("session_id");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      void refreshCredits();
+      window.dispatchEvent(new Event("gafcore:credits-applied"));
+      toast.success(
+        checkoutOk ? "Pago confirmado. Tu plan y créditos se están actualizando." : "Pago confirmado. Créditos actualizados.",
+      );
+    })();
   }, [refreshCredits]);
 
   const displayMonthly = displayMonthlyAllowanceForUi({ isAdmin, subActive, monthlyAllowance });

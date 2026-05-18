@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { type StripeEnv, verifyWebhook } from "@/lib/stripe.server";
+import {
+  PLAN_CREDITS,
+  applyGafcorePlanSubscription,
+} from "@/lib/stripe-subscription-sync.server";
 
 type QueryChain = PromiseLike<unknown> & {
   eq: (column: string, value: unknown) => QueryChain;
@@ -66,15 +70,6 @@ type StripeInvoicePayload = {
   };
 };
 
-// Plan → monthly credits + tier (lookup_key de Stripe o metadata `gafcore_price_id` en el precio)
-// Creador uses 0 credits + tier='creador' so consume_credits applies the unlimited fair-use logic.
-const PLAN_CREDITS: Record<string, { credits: number; tier: string }> = {
-  plan_basico_monthly: { credits: 70, tier: "basico" },
-  plan_pro_monthly: { credits: 150, tier: "pro" },
-  plan_premium_monthly: { credits: 350, tier: "premium" },
-  plan_creador_monthly: { credits: 0, tier: "creador" },
-};
-
 function resolveStripePlanPriceId(
   price:
     | undefined
@@ -105,47 +100,23 @@ async function handleSubscriptionCreated(subscription: StripeSubscriptionPayload
   const periodStart = item?.current_period_start ?? subscription.current_period_start;
   const periodEnd = item?.current_period_end ?? subscription.current_period_end;
 
-  const planInfo = priceId ? PLAN_CREDITS[priceId] : undefined;
-
-  await getSupabase()
-    .from("subscriptions")
-    .upsert(
-      {
-        user_id: userId,
-        stripe_subscription_id: subscription.id,
-        stripe_customer_id: subscription.customer,
-        product_id: productId,
-        price_id: priceId,
-        status: subscription.status,
-        current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
-        current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-        environment: env,
-        monthly_credits: planInfo?.credits ?? 0,
-        plan_tier: planInfo?.tier ?? "creator",
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "stripe_subscription_id" },
-    );
-
-  // Grant initial monthly credits
-  if (planInfo) {
-    await getSupabase().rpc("add_credits", {
-      p_user_id: userId,
-      p_amount: planInfo.credits,
-      p_reason: "monthly_grant",
-      p_metadata: { subscription_id: subscription.id, price_id: priceId },
-    });
-    /** Plan Creador: 0 créditos contables pero `consume_credits` usa monthly_allowance >= 1000 como ilimitado fair-use. */
-    const monthlyAllowance = planInfo.tier === "creador" ? 1000 : planInfo.credits;
-    await getSupabase()
-      .from("user_credits")
-      .update({
-        monthly_allowance: monthlyAllowance,
-        daily_limit: monthlyAllowance,
-        last_reset_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
+  if (!priceId) {
+    console.error("No priceId on subscription", subscription.id);
+    return;
   }
+
+  await applyGafcorePlanSubscription({
+    userId,
+    priceId,
+    stripeSubscriptionId: subscription.id,
+    stripeCustomerId: subscription.customer,
+    productId: typeof productId === "string" ? productId : undefined,
+    status: subscription.status,
+    environment: env,
+    currentPeriodStart: periodStart ? new Date(periodStart * 1000).toISOString() : null,
+    currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+  });
 }
 
 async function handleSubscriptionUpdated(subscription: StripeSubscriptionPayload, env: StripeEnv) {
@@ -212,12 +183,31 @@ type StripeCheckoutSession = {
   id: string;
   mode?: string;
   payment_status?: string;
+  subscription?: string;
+  customer?: string;
   metadata?: { userId?: string; gafcorePriceId?: string };
 };
 
-async function handleCheckoutCompleted(session: StripeCheckoutSession) {
-  if (session.mode !== "payment") return;
+async function handleCheckoutCompleted(session: StripeCheckoutSession, env: StripeEnv) {
   if (session.payment_status && session.payment_status !== "paid") return;
+
+  if (session.mode === "subscription") {
+    const userId = session.metadata?.userId;
+    const priceId = session.metadata?.gafcorePriceId;
+    const subId = session.subscription;
+    if (!userId || !priceId || !subId) return;
+    await applyGafcorePlanSubscription({
+      userId,
+      priceId,
+      stripeSubscriptionId: subId,
+      stripeCustomerId: session.customer,
+      status: "active",
+      environment: env,
+    });
+    return;
+  }
+
+  if (session.mode !== "payment") return;
   const userId = session.metadata?.userId;
   const priceId = session.metadata?.gafcorePriceId;
   if (!userId || !priceId) return;
@@ -272,7 +262,7 @@ async function handleWebhook(req: Request, env: StripeEnv) {
       break;
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
-      await handleCheckoutCompleted(event.data.object);
+      await handleCheckoutCompleted(event.data.object, env);
       break;
     default:
       console.log("Unhandled event:", event.type);

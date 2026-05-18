@@ -38,6 +38,7 @@ import { Route as ApiPublicGafcoreSupportFaqRouteImport } from './routes/api/pub
 import { Route as ApiPublicBillingCheckRouteImport } from './routes/api/public/billing.check'
 import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/chat.stream'
 import { Route as ApiGafcoreCheckoutSessionRouteImport } from './routes/api/gafcore/checkout-session'
+import { Route as ApiGafcoreCheckoutConfirmRouteImport } from './routes/api/gafcore/checkout-confirm'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -186,6 +187,11 @@ const ApiGafcoreCheckoutSessionRoute = ApiGafcoreCheckoutSessionRouteImport.upda
   path: '/api/gafcore/checkout-session',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreCheckoutConfirmRoute = ApiGafcoreCheckoutConfirmRouteImport.update({
+  id: '/api/gafcore/checkout-confirm',
+  path: '/api/gafcore/checkout-confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
+  '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
   '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -242,6 +249,7 @@ export interface FileRoutesByTo {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
+  '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
   '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -274,6 +282,7 @@ export interface FileRoutesById {
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
+  '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
   '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -307,6 +316,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/checkout-session'
+    | '/api/gafcore/checkout-confirm'
     | '/api/public/billing/check'
     | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/checkout-session'
+    | '/api/gafcore/checkout-confirm'
     | '/api/public/billing/check'
     | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/gafcore_/settings/project'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/checkout-session'
+    | '/api/gafcore/checkout-confirm'
     | '/api/public/billing/check'
     | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
@@ -401,6 +413,7 @@ export interface RootRouteChildren {
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
   ApiGafcoreChatStreamRoute: typeof ApiGafcoreChatStreamRoute
   ApiGafcoreCheckoutSessionRoute: typeof ApiGafcoreCheckoutSessionRoute
+  ApiGafcoreCheckoutConfirmRoute: typeof ApiGafcoreCheckoutConfirmRoute
   ApiPublicBillingCheckRoute: typeof ApiPublicBillingCheckRoute
   ApiPublicGafcoreSupportFaqRoute: typeof ApiPublicGafcoreSupportFaqRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -613,6 +626,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreCheckoutSessionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/checkout-confirm': {
+      id: '/api/gafcore/checkout-confirm'
+      path: '/api/gafcore/checkout-confirm'
+      fullPath: '/api/gafcore/checkout-confirm'
+      preLoaderRoute: typeof ApiGafcoreCheckoutConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -652,6 +672,7 @@ const rootRouteChildren: RootRouteChildren = {
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
   ApiGafcoreChatStreamRoute: ApiGafcoreChatStreamRoute,
   ApiGafcoreCheckoutSessionRoute: ApiGafcoreCheckoutSessionRoute,
+  ApiGafcoreCheckoutConfirmRoute: ApiGafcoreCheckoutConfirmRoute,
   ApiPublicBillingCheckRoute: ApiPublicBillingCheckRoute,
   ApiPublicGafcoreSupportFaqRoute: ApiPublicGafcoreSupportFaqRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
