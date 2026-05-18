@@ -101,7 +101,7 @@ import { CreditsOutModal } from "@/components/CreditsOutModal";
 
 type View = "preview" | "code";
 
-/** Nombre en la barra del IDE (no confundir con el nombre del proyecto en BD). */
+/** Nombre de cuenta en menús (el proyecto activo va en la barra principal). */
 function ideUserToolbarName(
   user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined,
 ): string {
@@ -712,11 +712,20 @@ export function GafCoreIDE() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex min-w-0 max-w-[min(100vw-200px,420px)] items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium hover:bg-muted"
-                title="Cuenta, proyectos y ajustes"
+                className="flex min-w-0 max-w-[min(100vw-200px,420px)] flex-col items-start gap-0 rounded-md px-2 py-1 text-left hover:bg-muted sm:flex-row sm:items-center sm:gap-1"
+                title={
+                  currentProjectId
+                    ? `Proyecto: ${projectName} · Cuenta: ${ideUserToolbarName(user)}`
+                    : "Crea o elige un proyecto"
+                }
               >
-                <span className="truncate">{ideUserToolbarName(user)}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate text-[13px] font-semibold text-foreground">
+                  {projectName}
+                </span>
+                <span className="hidden truncate text-[11px] text-muted-foreground sm:inline sm:max-w-[140px]">
+                  {ideUserToolbarName(user)}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground sm:ml-0.5" aria-hidden />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -729,13 +738,32 @@ export function GafCoreIDE() {
                 Ir a inicio
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Proyecto activo
+              </DropdownMenuLabel>
+              <div className="px-2 pb-1">
+                <p className="truncate text-sm font-semibold text-foreground">{projectName}</p>
+                {currentProjectId ? (
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                    {currentProjectId.slice(0, 8)}…
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Usa «+ Nuevo» para crear uno
+                  </p>
+                )}
+              </div>
+              <DropdownMenuSeparator />
               <DropdownMenuLabel className="flex items-start gap-2 text-[12px] font-normal">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold">
-                  G
+                  {ideUserToolbarName(user).charAt(0).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1 leading-snug">
                   <span className="block truncate font-medium text-foreground">
                     {ideUserToolbarName(user)}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                    {user?.email ?? "Sesión"}
                   </span>
                   {isAdmin ? (
                     <span className="mt-0.5 block text-[10px] text-muted-foreground">
