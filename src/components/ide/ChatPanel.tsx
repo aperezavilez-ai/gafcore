@@ -58,8 +58,11 @@ import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared"
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
 import {
   auditFunctionalFirst,
+  buildFunctionalFixInstruction,
   formatFunctionalAuditForUser,
   FUNCTIONAL_FIRST_BUILD_PREFIX,
+  hasFunctionalBlockingIssues,
+  type FunctionalAuditIssue,
 } from "@/lib/gafcore-functional-first.shared";
 import { validateGafcoreFunctional } from "@/lib/gafcore-validate.functions";
 
@@ -784,6 +787,168 @@ export function ChatPanel({
     return Array.from(byName.values());
   };
 
+  const runFunctionalAuditOnBatch = async (
+    outFiles: Array<{ name: string; content: string }>,
+    merged: FileItem[],
+  ): Promise<FunctionalAuditIssue[]> => {
+    const localAudit = auditFunctionalFirst(merged.map((f) => ({ name: f.name, content: f.content })));
+    try {
+      const remote = await callValidateFunctional({
+        data: outFiles.map((f) => ({ name: f.name, content: f.content })),
+      });
+      return remote.issues?.length ? remote.issues : localAudit.issues;
+    } catch {
+      return localAudit.issues;
+    }
+  };
+
+  const applyGenerationFiles = async (
+    baseFiles: FileItem[],
+    generated: Array<{ name: string; language?: string; content: string }>,
+    userInstruction: string,
+    userRaw: string,
+    options: { runFunctionalAudit: boolean; snapshotLabel?: string },
+  ): Promise<{ merged: FileItem[]; issues: FunctionalAuditIssue[] }> => {
+    if (options.snapshotLabel) {
+      try {
+        const { createSnapshot } = await import("@/lib/userSupabase");
+        void createSnapshot(baseFiles, options.snapshotLabel);
+      } catch {
+        /* */
+      }
+    }
+    let outFiles = repairGafcoreProjectMedia(
+      generated,
+      baseFiles.map((f) => ({ name: f.name, content: f.content, language: f.language })),
+      userInstruction,
+    );
+    try {
+      const enriched = await callEnrichMedia({
+        data: {
+          files: outFiles,
+          projectFiles: baseFiles.map((f) => ({
+            name: f.name,
+            content: f.content,
+            language: f.language,
+          })),
+          instruction: userInstruction,
+        },
+      });
+      if (enriched?.files?.length) outFiles = enriched.files;
+    } catch {
+      /* reparación local ya aplicada */
+    }
+    const merged = mergeGeneratedFiles(baseFiles, outFiles);
+    setFiles(merged);
+    void syncFilesToDb(outFiles);
+    onCodeGenerated?.();
+
+    try {
+      const v = await callValidateSources({
+        data: outFiles.map((f) => ({ name: f.name, content: f.content })),
+      });
+      if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
+        setLastError(v.errors.map((e) => `${e.name}: ${e.message}`).join("\n"));
+      }
+    } catch {
+      /* */
+    }
+
+    let issues: FunctionalAuditIssue[] = [];
+    if (options.runFunctionalAudit) {
+      issues = await runFunctionalAuditOnBatch(outFiles, merged);
+      if (issues.length > 0) {
+        const text = formatFunctionalAuditForUser(issues);
+        setLastError((prev) =>
+          prev ? `${prev}\n\n[Functional-first]\n${text}` : `[Functional-first]\n${text}`,
+        );
+      }
+    }
+    return { merged, issues };
+  };
+
+  const requestGafcoreGeneration = async (
+    tok: string,
+    history: ChatMsg[],
+    instruction: string,
+    contextFiles: FileItem[],
+    ac: AbortSignal,
+    myEpoch: number,
+  ): Promise<{
+    reply: string;
+    files: Array<{ name: string; language?: string; content: string }>;
+  }> => {
+    try {
+      const res = await fetch("/api/gafcore/chat/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tok}`,
+        },
+        body: JSON.stringify({ history, instruction, files: contextFiles }),
+        signal: ac.signal,
+      });
+
+      const ct = res.headers.get("content-type") || "";
+
+      if (!res.ok) {
+        let errCode = `HTTP ${res.status}`;
+        try {
+          const ej = (await res.json()) as { error?: string; detail?: string };
+          if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
+          else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
+          else if (ej?.error === "invalid_body")
+            errCode = "Petición inválida (revisa el texto o archivos).";
+          else if (ej?.error === "upstream") errCode = `UPSTREAM:${res.status}`;
+          else if (ej?.error === "credits_error") errCode = "CREDITS_VERIFY_FAILED";
+          else if (ej?.error === "no_stream_body") errCode = "NO_STREAM_BODY";
+          else if (typeof ej?.error === "string") errCode = ej.error;
+          else if (res.status === 500 && ej?.detail)
+            errCode = `Error del servidor: ${String(ej.detail).slice(0, 200)}`;
+        } catch {
+          /* */
+        }
+        throw new Error(errCode);
+      }
+
+      if (ct.includes("application/json")) {
+        const j = (await res.json()) as {
+          reply?: string;
+          files?: Array<{ name: string; language?: string; content: string }>;
+        };
+        return {
+          reply: typeof j.reply === "string" ? j.reply : "Listo.",
+          files: Array.isArray(j.files) ? j.files : [],
+        };
+      }
+
+      const text = await readSseJsonPayload(res, ac.signal, (n) => {
+        if (myEpoch === requestEpochRef.current) setStreamChars(n);
+      });
+      let parsed: { reply?: string; files?: unknown };
+      try {
+        parsed = JSON.parse(text || "{}");
+      } catch {
+        throw new Error("No se pudo interpretar la respuesta del modelo.");
+      }
+      const rawFiles = Array.isArray(parsed.files) ? parsed.files : [];
+      return {
+        reply: typeof parsed.reply === "string" ? parsed.reply : "Listo.",
+        files: rawFiles as Array<{ name: string; language?: string; content: string }>,
+      };
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      if ((err as Error)?.name === "AbortError") throw err;
+      const msg = String((err as Error)?.message || "");
+      if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        return callGafcoreChat({
+          data: { history, instruction, files: contextFiles as any },
+        });
+      }
+      throw err;
+    }
+  };
+
   const send = async (text?: string) => {
     const raw = (text ?? input).trim();
     const pendingSnapshot = [...pendingComposerImages];
@@ -852,85 +1017,7 @@ export function ChatPanel({
         throw new Error("no_session");
       }
 
-      let result: {
-        reply: string;
-        files?: Array<{ name: string; language?: string; content: string }>;
-        balance?: number | null;
-      };
-
-      try {
-        const res = await fetch("/api/gafcore/chat/stream", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tok}`,
-          },
-          body: JSON.stringify({ history, instruction, files }),
-          signal: ac.signal,
-        });
-
-        const ct = res.headers.get("content-type") || "";
-
-        if (!res.ok) {
-          let errCode = `HTTP ${res.status}`;
-          try {
-            const ej = (await res.json()) as { error?: string; detail?: string };
-            if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
-            else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
-            else if (ej?.error === "invalid_body")
-              errCode = "Petición inválida (revisa el texto o archivos).";
-            else if (ej?.error === "upstream") errCode = `UPSTREAM:${res.status}`;
-            else if (ej?.error === "credits_error") errCode = "CREDITS_VERIFY_FAILED";
-            else if (ej?.error === "no_stream_body") errCode = "NO_STREAM_BODY";
-            else if (typeof ej?.error === "string") errCode = ej.error;
-            else if (res.status === 500 && ej?.detail)
-              errCode = `Error del servidor: ${String(ej.detail).slice(0, 200)}`;
-          } catch {
-            /* */
-          }
-          throw new Error(errCode);
-        }
-
-        if (ct.includes("application/json")) {
-          const j = (await res.json()) as {
-            reply?: string;
-            files?: Array<{ name: string; language?: string; content: string }>;
-            balance?: number | null;
-          };
-          result = {
-            reply: typeof j.reply === "string" ? j.reply : "Listo.",
-            files: Array.isArray(j.files) ? j.files : [],
-            balance: j.balance,
-          };
-        } else {
-          const text = await readSseJsonPayload(res, ac.signal, (n) => {
-            if (myEpoch === requestEpochRef.current) setStreamChars(n);
-          });
-          if (myEpoch !== requestEpochRef.current) return;
-          let parsed: { reply?: string; files?: unknown };
-          try {
-            parsed = JSON.parse(text || "{}");
-          } catch {
-            throw new Error("No se pudo interpretar la respuesta del modelo.");
-          }
-          const rawFiles = Array.isArray(parsed.files) ? parsed.files : [];
-          result = {
-            reply: typeof parsed.reply === "string" ? parsed.reply : "Listo.",
-            files: rawFiles as Array<{ name: string; language?: string; content: string }>,
-          };
-        }
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === "AbortError") throw err;
-        if ((err as Error)?.name === "AbortError") throw err;
-        const msg = String((err as Error)?.message || "");
-        if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-          result = await callGafcoreChat({
-            data: { history, instruction, files: files as any },
-          });
-        } else {
-          throw err;
-        }
-      }
+      const result = await requestGafcoreGeneration(tok, history, instruction, files, ac.signal, myEpoch);
 
       if (myEpoch !== requestEpochRef.current) return;
 
@@ -938,79 +1025,71 @@ export function ChatPanel({
       setStreamChars(null);
       setMessages((m) => [...m, { role: "ai", content: replyText, ts: Date.now() }]);
       void persistMessage("assistant", replyText);
+
       if (result.files && result.files.length > 0) {
-        try {
-          const { createSnapshot } = await import("@/lib/userSupabase");
-          const snippet = raw.slice(0, 60);
-          void createSnapshot(files, `auto: ${snippet}`);
-        } catch {}
-        let outFiles = repairGafcoreProjectMedia(
-          result.files,
-          files.map((f) => ({ name: f.name, content: f.content, language: f.language })),
-          instruction,
-        );
-        try {
-          const enriched = await callEnrichMedia({
-            data: {
-              files: outFiles,
-              projectFiles: files.map((f) => ({
-                name: f.name,
-                content: f.content,
-                language: f.language,
-              })),
-              instruction,
-            },
-          });
-          if (enriched?.files?.length) outFiles = enriched.files;
-        } catch {
-          /* reparación local ya aplicada */
-        }
-        const merged = mergeGeneratedFiles(files, outFiles);
-        setFiles(merged);
-        void syncFilesToDb(outFiles);
-        onCodeGenerated?.();
+        const runFunctional = mode === "build" && !visualEditOn;
+        let { merged, issues } = await applyGenerationFiles(files, result.files, instruction, raw, {
+          runFunctionalAudit: runFunctional,
+          snapshotLabel: `auto: ${raw.slice(0, 60)}`,
+        });
 
-        try {
-          const v = await callValidateSources({
-            data: outFiles.map((f) => ({ name: f.name, content: f.content })),
-          });
-          if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
-            setLastError(v.errors.map((e) => `${e.name}: ${e.message}`).join("\n"));
-          }
-        } catch {
-          /* validación best-effort */
-        }
-
-        if (mode === "build" && !visualEditOn) {
-          const localAudit = auditFunctionalFirst(
-            merged.map((f) => ({ name: f.name, content: f.content })),
-          );
-          try {
-            const remote = await callValidateFunctional({
-              data: outFiles.map((f) => ({ name: f.name, content: f.content })),
-            });
-            const issues = remote.issues?.length ? remote.issues : localAudit.issues;
-            if (issues.length > 0) {
-              const text = formatFunctionalAuditForUser(issues);
-              setLastError((prev) =>
-                prev ? `${prev}\n\n[Functional-first]\n${text}` : `[Functional-first]\n${text}`,
+        if (runFunctional && hasFunctionalBlockingIssues(issues)) {
+          const canRetry =
+            isAdmin ||
+            isUnlimitedDaily ||
+            isFairUseCreadorPlan ||
+            balance >= COST_PER_REQUEST;
+          if (!canRetry) {
+            toast.error("Sin créditos para el reintento automático de corrección.");
+          } else {
+            toast.message("Corrigiendo funcionalidad (1 reintento automático)…", { duration: 5000 });
+            const fixInstruction =
+              FUNCTIONAL_FIRST_BUILD_PREFIX +
+              buildFunctionalFixInstruction(issues, raw || coreText);
+            const fixHistory: ChatMsg[] = [
+              ...history,
+              { role: "user", content: instruction },
+              { role: "assistant", content: replyText },
+            ];
+            const retryResult = await requestGafcoreGeneration(
+              tok,
+              fixHistory,
+              fixInstruction,
+              merged,
+              ac.signal,
+              myEpoch,
+            );
+            if (myEpoch === requestEpochRef.current && retryResult.files?.length) {
+              const retryReply = sanitizeUserFacingAiText(retryResult.reply || "Corregido.");
+              setMessages((m) => [
+                ...m,
+                { role: "ai", content: retryReply, ts: Date.now() },
+              ]);
+              void persistMessage("assistant", retryReply);
+              const retryBatch = await applyGenerationFiles(
+                merged,
+                retryResult.files,
+                fixInstruction,
+                raw,
+                { runFunctionalAudit: true },
               );
-              toast.message("Revisa funcionalidad (functional-first)", {
-                description: issues[0]?.message,
-                duration: 8000,
-              });
-            }
-          } catch {
-            if (localAudit.issues.length > 0) {
-              const text = formatFunctionalAuditForUser(localAudit.issues);
-              setLastError((prev) =>
-                prev ? `${prev}\n\n[Functional-first]\n${text}` : `[Functional-first]\n${text}`,
-              );
-              toast.message("Revisa funcionalidad del código generado", {
-                description: localAudit.issues[0]?.message,
-              });
+              merged = retryBatch.merged;
+              issues = retryBatch.issues;
+              if (!hasFunctionalBlockingIssues(issues)) {
+                setLastError(null);
+                toast.success("Corrección functional-first aplicada");
+              } else {
+                toast.message("Aún hay avisos functional-first tras el reintento", {
+                  description: issues[0]?.message,
+                });
+              }
             }
           }
+        } else if (issues.length > 0) {
+          toast.message("Revisa funcionalidad (functional-first)", {
+            description: issues[0]?.message,
+            duration: 8000,
+          });
         }
       }
     } catch (error: any) {

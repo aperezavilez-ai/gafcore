@@ -265,7 +265,8 @@ export function GafCoreIDE() {
       /GafCore listo|Pídele algo a GafCore|Editor · App\.tsx|const \[code, setCode\]/.test(
         appFile.content,
       ) ||
-      /Hola desde GafCore/i.test(appFile.content);
+      /Hola desde GafCore/i.test(appFile.content) ||
+      (/Proyecto listo/i.test(appFile.content) && !/useState/i.test(appFile.content));
 
     if (!isStale && remote?.length) {
       const sanitized = sanitizeProjectJsxFiles(remote);

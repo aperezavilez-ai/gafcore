@@ -125,3 +125,22 @@ export function formatFunctionalAuditForUser(issues: FunctionalAuditIssue[]): st
     .map((i) => `${i.file}: ${i.message}`)
     .join("\n");
 }
+
+export function hasFunctionalBlockingIssues(issues: FunctionalAuditIssue[]): boolean {
+  return issues.some((i) => i.severity === "error");
+}
+
+/** Instrucción para un único reintento automático tras fallar la auditoría. */
+export function buildFunctionalFixInstruction(
+  issues: FunctionalAuditIssue[],
+  originalUserRequest: string,
+): string {
+  const list = issues
+    .slice(0, 8)
+    .map((i) => `- [${i.severity}] ${i.file}: ${i.message}`)
+    .join("\n");
+  return `[FUNCTIONAL-FIRST CORRECCIÓN] La entrega anterior no cumple. Corrige solo archivos necesarios (delta):
+${list}
+Pedido original: ${originalUserRequest.slice(0, 500)}
+Obligatorio: onClick/onSubmit reales, useState, localStorage o capa lib/store.ts si hay datos. Sin TODO en el flujo principal.`;
+}
