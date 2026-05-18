@@ -25,6 +25,7 @@ import { Route as GafcoreLoginRouteImport } from './routes/gafcore_.login'
 import { Route as GafcoreAppRouteImport } from './routes/gafcore_.app'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as GafcoreSettingsProjectRouteImport } from './routes/gafcore_.settings.project'
+import { Route as GafcoreAdminOpsRouteImport } from './routes/gafcore_.admin.ops'
 import { Route as ApiV1MeRouteImport } from './routes/api/v1/me'
 import { Route as ApiV1KeysRouteImport } from './routes/api/v1/keys'
 import { Route as ApiV1HealthRouteImport } from './routes/api/v1/health'
@@ -39,6 +40,7 @@ import { Route as ApiPublicBillingCheckRouteImport } from './routes/api/public/b
 import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/chat.stream'
 import { Route as ApiGafcoreCheckoutSessionRouteImport } from './routes/api/gafcore/checkout-session'
 import { Route as ApiGafcoreCheckoutConfirmRouteImport } from './routes/api/gafcore/checkout-confirm'
+import { Route as ApiGafcoreAdminDiagnosticsIngestRouteImport } from './routes/api/gafcore/admin/diagnostics-ingest'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -120,6 +122,11 @@ const GafcoreSettingsProjectRoute = GafcoreSettingsProjectRouteImport.update({
   path: '/gafcore/settings/project',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GafcoreAdminOpsRoute = GafcoreAdminOpsRouteImport.update({
+  id: '/gafcore_/admin/ops',
+  path: '/gafcore/admin/ops',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1MeRoute = ApiV1MeRouteImport.update({
   id: '/api/v1/me',
   path: '/api/v1/me',
@@ -192,6 +199,12 @@ const ApiGafcoreCheckoutConfirmRoute = ApiGafcoreCheckoutConfirmRouteImport.upda
   path: '/api/gafcore/checkout-confirm',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreAdminDiagnosticsIngestRoute =
+  ApiGafcoreAdminDiagnosticsIngestRouteImport.update({
+    id: '/api/gafcore/admin/diagnostics-ingest',
+    path: '/api/gafcore/admin/diagnostics-ingest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -215,7 +228,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/keys': typeof ApiV1KeysRouteWithChildren
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
+  '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
@@ -247,7 +262,9 @@ export interface FileRoutesByTo {
   '/api/v1/keys': typeof ApiV1KeysRouteWithChildren
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
+  '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
@@ -314,7 +331,9 @@ export interface FileRouteTypes {
     | '/api/v1/keys'
     | '/api/v1/me'
     | '/gafcore/settings/project'
+    | '/gafcore/admin/ops'
     | '/api/gafcore/chat/stream'
+    | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/checkout-confirm'
     | '/api/public/billing/check'
@@ -346,7 +365,9 @@ export interface FileRouteTypes {
     | '/api/v1/keys'
     | '/api/v1/me'
     | '/gafcore/settings/project'
+    | '/gafcore/admin/ops'
     | '/api/gafcore/chat/stream'
+    | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/checkout-confirm'
     | '/api/public/billing/check'
@@ -378,7 +399,9 @@ export interface FileRouteTypes {
     | '/api/v1/keys'
     | '/api/v1/me'
     | '/gafcore_/settings/project'
+    | '/gafcore_/admin/ops'
     | '/api/gafcore/chat/stream'
+    | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/checkout-confirm'
     | '/api/public/billing/check'
@@ -411,7 +434,9 @@ export interface RootRouteChildren {
   ApiV1KeysRoute: typeof ApiV1KeysRouteWithChildren
   ApiV1MeRoute: typeof ApiV1MeRoute
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
+  GafcoreAdminOpsRoute: typeof GafcoreAdminOpsRoute
   ApiGafcoreChatStreamRoute: typeof ApiGafcoreChatStreamRoute
+  ApiGafcoreAdminDiagnosticsIngestRoute: typeof ApiGafcoreAdminDiagnosticsIngestRoute
   ApiGafcoreCheckoutSessionRoute: typeof ApiGafcoreCheckoutSessionRoute
   ApiGafcoreCheckoutConfirmRoute: typeof ApiGafcoreCheckoutConfirmRoute
   ApiPublicBillingCheckRoute: typeof ApiPublicBillingCheckRoute
@@ -535,6 +560,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GafcoreSettingsProjectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gafcore_/admin/ops': {
+      id: '/gafcore_/admin/ops'
+      path: '/gafcore/admin/ops'
+      fullPath: '/gafcore/admin/ops'
+      preLoaderRoute: typeof GafcoreAdminOpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/me': {
       id: '/api/v1/me'
       path: '/api/v1/me'
@@ -633,6 +665,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreCheckoutConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/admin/diagnostics-ingest': {
+      id: '/api/gafcore/admin/diagnostics-ingest'
+      path: '/api/gafcore/admin/diagnostics-ingest'
+      fullPath: '/api/gafcore/admin/diagnostics-ingest'
+      preLoaderRoute: typeof ApiGafcoreAdminDiagnosticsIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -670,7 +709,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1KeysRoute: ApiV1KeysRouteWithChildren,
   ApiV1MeRoute: ApiV1MeRoute,
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
+  GafcoreAdminOpsRoute: GafcoreAdminOpsRoute,
   ApiGafcoreChatStreamRoute: ApiGafcoreChatStreamRoute,
+  ApiGafcoreAdminDiagnosticsIngestRoute: ApiGafcoreAdminDiagnosticsIngestRoute,
   ApiGafcoreCheckoutSessionRoute: ApiGafcoreCheckoutSessionRoute,
   ApiGafcoreCheckoutConfirmRoute: ApiGafcoreCheckoutConfirmRoute,
   ApiPublicBillingCheckRoute: ApiPublicBillingCheckRoute,

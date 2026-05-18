@@ -155,20 +155,46 @@ export async function loadProjectFiles(): Promise<FileItem[] | null> {
   return Array.from(map.values());
 }
 
-export async function saveProjectFiles(files: FileItem[]): Promise<boolean> {
-  const sb = getUserSupabase();
-  if (!sb) return false;
-  const projectId = await ensureProjectId();
-  if (!projectId) return false;
+export type SaveProjectFilesResult =
+  | { ok: true }
+  | { ok: false; reason: "no_client" | "no_project" | "delete_failed" | "insert_failed"; detail?: string };
 
-  // Replace all files for this project
+export async function saveProjectFiles(
+  files: FileItem[],
+  explicitProjectId?: string | null,
+): Promise<boolean> {
+  const result = await saveProjectFilesDetailed(files, explicitProjectId);
+  return result.ok;
+}
+
+export async function saveProjectFilesDetailed(
+  files: FileItem[],
+  explicitProjectId?: string | null,
+): Promise<SaveProjectFilesResult> {
+  const sb = getUserSupabase();
+  if (!sb) return { ok: false, reason: "no_client" };
+
+  let projectId = explicitProjectId?.trim() || null;
+  if (!projectId) projectId = await ensureProjectId();
+  if (!projectId) return { ok: false, reason: "no_project" };
+
+  const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
+  if (!owned?.id) {
+    try {
+      localStorage.removeItem(PROJECT_KEY);
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, reason: "no_project", detail: "project_not_visible" };
+  }
+
   const { error: delErr } = await sb.from("project_files").delete().eq("project_id", projectId);
   if (delErr) {
     console.error("[Supabase] delete files error:", delErr);
-    return false;
+    return { ok: false, reason: "delete_failed", detail: delErr.message };
   }
 
-  if (files.length === 0) return true;
+  if (files.length === 0) return { ok: true };
 
   const map = new Map<string, FileItem>();
   for (const f of files) map.set(f.name, f);
@@ -182,9 +208,9 @@ export async function saveProjectFiles(files: FileItem[]): Promise<boolean> {
   const { error: insErr } = await sb.from("project_files").insert(rows);
   if (insErr) {
     console.error("[Supabase] insert files error:", insErr);
-    return false;
+    return { ok: false, reason: "insert_failed", detail: insErr.message };
   }
-  return true;
+  return { ok: true };
 }
 
 export type SnapshotRow = {

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { GafCoreAuthDialog } from "@/components/ide/GafCoreAuthDialog";
 import { toast } from "sonner";
 import {
   loadProjectFiles,
   saveProjectFiles,
+  saveProjectFilesDetailed,
   getUserSupabase,
   listProjects,
   createProject,
@@ -32,6 +33,7 @@ import {
   Cloud,
   BarChart3,
   Shield,
+  ShieldAlert,
   MoreHorizontal,
   Globe,
   Home,
@@ -438,15 +440,18 @@ export function GafCoreIDE() {
     if (!loaded || !getUserSupabase() || !currentProjectId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const ok = await saveProjectFiles(files);
-      if (!ok) {
+      const result = await saveProjectFilesDetailed(files, currentProjectId);
+      if (!result.ok) {
         const now = Date.now();
         if (now - saveErrToastAt.current > 25_000) {
           saveErrToastAt.current = now;
-          toast.error("No se pudo guardar", {
-            description:
-              "Revisa la conexión y que exista un proyecto en tu cuenta. Si acabas de entrar, espera unos segundos e inténtalo de nuevo.",
-          });
+          const description =
+            result.reason === "no_project"
+              ? "No hay proyecto activo. Usa «+ Nuevo» para crear uno y guardar tus archivos."
+              : result.reason === "insert_failed" && result.detail
+                ? `Supabase: ${result.detail}`
+                : "Revisa la conexión. Si acabas de entrar, espera unos segundos e inténtalo de nuevo.";
+          toast.error("No se pudo guardar", { description });
         }
       }
     }, 800);
@@ -877,14 +882,23 @@ export function GafCoreIDE() {
             </button>
           </div>
           {isAdmin ? (
-            <button
-              type="button"
-              onClick={() => setSecretsOpen(true)}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Secretos del proyecto (solo administración)"
-            >
-              <KeyRound className="h-4 w-4" />
-            </button>
+            <>
+              <Link
+                to="/gafcore/admin/ops"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Ops — diagnóstico y aprobación (admin)"
+              >
+                <ShieldAlert className="h-4 w-4" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setSecretsOpen(true)}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Secretos del proyecto (solo administración)"
+              >
+                <KeyRound className="h-4 w-4" />
+              </button>
+            </>
           ) : null}
           {isAdmin && (
             <button
