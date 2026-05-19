@@ -40,6 +40,7 @@ function applySession(session: Session | null, loading = false) {
 }
 
 export function initAuthOnce() {
+  if (typeof window === "undefined") return Promise.resolve();
   if (authInitPromise) return authInitPromise;
 
   authInitPromise = (async () => {

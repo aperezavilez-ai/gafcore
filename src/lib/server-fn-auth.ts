@@ -3,11 +3,10 @@ import { getAuthAccessToken, initAuthOnce } from "@/hooks/useAuth";
 
 let installed = false;
 
-void initAuthOnce();
-
 export function installServerFnAuth() {
   if (installed || typeof window === "undefined") return;
   installed = true;
+  void initAuthOnce();
 
   const originalFetch = window.fetch.bind(window);
 
