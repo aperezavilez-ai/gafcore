@@ -68,9 +68,32 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+function runtimeEnvDiag(): Response {
+  const flag = (key: string) =>
+    typeof process.env[key] === "string" && process.env[key]!.trim().length > 0;
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,
+      env: {
+        VITE_SUPABASE_URL: flag("VITE_SUPABASE_URL"),
+        VITE_SUPABASE_PUBLISHABLE_KEY: flag("VITE_SUPABASE_PUBLISHABLE_KEY"),
+        SUPABASE_URL: flag("SUPABASE_URL"),
+        SUPABASE_PUBLISHABLE_KEY: flag("SUPABASE_PUBLISHABLE_KEY"),
+        SUPABASE_SERVICE_ROLE_KEY: flag("SUPABASE_SERVICE_ROLE_KEY"),
+      },
+    }),
+    { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } },
+  );
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     ensureSupabaseSsrEnv();
+    const path = new URL(request.url).pathname;
+    if (path === "/api/__runtime-diag") {
+      return runtimeEnvDiag();
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
