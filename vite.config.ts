@@ -27,6 +27,16 @@ export default defineConfig(({ mode }) => {
       viteEnv[key] = value.trim();
     }
   }
+  // Build Vercel: si solo hay SUPABASE_* en el panel, inyectar también VITE_* en el bundle SSR.
+  for (const [viteKey, serverKey] of [
+    ["VITE_SUPABASE_URL", "SUPABASE_URL"],
+    ["VITE_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_PUBLISHABLE_KEY"],
+  ] as const) {
+    const fromServer = process.env[serverKey]?.trim();
+    const fromVite = viteEnv[viteKey]?.trim();
+    if (fromServer && !fromVite) viteEnv[viteKey] = fromServer;
+    if (fromVite && !process.env[serverKey]?.trim()) process.env[serverKey] = fromVite;
+  }
   const envDefine: Record<string, string> = {};
   for (const [key, value] of Object.entries(viteEnv)) {
     envDefine[`import.meta.env.${key}`] = JSON.stringify(value);
