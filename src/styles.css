@@ -1,5 +1,5 @@
-@import "tailwindcss" source(none);
-@source "../src";
+/* TanStack Start + Nitro en Linux/Vercel: source("./") evita CSS distinto en client vs SSR. */
+@import "tailwindcss" source("./");
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));

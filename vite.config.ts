@@ -44,6 +44,20 @@ export default defineConfig(({ mode }) => {
 
   return {
     define: envDefine,
+    build: {
+      rollupOptions: {
+        output: {
+          // Mismo nombre en client y SSR (evita HTTPError 500 en Vercel por hash distinto).
+          assetFileNames: (assetInfo) => {
+            const name = assetInfo.names?.[0] ?? assetInfo.name ?? "";
+            if (name === "style.css" || name.endsWith("styles.css")) {
+              return "assets/gafcore-app[extname]";
+            }
+            return "assets/[name]-[hash][extname]";
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         "@": `${process.cwd()}/src`,
@@ -74,13 +88,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       tsconfigPaths({ projects: ["./tsconfig.json"] }),
       tanstackStart({
-        server: {
-          entry: "server",
-          build: {
-            // Evita request extra de CSS en el primer paint (Vercel).
-            inlineCss: true,
-          },
-        },
+        server: { entry: "server" },
         importProtection: {
           behavior: "error",
           client: {
