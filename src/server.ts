@@ -68,6 +68,41 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+function probeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+async function ssrProbe(request: Request): Promise<Response> {
+  const steps: Record<string, unknown> = {};
+  try {
+    const handler = await getServerEntry();
+    steps.serverEntry = "ok";
+    const homeUrl = new URL("/", request.url).toString();
+    const response = await handler.fetch(new Request(homeUrl, { method: "GET" }), {}, {});
+    steps.homeStatus = response.status;
+    if (response.status >= 500) {
+      const captured = consumeLastCapturedError();
+      if (captured) steps.capturedError = probeErrorMessage(captured);
+      const body = await response.clone().text();
+      if (body.includes("This page didn't load")) steps.homeBody = "branded-500";
+      else steps.homeBodyPreview = body.slice(0, 180);
+    }
+    return new Response(JSON.stringify({ ok: response.status < 500, steps }), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  } catch (error) {
+    steps.error = probeErrorMessage(error);
+    const captured = consumeLastCapturedError();
+    if (captured) steps.capturedError = probeErrorMessage(captured);
+    return new Response(JSON.stringify({ ok: false, steps }), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  }
+}
+
 function runtimeEnvDiag(): Response {
   const flag = (key: string) =>
     typeof process.env[key] === "string" && process.env[key]!.trim().length > 0;
@@ -93,6 +128,9 @@ export default {
     const path = new URL(request.url).pathname;
     if (path === "/api/__runtime-diag") {
       return runtimeEnvDiag();
+    }
+    if (path === "/api/__ssr-probe") {
+      return ssrProbe(request);
     }
     try {
       const handler = await getServerEntry();
