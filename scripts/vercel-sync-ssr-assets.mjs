@@ -81,6 +81,15 @@ for (const file of walk(serverFunc)) {
   }
 }
 
+if (mainCss && mainIndexJs) {
+  const shellPath = join(serverFunc, "gafcore-spa-shell.json");
+  writeFileSync(
+    shellPath,
+    JSON.stringify({ css: `/assets/${mainCss}`, js: `/assets/${mainIndexJs}` }),
+    "utf8",
+  );
+}
+
 console.log(
   `[vercel-sync-ssr-assets] css=${mainCss ?? "none"} js=${mainIndexJs ?? "none"} → ${filesPatched} files, ${replacements} fixes`,
 );
