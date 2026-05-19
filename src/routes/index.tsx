@@ -1,7 +1,5 @@
 import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
-
 function RootGate() {
   useEffect(() => {
     const pendingRedirect = sessionStorage.getItem("gafcore_post_login_redirect");
@@ -15,7 +13,11 @@ function RootGate() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
       <div className="flex flex-col items-center gap-3">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <div
+          role="status"
+          aria-label="Cargando"
+          className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"
+        />
         <p className="text-sm text-muted-foreground">Cargando GafCore…</p>
       </div>
     </div>

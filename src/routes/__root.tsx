@@ -2,9 +2,8 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 import { useEffect } from "react";
 import { getPublicSiteOrigin } from "@/lib/public-site-url";
 import { I18nProvider } from "@/i18n/I18nProvider";
-import { AIChatWidget } from "@/components/AIChatWidget";
 import { ClientOnly } from "@/components/ClientOnly";
-import { Toaster } from "@/components/ui/sonner";
+import { ClientRootWidgets } from "@/components/ClientRootWidgets";
 import { installServerFnAuth } from "@/lib/server-fn-auth";
 
 if (typeof window !== "undefined") {
@@ -87,8 +86,7 @@ function RootComponent() {
       <MobileViewportGuard />
       <Outlet />
       <ClientOnly>
-        <Toaster richColors position="top-right" />
-        <AIChatWidget />
+        <ClientRootWidgets />
       </ClientOnly>
     </I18nProvider>
   );
