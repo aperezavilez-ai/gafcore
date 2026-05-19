@@ -138,20 +138,43 @@ export function rewritePaintThemeMediaUrls(source: string, instruction = ""): st
 export function applyPicsumFallbacksInSource(
   source: string,
   instruction = "",
+  assetMap: Record<string, string> = {},
 ): string {
+  const resolveOrPicsum = (src: string, alt: string, hero = false): string => {
+    const s = src.trim();
+    if (assetMap && Object.keys(assetMap).length > 0) {
+      const resolved = resolveAssetSrc(s, assetMap);
+      if (resolved !== s && (resolved.startsWith("data:") || resolved.startsWith("http"))) {
+        return resolved;
+      }
+    }
+    if (!isUnresolvableImageSrc(s)) return s;
+    return themedPicsumUrl(alt, instruction, _picsumSlot++, hero ? 1280 : 800, hero ? 720 : 600);
+  };
+
   _picsumSlot = 0;
   let out = source.replace(IMG_SRC_RE, (tag, src: string) => {
     const s = src.trim();
-    if (!isUnresolvableImageSrc(s)) return tag;
+    if (!isUnresolvableImageSrc(s) && !assetMap[s]) return tag;
     const alt = extractAltNearSrc(source, src);
-    const url = themedPicsumUrl(alt, instruction, _picsumSlot++, s.includes("hero") ? 1280 : 800, 600);
+    const url = resolveOrPicsum(s, alt, s.includes("hero"));
     return tag.replace(src, url);
   });
   out = out.replace(/src=\{["']([^"']+)["']\}/g, (tag, src: string) => {
-    if (!isUnresolvableImageSrc(src)) return tag;
-    const url = themedPicsumUrl(src, instruction, _picsumSlot++, 600, 600);
+    const url = resolveOrPicsum(src, src, false);
+    if (url === src.trim() && isUnresolvableImageSrc(src)) {
+      return `src={${JSON.stringify(themedPicsumUrl(src, instruction, _picsumSlot++, 600, 600))}}`;
+    }
+    if (url === src.trim()) return tag;
     return `src={${JSON.stringify(url)}}`;
   });
+  out = out.replace(
+    /(background(?:-image)?\s*:\s*url\()(["']?)([^"')]+)\2?\)/gi,
+    (_m, pre, q, src: string) => {
+      const url = resolveOrPicsum(src, "hero", true);
+      return `${pre}${q}${url}${q})`;
+    },
+  );
   out = rewritePaintThemeMediaUrls(out, instruction);
   return out;
 }
@@ -235,7 +258,7 @@ export function repairGafcoreProjectMedia(
     if (!/\.(html|htm|jsx|tsx|js|css)$/i.test(f.name)) return f;
     let content = repairHtmlMedia(f.content, assetMap);
     content = repairCommonJsxSyntaxErrors(content);
-    content = applyPicsumFallbacksInSource(content, instruction);
+    content = applyPicsumFallbacksInSource(content, instruction, assetMap);
     if (/\.html?$/i.test(f.name)) content = injectPreviewFallbackScript(content);
     return { ...f, content };
   });

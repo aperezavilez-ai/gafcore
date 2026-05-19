@@ -5,6 +5,8 @@ import {
   filesContextForModel,
   type GafcoreChatMessage,
 } from "@/lib/gafcore-media.shared";
+import { instructionNeedsLayoutModel } from "@/lib/gafcore-layout-instruction.shared";
+import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -25,6 +27,7 @@ export const gafcoreChatBodySchema = z.object({
       }),
     )
     .max(80),
+  projectId: z.string().uuid().optional(),
 });
 
 export type GafcoreChatBody = z.infer<typeof gafcoreChatBodySchema>;
@@ -42,6 +45,7 @@ Pilares (aplícalos en cada cambio):
    - **Layout**: pon \`alt\` útil y tamaños (\`width\`/\`height\` o contenedor \`aspect-*\` en Tailwind) para evitar saltos de layout. Evita animaciones o sombras pesadas en decenas de tarjetas a la vez.
    - **E‑commerce / catálogos**: grids simples responsive (grid + gap), pocas fuentes externas; si hay muchos productos, paginación o “mostrar 6–8” con botón, no cientos de nodos sin necesidad.
    - **Fidelidad a briefings visuales**: si el usuario pide **galería, collage, grid de N imágenes, hero de dos columnas, CTAs duales, secciones premium**, impleméntalo **literalmente** en la misma respuesta: \`grid\`/\`flex\` con \`gap\`, \`grid-cols-*\`, \`min-h-*\` o \`aspect-*\`, textos jerárquicos (h1/h2/p), botones con estilos distintos (relleno + outline) y **varias** URLs https de imagen coherentes con el tema. **No sustituyas** eso por una fila de iconitos o un bloque de texto genérico: es incumplimiento del encargo.
+   - **Dirección de layout (español)**: si piden **horizontal / en fila / uno al lado del otro / iconos en horizontal debajo del nombre**, usa \`flex-row\` o \`grid-cols-*\` en ese contenedor — **nunca** \`flex-col\` ahí. Si piden **vertical / en columna / uno debajo de otro**, usa \`flex-col\`. Respeta la dirección literal aunque el código previo use lo contrario.
 7) **Alcance y excelencia operativa (GafCore)**:
    - **Alcance**: “delta mínimo” significa **no tocar** rutas, auth ni carpetas que no guarden relación con el pedido; **no** significa entregar una UI pobre cuando el usuario pidió riqueza visual. Si hace falta un componente o sección grande en un solo archivo para cumplir el diseño, hazlo (sin reestructurar masivamente el repo si no se pide).
    - **Robustez**: anticipa fallos habituales (imports inexistentes, JSON mal cerrado, rutas de archivo inválidas) y evítalos en la primera respuesta.
@@ -49,7 +53,18 @@ Pilares (aplícalos en cada cambio):
    - **JSX válido**: cada atributo separado (\`htmlFor="from" className="…"\`). **Nunca** pegues URLs (\`https://…\`) dentro de un atributo ni entre comillas de otro (prohibido \`htmlFor="from"https://…\`).
    - **Salida**: el razonamiento detallado no debe aparecer fuera del campo \`reply\`; nunca texto antes o después del objeto JSON raíz.
 
-8) **FUNCTIONAL-FIRST (obligatorio en modo Construir — Capa 0 GafCore)**:
+8) **Tono y conversación (GafCore)**:
+   - Eres cercano y profesional en español. Si el usuario **solo saluda** (hola, buenas, gracias), responde con calidez en \`reply\`, pregunta en qué ayudar, y \`files: []\` — **nunca** digas «no se hicieron cambios» ni un tono de error.
+   - En construcción, explica en \`reply\` qué hiciste y por qué (1-3 frases útiles), no solo «listo».
+   - Propón mejoras breves cuando aporte valor (UX, imagen hero, formularios funcionales).
+
+9) **Capa de validación GafCore (antes de cerrar la respuesta)**:
+   - Revisa mentalmente: sintaxis TS/JSX, imports relativos que existan en el delta o en contexto, \`export default\` en App, \`main.tsx\` + \`index.html\` si es Vite.
+   - No inventes módulos \`./\` sin crear el archivo en \`files\`.
+   - Si el usuario pidió build/deploy, \`package.json\` coherente con imports npm usados.
+   - **Consistencia de salida**: un solo objeto JSON raíz; \`files\` con rutas relativas sin \`/\` inicial; \`content\` completo por archivo (no truncar con \`...\`).
+
+10) **FUNCTIONAL-FIRST (obligatorio en modo Construir — Capa 0 GafCore)**:
    - **Prioridad absoluta**: Funcionalidad > UI > estética. Nada es “solo UI”.
    - **Cada feature nueva debe incluir**: (1) UI, (2) estado React + handlers, (3) capa de datos (ver abajo), (4) manejo de error, (5) loading/éxito visible, (6) flujo de usuario cerrado.
    - **Flujo de generación** (sigue este orden mental antes de escribir archivos):
@@ -183,7 +198,9 @@ export function pickModel(
   const t = instruction.trim();
   /** Explícito en el IDE (toggle o texto): fuerza modelo profundo antes que “modo chat”. */
   if (/^\[modo profundo\]/i.test(t) || /^\[modo deep\]/i.test(t)) return deep;
+  if (/^\[CONVERSACIÓN GafCore\]/i.test(t) || /^\[Modo chat\]/i.test(t)) return fast;
   if (/^\[modo chat\]/i.test(t)) return fast;
+  if (/^\[CREATIVIDAD OBLIGATORIA\]/i.test(t) || isSubstantiveBuildRequest(t)) return deep;
 
   /** Pide calidad visual / maquetación: el modelo “fast” suele dejar UI pobre o URLs de imagen inválidas en el preview del IDE. */
   const wantsDeepUi =
@@ -199,7 +216,7 @@ export function pickModel(
       t,
     );
 
-  if (wantsDeepUi || wantsDeepTech) return deep;
+  if (wantsDeepUi || wantsDeepTech || instructionNeedsLayoutModel(t)) return deep;
   if (t.length >= 420) return deep;
   if (t.length < 260) return fast;
   return deep;
@@ -288,6 +305,7 @@ export async function fetchBalance(userId: string): Promise<number | null> {
 export function buildGafcoreMessages(
   data: GafcoreChatBody,
   resolvedModel?: string,
+  memoryHints = "",
 ): {
   messages: GafcoreChatMessage[];
   model: string;
@@ -320,8 +338,12 @@ export function buildGafcoreMessages(
         ]
       : textBlock;
 
+  const systemContent = memoryHints.trim()
+    ? `${GAFCORE_SYSTEM}${memoryHints}`
+    : GAFCORE_SYSTEM;
+
   const messages: GafcoreChatMessage[] = [
-    { role: "system", content: GAFCORE_SYSTEM },
+    { role: "system", content: systemContent },
     ...data.history.map((h) => ({ role: h.role, content: h.content })),
     { role: "user", content: userContent },
   ];

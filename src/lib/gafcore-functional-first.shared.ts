@@ -126,8 +126,14 @@ export function formatFunctionalAuditForUser(issues: FunctionalAuditIssue[]): st
     .join("\n");
 }
 
+/** Errores graves que impiden considerar la entrega válida. */
 export function hasFunctionalBlockingIssues(issues: FunctionalAuditIssue[]): boolean {
   return issues.some((i) => i.severity === "error");
+}
+
+/** Dispara el único reintento automático (errores o avisos). */
+export function shouldAutoRetryFunctional(issues: FunctionalAuditIssue[]): boolean {
+  return issues.length > 0;
 }
 
 /** Instrucción para un único reintento automático tras fallar la auditoría. */

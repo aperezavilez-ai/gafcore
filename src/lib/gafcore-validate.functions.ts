@@ -7,6 +7,8 @@ import {
   auditFunctionalFirst,
   formatFunctionalAuditForUser,
 } from "@/lib/gafcore-functional-first.shared";
+import type { ProjectValidationIssue } from "@/lib/gafcore-ai-validation.shared";
+import { runValidationWithAutofix } from "@/validation/runner";
 
 const fileSchema = z.object({
   name: z.string().min(1).max(512),
@@ -61,5 +63,21 @@ export const validateGafcoreFunctional = createServerFn({ method: "POST" })
       ok: audit.ok,
       issues: audit.issues,
       summary: formatFunctionalAuditForUser(audit.issues),
+    };
+  });
+
+/** Capa de validación IA unificada: sintaxis (TS) + imports + build + functional. */
+export const validateGafcoreProject = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => schema.parse(input))
+  .handler(async ({ data }) => {
+    const { report } = runValidationWithAutofix({ files: data, phase: "manual" });
+    return {
+      ok: report.blockingErrorCount === 0,
+      issues: report.issues,
+      overallScore: report.overallScore,
+      status: report.status,
+      approved: report.approved,
+      dimensions: report.dimensions,
     };
   });

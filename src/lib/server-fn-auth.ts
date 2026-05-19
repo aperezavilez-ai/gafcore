@@ -20,7 +20,7 @@ export function installServerFnAuth() {
             ? input.toString()
             : input.url;
 
-      if (url && url.includes("/_serverFn/")) {
+      if (url && (url.includes("/_serverFn/") || url.includes("/api/gafcore/"))) {
         const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
         if (!headers.has("authorization") && !headers.has("Authorization")) {
           const token = await getAuthAccessToken();

@@ -1,5 +1,7 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -29,7 +31,6 @@ import {
   Brain,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +43,10 @@ import { useServerFn } from "@tanstack/react-start";
 import type { ChatMsg } from "@/lib/openaiChat";
 import { gafcoreChat } from "@/lib/gafcore-chat.functions";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
-import { validateGafcoreSources } from "@/lib/gafcore-validate.functions";
+import {
+  validateGafcoreSources,
+  validateGafcoreProject,
+} from "@/lib/gafcore-validate.functions";
 import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import {
   repairCommonJsxSyntaxErrors,
@@ -56,15 +60,30 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
+import { FUNCTIONAL_FIRST_BUILD_PREFIX } from "@/lib/gafcore-functional-first.shared";
 import {
-  auditFunctionalFirst,
-  buildFunctionalFixInstruction,
-  formatFunctionalAuditForUser,
-  FUNCTIONAL_FIRST_BUILD_PREFIX,
-  hasFunctionalBlockingIssues,
-  type FunctionalAuditIssue,
-} from "@/lib/gafcore-functional-first.shared";
-import { validateGafcoreFunctional } from "@/lib/gafcore-validate.functions";
+  auditProjectLocally,
+  buildValidationFixInstruction,
+  formatValidationForUser,
+  hasBlockingValidationIssues,
+  shouldAutoRetryValidation,
+  type ProjectValidationIssue,
+} from "@/lib/gafcore-ai-validation.shared";
+import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
+import {
+  advanceGafcorePipelineStep,
+  finalizeGafcorePipelineRun,
+  startGafcorePipelineRun,
+} from "@/lib/gafcore-orchestrator.functions";
+import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
+import {
+  buildConversationalInstructionPrefix,
+  buildCreativeBuildPrefix,
+  isConversationalOnly,
+  isSubstantiveBuildRequest,
+  softenRoboticReply,
+} from "@/lib/gafcore-chat-intent.shared";
+import { formatValidationScoreShort } from "@/validation/runner";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -250,13 +269,22 @@ export function ChatPanel({
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const recognitionRef = useRef<any>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContentRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [streamChars, setStreamChars] = useState<number | null>(null);
   /** Invalida respuestas tardías si el usuario envía otra cosa o pulsa detener. */
   const requestEpochRef = useRef(0);
+  const sendInFlightRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pipelineRunIdRef = useRef<string | null>(null);
+  /** Evita eco Realtime del mismo mensaje que acabamos de persistir. */
+  const localMessageEchoRef = useRef<Set<string>>(new Set());
+  const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
+  const [validationLabel, setValidationLabel] = useState<string | null>(null);
   const freeCreditsRescueDone = useRef(false);
   const freeCreditsRescueUserId = useRef<string | null>(null);
 
@@ -319,23 +347,13 @@ export function ChatPanel({
         (payload: any) => {
           const r = payload.new;
           if (!r || r.user_id !== user.id) return;
+          const dbRole = r.role === "assistant" ? "assistant" : "user";
+          const echoKey = messageEchoKey(dbRole, String(r.content ?? ""));
+          if (localMessageEchoRef.current.has(echoKey)) return;
           const ts = new Date(r.created_at).getTime();
-          setMessages((prev) => {
-            // dedupe: skip if last message has same content+role within 2s
-            const last = prev[prev.length - 1];
-            if (
-              last &&
-              last.content === r.content &&
-              (last.role === "ai") === (r.role === "assistant") &&
-              Math.abs((last.ts ?? 0) - ts) < 2000
-            ) {
-              return prev;
-            }
-            return [
-              ...prev,
-              { role: r.role === "assistant" ? "ai" : "user", content: r.content, ts },
-            ];
-          });
+          const role = r.role === "assistant" ? "ai" : "user";
+          const content = String(r.content ?? "");
+          appendMessageDeduped(role, content);
         },
       )
       .subscribe();
@@ -344,9 +362,37 @@ export function ChatPanel({
     };
   }, [projectId, user?.id]);
 
+  const messageEchoKey = (role: "user" | "assistant", content: string) =>
+    `${role}:${content.trim()}`;
+
+  const markLocalEcho = (role: "user" | "assistant", content: string) => {
+    const key = messageEchoKey(role, content);
+    localMessageEchoRef.current.add(key);
+    window.setTimeout(() => localMessageEchoRef.current.delete(key), 45_000);
+  };
+
+  const appendMessageDeduped = (role: "user" | "ai", content: string) => {
+    const trimmed = content.trim();
+    setMessages((prev) => {
+      const now = Date.now();
+      if (
+        prev.some(
+          (m) =>
+            m.role === role &&
+            m.content.trim() === trimmed &&
+            now - m.ts < 90_000,
+        )
+      ) {
+        return prev;
+      }
+      return [...prev, { role, content, ts: now }];
+    });
+  };
+
   // Persist a message (best-effort)
   const persistMessage = async (role: "user" | "assistant", content: string) => {
     if (!projectId || !user?.id) return;
+    markLocalEcho(role, content);
     try {
       await supabase.from("chat_messages").insert({
         project_id: projectId,
@@ -362,28 +408,20 @@ export function ChatPanel({
   // Sync generated files to project_files (best-effort)
   const syncFilesToDb = async (
     generated: Array<{ name: string; language?: string; content: string }>,
-  ): Promise<boolean> => {
-    if (!projectId || !user?.id || generated.length === 0) return false;
-    try {
-      const { error } = await supabase.from("project_files").upsert(
-        generated.map((f) => ({
-          project_id: projectId,
-          name: f.name,
-          language: f.language ?? "typescript",
-          content: f.content,
-          updated_at: new Date().toISOString(),
-        })),
-        { onConflict: "project_id,name" },
-      );
-      if (error) {
-        console.error("[ChatPanel] syncFilesToDb:", error);
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.error("[ChatPanel] syncFilesToDb:", e);
-      return false;
+  ): Promise<{ ok: boolean; detail?: string }> => {
+    if (!projectId || !user?.id || generated.length === 0) {
+      return { ok: false, detail: "no_project" };
     }
+    const { upsertSingleProjectFile } = await import("@/lib/userSupabase");
+    for (const f of generated) {
+      const r = await upsertSingleProjectFile(projectId, {
+        name: f.name,
+        language: f.language ?? "typescript",
+        content: f.content,
+      });
+      if (!r.ok) return r;
+    }
+    return { ok: true };
   };
 
   const {
@@ -524,9 +562,11 @@ export function ChatPanel({
         });
         return;
       }
-      const ok = await syncFilesToDb([item]);
-      if (!ok) {
-        toast.error("No se pudo guardar la imagen en la nube; sigue en el editor local.");
+      const saved = await syncFilesToDb([item]);
+      if (!saved.ok) {
+        toast.error("No se pudo guardar la imagen en la nube; sigue en el editor local.", {
+          description: saved.detail?.slice(0, 120) ?? "Revisa permisos del proyecto en Supabase.",
+        });
       }
     } catch {
       toast.error("No se pudo procesar la imagen.");
@@ -580,12 +620,13 @@ export function ChatPanel({
           });
           return;
         }
-        const ok = await syncFilesToDb([item]);
-        if (ok) {
+        const saved = await syncFilesToDb([item]);
+        if (saved.ok) {
           toast.success(`Archivo “${file.name}” añadido y guardado en el proyecto`);
         } else {
           toast.error(
             "No se pudo guardar el archivo en la nube. Sigue en el editor; reintenta o revisa permisos.",
+            { description: saved.detail?.slice(0, 120) },
           );
         }
       })();
@@ -620,6 +661,17 @@ export function ChatPanel({
           ev.preventDefault();
           void applyChatImageFromBlob(f, "Imagen pegada");
           return true;
+        }
+        if (it.type.startsWith("image/")) {
+          const f = it.getAsFile();
+          if (f) {
+            ev.preventDefault();
+            void applyChatImageFromBlob(
+              new File([f], `captura-${Date.now()}.png`, { type: it.type || "image/png" }),
+              "Captura pegada",
+            );
+            return true;
+          }
         }
       }
     }
@@ -710,9 +762,86 @@ export function ChatPanel({
     ta.style.height = Math.min(Math.max(ta.scrollHeight, 64), 320) + "px";
   }, [input]);
 
+  const forceScrollToBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (el) {
+      const top = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.scrollTop = top;
+      try {
+        el.scrollTo({ top, behavior: "auto" });
+      } catch {
+        /* */
+      }
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+  }, []);
+
+  const scrollChatToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      if (!stickToBottomRef.current) return;
+      const el = scrollContainerRef.current;
+      if (!el) return;
+      const top = Math.max(0, el.scrollHeight - el.clientHeight);
+      try {
+        el.scrollTo({ top, behavior });
+      } catch {
+        el.scrollTop = top;
+      }
+      messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+    },
+    [],
+  );
+
+  const scrollChatToBottomSoon = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      forceScrollToBottom();
+      scrollChatToBottom(behavior);
+      requestAnimationFrame(() => scrollChatToBottom(behavior));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollChatToBottom(behavior));
+      });
+      window.setTimeout(() => scrollChatToBottom(behavior), 50);
+      window.setTimeout(() => scrollChatToBottom(behavior), 150);
+      window.setTimeout(() => scrollChatToBottom(behavior), 400);
+      window.setTimeout(() => forceScrollToBottom(), 600);
+    },
+    [scrollChatToBottom, forceScrollToBottom],
+  );
+
+  useLayoutEffect(() => {
+    if (!stickToBottomRef.current) return;
+    forceScrollToBottom();
+    scrollChatToBottom("auto");
+  }, [messages, loading, streamChars, pipelineStatus, forceScrollToBottom, scrollChatToBottom]);
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 9e9, behavior: "smooth" });
-  }, [messages, loading]);
+    const container = scrollContainerRef.current;
+    const content = messagesContentRef.current;
+    if (!container || !content) return;
+
+    const onScroll = () => {
+      const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+      stickToBottomRef.current = distance < 96;
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+
+    const ro = new ResizeObserver(() => {
+      if (stickToBottomRef.current) scrollChatToBottom("auto");
+    });
+    ro.observe(content);
+
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [scrollChatToBottom]);
+
+  useEffect(() => {
+    if (!loading) return;
+    stickToBottomRef.current = true;
+    const id = window.setInterval(() => scrollChatToBottom("auto"), 400);
+    return () => window.clearInterval(id);
+  }, [loading, scrollChatToBottom]);
 
   // Broadcast visual-edit toggle to all preview iframes
   useEffect(() => {
@@ -769,8 +898,58 @@ export function ChatPanel({
 
   const callGafcoreChat = useServerFn(gafcoreChat);
   const callValidateSources = useServerFn(validateGafcoreSources);
-  const callValidateFunctional = useServerFn(validateGafcoreFunctional);
+  const callValidateProject = useServerFn(validateGafcoreProject);
+  const callRecordMemory = useServerFn(recordProjectAiMemory);
   const callEnrichMedia = useServerFn(enrichGafcoreMedia);
+  const callStartPipeline = useServerFn(startGafcorePipelineRun);
+  const callAdvancePipeline = useServerFn(advanceGafcorePipelineStep);
+  const callFinalizePipeline = useServerFn(finalizeGafcorePipelineRun);
+
+  const usePipelineOrchestrator = Boolean(
+    projectId && mode === "build" && !visualEditOn,
+  );
+
+  const startPipelineRun = async (instruction: string) => {
+    if (!usePipelineOrchestrator || !projectId) return;
+    pipelineRunIdRef.current = null;
+    setPipelineStatus(null);
+    try {
+      const res = await callStartPipeline({
+        data: {
+          projectId,
+          instruction,
+          mode: "build",
+          visualEdit: visualEditOn,
+        },
+      });
+      if (res?.ok && res.runId) {
+        pipelineRunIdRef.current = res.runId;
+        const last = res.events?.[res.events.length - 1];
+        setPipelineStatus(last?.message ?? "Pipeline iniciado");
+      }
+    } catch {
+      pipelineRunIdRef.current = null;
+    }
+  };
+
+  const advancePipeline = async (
+    step: "generate" | "retry" | "validate" | "memory",
+    state: "generating" | "retrying" | "validating" | "persisting_memory",
+  ) => {
+    const runId = pipelineRunIdRef.current;
+    if (!runId) return;
+    try {
+      const res = await callAdvancePipeline({
+        data: { runId, step, state },
+      });
+      if (res?.ok && res.run?.events?.length) {
+        const last = res.run.events[res.run.events.length - 1];
+        if (last?.message) setPipelineStatus(last.message);
+      }
+    } catch {
+      /* opcional si falta migración */
+    }
+  };
 
   const mergeGeneratedFiles = (
     currentFiles: FileItem[],
@@ -787,18 +966,79 @@ export function ChatPanel({
     return Array.from(byName.values());
   };
 
-  const runFunctionalAuditOnBatch = async (
-    outFiles: Array<{ name: string; content: string }>,
-    merged: FileItem[],
-  ): Promise<FunctionalAuditIssue[]> => {
-    const localAudit = auditFunctionalFirst(merged.map((f) => ({ name: f.name, content: f.content })));
+  const persistValidationMemory = async (
+    issues: ProjectValidationIssue[],
+    resolved: boolean,
+  ) => {
+    if (!projectId || issues.length === 0) return;
     try {
-      const remote = await callValidateFunctional({
-        data: outFiles.map((f) => ({ name: f.name, content: f.content })),
+      await callRecordMemory({
+        data: {
+          projectId,
+          issues: issues.slice(0, 12),
+          resolved,
+        },
       });
-      return remote.issues?.length ? remote.issues : localAudit.issues;
     } catch {
-      return localAudit.issues;
+      /* memoria opcional si falta migración */
+    }
+  };
+
+  const runProjectValidation = async (
+    merged: FileItem[],
+    options?: { skipOrchestrator?: boolean },
+  ): Promise<{
+    issues: ProjectValidationIssue[];
+    patchedFiles?: Array<{ name: string; content: string; language?: string }>;
+  }> => {
+    const payload = merged.map((f) => ({ name: f.name, content: f.content }));
+    const runId = pipelineRunIdRef.current;
+    if (runId && !options?.skipOrchestrator) {
+      try {
+        const fin = await callFinalizePipeline({
+          data: {
+            runId,
+            files: payload.slice(0, 40),
+          },
+        });
+        if (fin?.ok) {
+          const last = fin.run?.events?.[fin.run.events.length - 1];
+          const score = fin.overallScore ?? 0;
+          if (fin.validationStatus) {
+            setValidationLabel(formatValidationScoreShort(score, fin.validationStatus));
+          }
+          setPipelineStatus(
+            fin.success
+              ? `Validación completada · ${score}/100`
+              : (last?.message ?? "Validación con avisos"),
+          );
+          if (fin.run?.state === "completed" || fin.run?.state === "failed") {
+            pipelineRunIdRef.current = null;
+          }
+          if (fin.fixesApplied?.length) {
+            toast.message(`Auto-fix: ${fin.fixesApplied.length} corrección(es) aplicada(s)`, {
+              duration: 4000,
+            });
+          }
+          return {
+            issues: fin.issues ?? [],
+            patchedFiles: fin.patchedFiles?.length ? fin.patchedFiles : undefined,
+          };
+        }
+      } catch {
+        /* fallback local + server fn */
+      }
+    }
+    const local = auditProjectLocally(payload);
+    try {
+      const remote = await callValidateProject({ data: payload.slice(0, 40) });
+      if (typeof remote.overallScore === "number" && remote.status) {
+        setValidationLabel(formatValidationScoreShort(remote.overallScore, remote.status));
+      }
+      const issues = remote.issues?.length ? remote.issues : local.issues;
+      return { issues };
+    } catch {
+      return { issues: local.issues };
     }
   };
 
@@ -808,7 +1048,7 @@ export function ChatPanel({
     userInstruction: string,
     userRaw: string,
     options: { runFunctionalAudit: boolean; snapshotLabel?: string },
-  ): Promise<{ merged: FileItem[]; issues: FunctionalAuditIssue[] }> => {
+  ): Promise<{ merged: FileItem[]; issues: ProjectValidationIssue[] }> => {
     if (options.snapshotLabel) {
       try {
         const { createSnapshot } = await import("@/lib/userSupabase");
@@ -854,17 +1094,36 @@ export function ChatPanel({
       /* */
     }
 
-    let issues: FunctionalAuditIssue[] = [];
+    let issues: ProjectValidationIssue[] = [];
+    let mergedForReturn = merged;
     if (options.runFunctionalAudit) {
-      issues = await runFunctionalAuditOnBatch(outFiles, merged);
-      if (issues.length > 0) {
-        const text = formatFunctionalAuditForUser(issues);
-        setLastError((prev) =>
-          prev ? `${prev}\n\n[Functional-first]\n${text}` : `[Functional-first]\n${text}`,
+      const validation = await runProjectValidation(merged);
+      issues = validation.issues;
+      if (validation.patchedFiles?.length) {
+        mergedForReturn = mergeGeneratedFiles(merged, validation.patchedFiles);
+        setFiles(mergedForReturn);
+        void syncFilesToDb(
+          validation.patchedFiles.map((f) => ({
+            name: f.name,
+            content: f.content,
+            language: f.language,
+          })),
         );
       }
+      if (issues.length > 0) {
+        const text = formatValidationForUser(issues);
+        setLastError((prev) =>
+          prev ? `${prev}\n\n[Validación GafCore]\n${text}` : `[Validación GafCore]\n${text}`,
+        );
+        if (!pipelineRunIdRef.current) {
+          void persistValidationMemory(
+            issues.filter((i) => i.severity === "error"),
+            false,
+          );
+        }
+      }
     }
-    return { merged, issues };
+    return { merged: mergedForReturn, issues };
   };
 
   const requestGafcoreGeneration = async (
@@ -874,6 +1133,7 @@ export function ChatPanel({
     contextFiles: FileItem[],
     ac: AbortSignal,
     myEpoch: number,
+    userTextForTone: string,
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
@@ -885,7 +1145,12 @@ export function ChatPanel({
           "Content-Type": "application/json",
           Authorization: `Bearer ${tok}`,
         },
-        body: JSON.stringify({ history, instruction, files: contextFiles }),
+        body: JSON.stringify({
+          history,
+          instruction,
+          files: contextFiles,
+          ...(projectId ? { projectId } : {}),
+        }),
         signal: ac.signal,
       });
 
@@ -916,8 +1181,9 @@ export function ChatPanel({
           reply?: string;
           files?: Array<{ name: string; language?: string; content: string }>;
         };
+        const replyRaw = typeof j.reply === "string" ? j.reply : "Listo.";
         return {
-          reply: typeof j.reply === "string" ? j.reply : "Listo.",
+          reply: softenRoboticReply(userTextForTone, replyRaw),
           files: Array.isArray(j.files) ? j.files : [],
         };
       }
@@ -932,8 +1198,9 @@ export function ChatPanel({
         throw new Error("No se pudo interpretar la respuesta del modelo.");
       }
       const rawFiles = Array.isArray(parsed.files) ? parsed.files : [];
+      const replyRaw = typeof parsed.reply === "string" ? parsed.reply : "Listo.";
       return {
-        reply: typeof parsed.reply === "string" ? parsed.reply : "Listo.",
+        reply: softenRoboticReply(userTextForTone, replyRaw),
         files: rawFiles as Array<{ name: string; language?: string; content: string }>,
       };
     } catch (err: unknown) {
@@ -942,7 +1209,12 @@ export function ChatPanel({
       const msg = String((err as Error)?.message || "");
       if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
         return callGafcoreChat({
-          data: { history, instruction, files: contextFiles as any },
+          data: {
+            history,
+            instruction,
+            files: contextFiles as any,
+            ...(projectId ? { projectId } : {}),
+          },
         });
       }
       throw err;
@@ -952,9 +1224,13 @@ export function ChatPanel({
   const send = async (text?: string) => {
     const raw = (text ?? input).trim();
     const pendingSnapshot = [...pendingComposerImages];
+    const refNames = pendingSnapshot.map((p) => p.fileName).join(", ");
     const pendingRef =
       pendingSnapshot.length > 0
-        ? `\n[Referencia visual en archivos del proyecto: ${pendingSnapshot.map((p) => p.fileName).join(", ")}.]`
+        ? `\n[REFERENCIA VISUAL OBLIGATORIA] Imagen(es) en el proyecto: ${refNames}. ` +
+          `Usa esa imagen como fondo del hero (background-image: url(...) o <img> a pantalla completa con object-cover). ` +
+          `En JSX/HTML usa src="${pendingSnapshot[0]?.fileName ?? "assets/ref.jpg"}" — el preview la resuelve. ` +
+          `Prohibido dejar solo fondo negro o sólido si el usuario pidió imagen de fondo.\n`
         : "";
     const coreText =
       raw ||
@@ -975,40 +1251,68 @@ export function ChatPanel({
       setCreditsOut(true);
       return;
     }
+    const conversational = isConversationalOnly(raw) && pendingSnapshot.length === 0;
+    const effectiveBuild = mode === "build" && !conversational;
+
     const functionalPrefix =
-      mode === "build" && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
+      effectiveBuild && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
+    const conversationalPrefix = conversational ? buildConversationalInstructionPrefix(raw) : "";
+    const creativePrefix =
+      effectiveBuild && !visualEditOn ? buildCreativeBuildPrefix(raw) : "";
     const deepPrefix =
-      deepModel && mode === "build"
+      (deepModel && effectiveBuild) || (effectiveBuild && isSubstantiveBuildRequest(raw))
         ? "[modo profundo] Prioriza análisis cuidadoso, UI cuidada y código robusto; la salida sigue siendo solo el JSON del contrato. "
         : "";
     const chatPrefix =
-      mode === "chat"
+      mode === "chat" || conversational
         ? "[Modo chat] Responde sin generar código a menos que se solicite explícitamente. "
         : "";
     const visualPrefix = visualEditOn
       ? "[Edición visual] Enfócate solo en cambios de UI/estilos sin tocar lógica. "
       : "";
-    const instruction = functionalPrefix + deepPrefix + chatPrefix + visualPrefix + coreText + pendingRef;
-    if (!instruction.trim() || loading) return;
+    const visionBoost =
+      pendingSnapshot.length > 0
+        ? "[modo profundo] Hay imagen de referencia pegada; analízala y aplícala al diseño. "
+        : "";
+    const layoutPrefix = buildLayoutInstructionPrefix(raw);
+    const instruction =
+      conversationalPrefix +
+      creativePrefix +
+      functionalPrefix +
+      layoutPrefix +
+      visionBoost +
+      deepPrefix +
+      chatPrefix +
+      visualPrefix +
+      coreText +
+      pendingRef;
+    if (!instruction.trim() || loading || sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    setLoading(true);
     const myEpoch = ++requestEpochRef.current;
     setInput("");
     setPendingComposerImages([]);
     const userDisplay = [raw, pendingSnapshot.length > 0 ? `📎 ${pendingSnapshot.length} imagen` : ""]
       .filter(Boolean)
       .join("\n");
-    setMessages((m) => [
-      ...m,
-      { role: "user", content: userDisplay || "📎 Imagen de referencia", ts: Date.now() },
-    ]);
-    void persistMessage("user", instruction);
-    setLoading(true);
+    const userBubble = userDisplay || "📎 Imagen de referencia";
+    stickToBottomRef.current = true;
+    appendMessageDeduped("user", userBubble);
+    stickToBottomRef.current = true;
+    forceScrollToBottom();
+    scrollChatToBottomSoon("auto");
+    void persistMessage("user", userBubble);
+    if (effectiveBuild && projectId) void startPipelineRun(instruction);
     setStreamChars(null);
     const ac = new AbortController();
     abortControllerRef.current = ac;
     try {
-      const history: ChatMsg[] = messages
-        .slice(-6)
-        .map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }));
+      const history: ChatMsg[] = [
+        ...messages
+          .slice(-5)
+          .map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content })),
+        { role: "user", content: conversational ? userBubble : instruction },
+      ];
 
       const { data: sess } = await supabase.auth.getSession();
       const tok = sess.session?.access_token;
@@ -1017,23 +1321,36 @@ export function ChatPanel({
         throw new Error("no_session");
       }
 
-      const result = await requestGafcoreGeneration(tok, history, instruction, files, ac.signal, myEpoch);
+      await advancePipeline("generate", "generating");
+      const result = await requestGafcoreGeneration(
+        tok,
+        history,
+        instruction,
+        files,
+        ac.signal,
+        myEpoch,
+        raw,
+      );
 
       if (myEpoch !== requestEpochRef.current) return;
 
-      const replyText = sanitizeUserFacingAiText(result.reply || "Listo.");
+      let replyText = sanitizeUserFacingAiText(
+        softenRoboticReply(raw, result.reply || "Listo."),
+      );
       setStreamChars(null);
-      setMessages((m) => [...m, { role: "ai", content: replyText, ts: Date.now() }]);
+      appendMessageDeduped("ai", replyText);
+      forceScrollToBottom();
+      scrollChatToBottomSoon("auto");
       void persistMessage("assistant", replyText);
 
-      if (result.files && result.files.length > 0) {
-        const runFunctional = mode === "build" && !visualEditOn;
+      if (result.files && result.files.length > 0 && effectiveBuild) {
+        const runFunctional = effectiveBuild && !visualEditOn;
         let { merged, issues } = await applyGenerationFiles(files, result.files, instruction, raw, {
           runFunctionalAudit: runFunctional,
           snapshotLabel: `auto: ${raw.slice(0, 60)}`,
         });
 
-        if (runFunctional && hasFunctionalBlockingIssues(issues)) {
+        if (runFunctional && shouldAutoRetryValidation(issues)) {
           const canRetry =
             isAdmin ||
             isUnlimitedDaily ||
@@ -1042,10 +1359,11 @@ export function ChatPanel({
           if (!canRetry) {
             toast.error("Sin créditos para el reintento automático de corrección.");
           } else {
-            toast.message("Corrigiendo funcionalidad (1 reintento automático)…", { duration: 5000 });
+            toast.message("Corrigiendo validación (1 reintento automático)…", { duration: 5000 });
+            await advancePipeline("retry", "retrying");
             const fixInstruction =
               FUNCTIONAL_FIRST_BUILD_PREFIX +
-              buildFunctionalFixInstruction(issues, raw || coreText);
+              buildValidationFixInstruction(issues, raw || coreText);
             const fixHistory: ChatMsg[] = [
               ...history,
               { role: "user", content: instruction },
@@ -1058,13 +1376,12 @@ export function ChatPanel({
               merged,
               ac.signal,
               myEpoch,
+              raw || coreText,
             );
             if (myEpoch === requestEpochRef.current && retryResult.files?.length) {
               const retryReply = sanitizeUserFacingAiText(retryResult.reply || "Corregido.");
-              setMessages((m) => [
-                ...m,
-                { role: "ai", content: retryReply, ts: Date.now() },
-              ]);
+              appendMessageDeduped("ai", retryReply);
+              scrollChatToBottomSoon("auto");
               void persistMessage("assistant", retryReply);
               const retryBatch = await applyGenerationFiles(
                 merged,
@@ -1075,18 +1392,25 @@ export function ChatPanel({
               );
               merged = retryBatch.merged;
               issues = retryBatch.issues;
-              if (!hasFunctionalBlockingIssues(issues)) {
-                setLastError(null);
-                toast.success("Corrección functional-first aplicada");
+              if (!hasBlockingValidationIssues(issues)) {
+                setLastError(issues.length > 0 ? formatValidationForUser(issues) : null);
+                if (!pipelineRunIdRef.current) {
+                  void persistValidationMemory(issues, true);
+                }
+                toast.success(
+                  issues.length > 0
+                    ? "Corrección aplicada (quedan avisos menores)"
+                    : "Corrección de validación aplicada",
+                );
               } else {
-                toast.message("Aún hay avisos functional-first tras el reintento", {
+                toast.message("Aún hay errores tras el reintento automático", {
                   description: issues[0]?.message,
                 });
               }
             }
           }
         } else if (issues.length > 0) {
-          toast.message("Revisa funcionalidad (functional-first)", {
+          toast.message("Revisa validación del proyecto", {
             description: issues[0]?.message,
             duration: 8000,
           });
@@ -1108,15 +1432,11 @@ export function ChatPanel({
         /sin créditos|créditos.*agotad/i.test(msg)
       ) {
         setCreditsOut(true);
-        setMessages((m) => [
-          ...m,
-          {
-            role: "ai",
-            content:
-              "Te has quedado sin créditos de IA. Tus funciones de IA están en pausa hasta que recargues. Cada solicitud al asistente consume 1 crédito; los créditos se usan para pagar el costo del modelo de IA que responde tu mensaje. Recarga abajo para reactivar el asistente.",
-            ts: Date.now(),
-          },
-        ]);
+        appendMessageDeduped(
+          "ai",
+          "Te has quedado sin créditos de IA. Tus funciones de IA están en pausa hasta que recargues. Cada solicitud al asistente consume 1 crédito; los créditos se usan para pagar el costo del modelo de IA que responde tu mensaje. Recarga abajo para reactivar el asistente.",
+        );
+        scrollChatToBottomSoon("auto");
       } else {
         const errMsg = String(error?.message ?? "");
         const aiCfg =
@@ -1128,18 +1448,13 @@ export function ChatPanel({
           ? "El asistente de IA no encuentra clave en el servidor. En local: crea o edita **.env.local** (o `.env`) en la **raíz del proyecto** con `OPENROUTER_API_KEY`, `OPENAI_API_KEY` o la pareja `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY`, guarda y **reinicia** el servidor (`cmd /c \"npm run dev\"` si PowerShell bloquea npm). Ejecuta `npm run gafcore:doctor` para ver qué falta. En producción, define las mismas variables en el host (p. ej. Vercel)."
           : (streamHint ?? error?.message ?? "No pude responder en este momento. Inténtalo de nuevo.");
         if (aiCfg) toast.error("IA no configurada", { duration: 12_000 });
-        setMessages((m) => [
-          ...m,
-          {
-            role: "ai",
-            content: sanitizeUserFacingAiText(friendly),
-            ts: Date.now(),
-          },
-        ]);
+        appendMessageDeduped("ai", sanitizeUserFacingAiText(friendly));
+        scrollChatToBottomSoon("auto");
       }
     } finally {
       abortControllerRef.current = null;
       setStreamChars(null);
+      sendInFlightRef.current = false;
       if (myEpoch === requestEpochRef.current) {
         setLoading(false);
       }
@@ -1150,9 +1465,9 @@ export function ChatPanel({
   const empty = messages.length === 0;
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-background">
       {/* Plan + créditos (chat) + recarga */}
-      <div className="border-b border-border/60 px-3 py-1.5">
+      <div className="shrink-0 border-b border-border/60 px-3 py-1.5">
         <div className="flex items-center justify-between gap-2">
           <span
             className="min-w-0 flex-1 truncate text-[10px] font-semibold text-foreground md:text-[11px]"
@@ -1190,6 +1505,14 @@ export function ChatPanel({
             </span>
           </button>
         </div>
+        {pipelineStatus || validationLabel ? (
+          <p
+            className="mt-1 truncate text-[10px] text-muted-foreground"
+            title={[pipelineStatus, validationLabel].filter(Boolean).join(" · ")}
+          >
+            {[pipelineStatus, validationLabel].filter(Boolean).join(" · ")}
+          </p>
+        ) : null}
         {!isAdmin ? (
           <Button
             type="button"
@@ -1203,8 +1526,11 @@ export function ChatPanel({
         ) : null}
       </div>
       {/* Conversation */}
-      <ScrollArea className="flex-1">
-        <div ref={scrollRef} className="h-full overflow-y-auto px-4 py-5">
+      <div
+        ref={scrollContainerRef}
+        className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
+        <div ref={messagesContentRef} className="px-4 py-5 pb-32">
           {empty ? (
             <div className="flex h-full flex-col items-center justify-center pt-10 text-center">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -1267,11 +1593,12 @@ export function ChatPanel({
               )}
             </div>
           )}
+          <div ref={messagesEndRef} className="h-px w-full shrink-0 scroll-mb-28" aria-hidden />
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Composer */}
-      <div className="px-3 pb-3 pt-2">
+      <div className="shrink-0 border-t border-border/40 bg-background px-3 pb-3 pt-2">
         {lastError && (
           <div className="mb-2 rounded-lg border border-destructive/40 bg-destructive/10 p-2.5 text-[12px]">
             <div className="flex items-start gap-2">

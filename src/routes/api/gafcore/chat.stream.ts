@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { requireUser } from "@/routes/api/elevenlabs/-_auth";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   gafcoreChatBodySchema,
   buildGafcoreMessages,
@@ -9,12 +8,19 @@ import {
   instructionKey,
   projectCacheFingerprint,
   COST_PER_REQUEST,
-  pickModel,
-  resolveGafcoreModelDefaults,
   type ProjFile,
 } from "@/lib/gafcore-chat.shared";
-import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
+import { loadProjectMemoryHintsForUser } from "@/lib/gafcore-ai-memory.server";
+import {
+  consumeAiCredits,
+  getGafcoreAiGateway,
+  parseUpstreamFailure,
+  refundAiCredits,
+  resolveGatewayModel,
+  streamChatCompletions,
+} from "@/lib/gafcore-ai-gateway.server";
+import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
 
 /**
  * POST /api/gafcore/chat/stream
@@ -47,9 +53,9 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
         }
         const data = parsed.data;
 
-        let aiCfg: ReturnType<typeof getAiChatConfig>;
+        let gateway: ReturnType<typeof getGafcoreAiGateway>;
         try {
-          aiCfg = getAiChatConfig();
+          gateway = getGafcoreAiGateway();
         } catch {
           return new Response(JSON.stringify({ error: "ai_not_configured" }), {
             status: 500,
@@ -57,20 +63,16 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
           });
         }
 
-        const defaults = resolveGafcoreModelDefaults(aiCfg.url);
-        const fast = process.env.AI_MODEL_FAST?.trim() || defaults.fast;
-        const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
-        const { messages, model, subset, ctxFiles } = buildGafcoreMessages(
-          data,
-          pickModel(
-            data.instruction,
-            fast,
-            deep,
-            data.files.some((f) => f.content.trim().startsWith("data:image/")),
-          ),
-        );
+        const memoryHints = data.projectId
+          ? await loadProjectMemoryHintsForUser(data.projectId, userId)
+          : "";
+        const model = resolveGatewayModel(gateway, {
+          instruction: data.instruction,
+          hasVision: data.files.some((f) => f.content.trim().startsWith("data:image/")),
+        });
+        const { messages, subset, ctxFiles } = buildGafcoreMessages(data, model, memoryHints);
         const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
-        const cached = cacheGet(cacheKey);
+        const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
         if (cached) {
           const balance = await fetchBalance(userId);
           return new Response(
@@ -86,61 +88,46 @@ export const Route = createFileRoute("/api/gafcore/chat/stream")({
 
         const skipCredits = await isGafcoreAdminUser(userId);
         if (!skipCredits) {
-          const { data: credit, error: creditErr } = await supabaseAdmin.rpc("consume_credits", {
-            p_user_id: userId,
-            p_amount: COST_PER_REQUEST,
-            p_reason: "gafcore_chat_stream",
-            p_metadata: {
-              instruction_len: data.instruction.length,
-              model,
-              ctx_files: ctxFiles.length,
-              subset,
-            } as never,
+          const credit = await consumeAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream", {
+            instruction_len: data.instruction.length,
+            model,
+            ctx_files: ctxFiles.length,
+            subset,
           });
-          if (creditErr) {
-            return new Response(JSON.stringify({ error: "credits_error" }), {
-              status: 500,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
-          if (!(credit as { ok?: boolean } | null)?.ok) {
-            return new Response(JSON.stringify({ error: "insufficient_credits" }), {
-              status: 402,
+          if (!credit.ok) {
+            const err = credit.error === "insufficient_credits" ? "insufficient_credits" : "credits_error";
+            return new Response(JSON.stringify({ error: err }), {
+              status: credit.error === "insufficient_credits" ? 402 : 500,
               headers: { "Content-Type": "application/json" },
             });
           }
         }
 
-        const upstream = await postChatCompletions({
-          model,
-          messages,
-          stream: true,
-          response_format: { type: "json_object" },
-        });
+        const upstream = await streamChatCompletions({ model, messages, json: true });
 
         if (!upstream.ok) {
           if (!skipCredits) {
-            await supabaseAdmin.rpc("add_credits", {
-              p_user_id: userId,
-              p_amount: COST_PER_REQUEST,
-              p_reason: "gafcore_chat_stream_refund",
-              p_metadata: { status: upstream.status } as never,
+            await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream_refund", {
+              status: upstream.status,
             });
           }
-          const t = await upstream.text().catch(() => "");
-          return new Response(JSON.stringify({ error: "upstream", detail: t.slice(0, 400) }), {
-            status: upstream.status >= 400 ? upstream.status : 502,
-            headers: { "Content-Type": "application/json" },
-          });
+          const fail = await parseUpstreamFailure(upstream);
+          return new Response(
+            JSON.stringify({
+              error: fail.code === "rate_limited" ? "rate_limited" : "upstream",
+              detail: fail.detail,
+            }),
+            {
+              status: fail.status >= 400 ? fail.status : 502,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
 
         if (!upstream.body) {
           if (!skipCredits) {
-            await supabaseAdmin.rpc("add_credits", {
-              p_user_id: userId,
-              p_amount: COST_PER_REQUEST,
-              p_reason: "gafcore_chat_stream_refund",
-              p_metadata: { reason: "no_body" } as never,
+            await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream_refund", {
+              reason: "no_body",
             });
           }
           return new Response(JSON.stringify({ error: "no_stream_body" }), {

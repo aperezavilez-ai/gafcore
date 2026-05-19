@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
-import { resolveGafcoreModelDefaults } from "@/lib/gafcore-chat.shared";
+import {
+  completeChatMessage,
+  getGafcoreAiGateway,
+  resolveGatewayModel,
+} from "@/lib/gafcore-ai-gateway.server";
 import { verifyTurnstileToken } from "@/lib/turnstile-verify.server";
 
 const CORS = {
@@ -89,9 +92,9 @@ export const Route = createFileRoute("/api/public/gafcore/support-faq")({
           }
         }
 
-        let aiCfg: ReturnType<typeof getAiChatConfig>;
+        let gateway: ReturnType<typeof getGafcoreAiGateway>;
         try {
-          aiCfg = getAiChatConfig();
+          gateway = getGafcoreAiGateway();
         } catch {
           return new Response(JSON.stringify({ error: "ai_not_configured" }), {
             status: 503,
@@ -99,28 +102,29 @@ export const Route = createFileRoute("/api/public/gafcore/support-faq")({
           });
         }
 
-        const { fast } = resolveGafcoreModelDefaults(aiCfg.url);
-        const model = process.env.AI_SUPPORT_MODEL?.trim() || fast;
+        const model = resolveGatewayModel(gateway, { tier: "support" });
 
-        const upstream = await postChatCompletions({
-          model,
-          messages: [
-            { role: "system", content: SYSTEM },
-            { role: "user", content: parsed.data.question },
-          ],
-          temperature: 0.35,
-        });
-
-        if (!upstream.ok) {
-          const t = await upstream.text().catch(() => "");
-          return new Response(JSON.stringify({ error: "upstream", detail: t.slice(0, 200) }), {
-            status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502,
-            headers: { "Content-Type": "application/json", ...CORS },
+        let reply: string;
+        try {
+          const completed = await completeChatMessage({
+            model,
+            messages: [
+              { role: "system", content: SYSTEM },
+              { role: "user", content: parsed.data.question },
+            ],
+            temperature: 0.35,
           });
+          reply = completed.content.trim() || "…";
+        } catch (e: unknown) {
+          const err = e as Error & { status?: number };
+          return new Response(
+            JSON.stringify({ error: "upstream", detail: err.message?.slice(0, 200) }),
+            {
+              status: err.status && err.status >= 400 && err.status < 600 ? err.status : 502,
+              headers: { "Content-Type": "application/json", ...CORS },
+            },
+          );
         }
-
-        const json = (await upstream.json()) as { choices?: { message?: { content?: string } }[] };
-        const reply = json?.choices?.[0]?.message?.content?.trim() || "…";
         return new Response(JSON.stringify({ reply }), {
           status: 200,
           headers: { "Content-Type": "application/json; charset=utf-8", ...CORS },

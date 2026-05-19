@@ -162,12 +162,50 @@ async function gh(token: string, path: string, init: RequestInit = {}) {
   return res;
 }
 
+async function ensureGithubBranch(
+  token: string,
+  repo: string,
+  branch: string,
+): Promise<{ ok: boolean; message: string }> {
+  const branchRes = await gh(token, `/repos/${repo}/branches/${encodeURIComponent(branch)}`);
+  if (branchRes.ok) return { ok: true, message: "ok" };
+
+  const repoRes = await gh(token, `/repos/${repo}`);
+  if (!repoRes.ok) {
+    return {
+      ok: false,
+      message: `No se encontró el repositorio ${repo}. Conecta GitHub y vuelve a publicar.`,
+    };
+  }
+
+  const readmePath = githubPath("README.md");
+  const initRes = await gh(token, `/repos/${repo}/contents/${readmePath}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      message: "chore: inicializar rama desde GafCore",
+      content: b64("# Sitio publicado con GafCore\n"),
+      branch,
+    }),
+  });
+  if (!initRes.ok) {
+    const t = await initRes.text();
+    return {
+      ok: false,
+      message: `No se encontró \`${repo}@${branch}\`. Verifica el repo y la rama. ${t.slice(0, 100)}`,
+    };
+  }
+  return { ok: true, message: "rama creada" };
+}
+
 export async function deployToGithub(
   files: FileItem[],
   opts: { token: string; repo: string; branch: string },
 ): Promise<{ ok: boolean; message: string }> {
   const { token, repo, branch } = opts;
   if (!token || !repo) return { ok: false, message: "Falta token o repo (owner/repo)" };
+
+  const branchReady = await ensureGithubBranch(token, repo, branch);
+  if (!branchReady.ok) return { ok: false, message: branchReady.message };
 
   const deployFiles = withDeployScaffold(files);
 

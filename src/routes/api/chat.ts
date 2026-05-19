@@ -1,8 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import "@tanstack/react-start";
 import { requireUser } from "./elevenlabs/-_auth";
-import { resolveGafcoreModelDefaults } from "@/lib/gafcore-chat.shared";
-import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
+import {
+  getGafcoreAiGateway,
+  parseUpstreamFailure,
+  resolveGatewayModel,
+  streamChatCompletions,
+} from "@/lib/gafcore-ai-gateway.server";
 
 const SYSTEM_PROMPT = `Eres GafCore AI, asistente de la plataforma de creación con IA. Responde en español de forma clara, breve y útil. Usa markdown cuando ayude.`;
 
@@ -15,22 +19,15 @@ export const Route = createFileRoute("/api/chat")({
         const auth = await requireUser(request);
         if (auth instanceof Response) return auth;
 
-        let aiCfg: ReturnType<typeof getAiChatConfig>;
+        let gateway: ReturnType<typeof getGafcoreAiGateway>;
         try {
-          aiCfg = getAiChatConfig();
+          gateway = getGafcoreAiGateway();
         } catch {
           return new Response(JSON.stringify({ error: "AI not configured" }), {
             status: 500,
             headers: { "Content-Type": "application/json" },
           });
         }
-
-        const { fast, deep } = resolveGafcoreModelDefaults(aiCfg.url);
-        const MODEL_BY_MODE: Record<Mode, string> = {
-          fast,
-          reasoning: deep,
-          pro: deep,
-        };
 
         let body: { messages?: Array<{ role: string; content: string }>; mode?: Mode };
         try {
@@ -50,12 +47,13 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
-        const mode: Mode = body.mode && body.mode in MODEL_BY_MODE ? body.mode : "fast";
-        const model = MODEL_BY_MODE[mode];
+        const mode: Mode = body.mode && ["fast", "reasoning", "pro"].includes(body.mode) ? body.mode : "fast";
+        const model = resolveGatewayModel(gateway, {
+          tier: mode === "fast" ? "fast" : "deep",
+        });
 
-        const upstream = await postChatCompletions({
+        const upstream = await streamChatCompletions({
           model,
-          stream: true,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -63,12 +61,9 @@ export const Route = createFileRoute("/api/chat")({
         });
 
         if (!upstream.ok) {
-          const text = await upstream.text().catch(() => "");
-          let msg = `AI error (${upstream.status})`;
-          if (upstream.status === 429) msg = "Rate limit, intenta en unos segundos.";
-          if (upstream.status === 402) msg = "Sin créditos de IA en el proveedor.";
-          return new Response(JSON.stringify({ error: msg, detail: text.slice(0, 300) }), {
-            status: upstream.status,
+          const fail = await parseUpstreamFailure(upstream);
+          return new Response(JSON.stringify({ error: fail.message, detail: fail.detail }), {
+            status: fail.status,
             headers: { "Content-Type": "application/json" },
           });
         }

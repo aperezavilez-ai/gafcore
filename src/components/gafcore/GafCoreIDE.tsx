@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { GafCoreAuthDialog } from "@/components/ide/GafCoreAuthDialog";
 import { toast } from "sonner";
 import {
@@ -7,19 +8,24 @@ import {
   saveProjectFiles,
   saveProjectFilesDetailed,
   getUserSupabase,
-  listProjects,
-  type ProjectRow,
-  createProject,
-  renameProject,
-  getCurrentProjectId,
-  setCurrentProjectId,
-  clearCurrentProjectId,
   listSecrets,
-  getProjectDeployMeta,
 } from "@/lib/userSupabase";
 import {
-  deployHostFromGithubRepo,
-  normalizeDeployHost,
+  activateProjectRow,
+  bootstrapWorkspace,
+  cacheActiveProject,
+  createProject,
+  listProjects,
+  loadDeployHostForProject,
+  loadDeploySummaryForProject,
+  readCachedProjectName,
+  renameProject,
+  syncActiveFromList,
+  autoPublishProject,
+  type ProjectRow,
+} from "@/core/project";
+import {
+  isGithubDeployConfigured,
   type GafcoreDeployResult,
 } from "@/lib/gafcore-deploy.shared";
 import { fileItemsFromBrowserFileList } from "@/lib/gafcore-import-files";
@@ -90,8 +96,10 @@ import { ConnectorsDialog } from "@/components/ide/ConnectorsDialog";
 import { GafCoreAnalyticsDialog } from "@/components/ide/GafCoreAnalyticsDialog";
 import { FileSidebar } from "@/components/ide/FileSidebar";
 import { getIdeConfig } from "@/lib/ideConfig";
-import { deployToGithub } from "@/lib/githubDeploy";
 import { PublishDialog } from "@/components/ide/PublishDialog";
+import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
+import { getProjectDeployStatus } from "@/lib/gafcore-deploy.functions";
+import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
@@ -138,6 +146,8 @@ export function GafCoreIDE() {
     subActive &&
     (subscription?.price_id === "plan_creador_monthly" ||
       String(subscription?.plan_tier ?? "").toLowerCase() === "creador");
+  const callDeployStatus = useServerFn(getProjectDeployStatus);
+
   const [files, setFiles] = useState<FileItem[]>(initialFiles);
   const [activeIndex, setActiveIndex] = useState(0);
   const [openTabs, setOpenTabs] = useState<string[]>([initialFiles[0].name]);
@@ -145,13 +155,16 @@ export function GafCoreIDE() {
   const [deploying, setDeploying] = useState(false);
   const [view, setView] = useState<View>("preview");
   const [previewKey, setPreviewKey] = useState(0);
-  const [projectName, setProjectName] = useState("GafCore");
+  const [projectName, setProjectName] = useState(readCachedProjectName);
   /** ID del proyecto activo (sincronizado con `setCurrentProjectId` en userSupabase). */
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(null);
   const [recentProjects, setRecentProjects] = useState<ProjectRow[]>([]);
   const [switchingProject, setSwitchingProject] = useState(false);
   const [deploySiteHost, setDeploySiteHost] = useState<string | null>(null);
+  const [deployGithubRepo, setDeployGithubRepo] = useState<string | null>(null);
+  const [deployGithubReady, setDeployGithubReady] = useState(() => isGithubDeployConfigured());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsFocusDeploy, setSettingsFocusDeploy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [secretsOpen, setSecretsOpen] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
@@ -159,6 +172,8 @@ export function GafCoreIDE() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [importProjectDialogOpen, setImportProjectDialogOpen] = useState(false);
+  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+  const [deployLiveStatus, setDeployLiveStatus] = useState<ProjectDeployStatus>("idle");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [usersOpen, setUsersOpen] = useState(false);
@@ -243,15 +258,9 @@ export function GafCoreIDE() {
   const refreshProjects = async () => {
     const list = await listProjects();
     setRecentProjects(list.slice(0, 8));
-    const cur = getCurrentProjectId();
-    const nextId = cur && list.some((p) => p.id === cur) ? cur : null;
-    if (!nextId) {
-      clearCurrentProjectId();
-    }
-    setCurrentProjectIdState(nextId);
-    const found = nextId ? list.find((p) => p.id === nextId) : undefined;
-    if (found) setProjectName(found.name);
-    else if (list.length === 0) setProjectName("Sin proyecto");
+    const active = await syncActiveFromList(list);
+    setCurrentProjectIdState(active.id);
+    setProjectName(active.name);
   };
 
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
@@ -292,20 +301,15 @@ export function GafCoreIDE() {
       if (currentProjectId && loaded) {
         await saveProjectFilesDetailed(files, currentProjectId);
       }
-      setCurrentProjectId(p.id);
-      setCurrentProjectIdState(p.id);
-      setProjectName(p.name);
+      const active = activateProjectRow(p);
+      setCurrentProjectIdState(active.id);
+      setProjectName(active.name);
       const remote = await loadProjectFiles(p.id);
       await hydrateEditorFromRemote(remote, p.id);
       setPreviewKey((k) => k + 1);
-      const meta = await getProjectDeployMeta(p.id);
-      const cfg = getIdeConfig();
-      const host =
-        normalizeDeployHost(meta?.deploy_site_url ?? cfg.deploySiteUrl) ??
-        (meta?.github_repo || cfg.githubRepo
-          ? deployHostFromGithubRepo(meta?.github_repo ?? cfg.githubRepo ?? "")
-          : null);
-      setDeploySiteHost(host);
+      const deploy = await loadDeploySummaryForProject(p.id);
+      setDeploySiteHost(deploy.siteHost);
+      setDeployGithubRepo(deploy.githubRepo);
       toast.success(`Proyecto «${p.name}»`);
     } catch (e) {
       console.error(e);
@@ -315,26 +319,24 @@ export function GafCoreIDE() {
     }
   };
 
-  const newProject = async () => {
-    const name = window.prompt("Nombre del nuevo proyecto", "Mi proyecto");
-    if (!name?.trim()) return;
-    const created = await createProject(name.trim());
-    if (!created) {
-      toast.error("No se pudo crear el proyecto");
-      return;
-    }
-    setCurrentProjectId(created.id);
-    setCurrentProjectIdState(created.id);
-    setProjectName(created.name);
-    setFiles(initialFiles);
-    setOpenTabs([initialFiles[0].name]);
+  const onProjectCreatedFromTemplate = async (
+    created: { id: string; name: string; created_at: string },
+    nextFiles: FileItem[],
+  ) => {
+    const active = activateProjectRow(created);
+    setCurrentProjectIdState(active.id);
+    setProjectName(active.name);
+    const filesOut = nextFiles.length ? nextFiles : initialFiles;
+    setFiles(filesOut);
+    setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
     setActiveIndex(0);
+    setLoaded(true);
     setPreviewKey((k) => k + 1);
-    const saved = await saveProjectFiles(initialFiles);
-    if (!saved) toast.error("Proyecto creado pero no se pudieron guardar los archivos iniciales");
     await refreshProjects();
-    toast.success(`Proyecto «${created.name}» creado. Puedes cambiar de proyecto en «Todos los proyectos».`);
+    toast.success(`Proyecto «${created.name}» creado.`);
   };
+
+  const newProject = () => setNewProjectDialogOpen(true);
 
   const applyImportedFiles = async (items: FileItem[], suggestedName = "Mi proyecto") => {
     if (!items.length) {
@@ -351,9 +353,9 @@ export function GafCoreIDE() {
       toast.error("No se pudo crear el proyecto");
       return;
     }
-    setCurrentProjectId(created.id);
-    setCurrentProjectIdState(created.id);
-    setProjectName(created.name);
+    const active = activateProjectRow(created);
+    setCurrentProjectIdState(active.id);
+    setProjectName(active.name);
     setFiles(items);
     setOpenTabs([items[0]?.name].filter(Boolean) as string[]);
     setActiveIndex(0);
@@ -418,6 +420,7 @@ export function GafCoreIDE() {
     const ok = await renameProject(cur, trimmed);
     if (ok) {
       setProjectName(trimmed);
+      cacheActiveProject(cur, trimmed);
       await refreshProjects();
       toast.success(`Renombrado a «${trimmed}»`);
     } else {
@@ -449,33 +452,32 @@ export function GafCoreIDE() {
   }, [isAdmin, secretsOpen]);
 
   useEffect(() => {
-    (async () => {
-      if (!getUserSupabase()) {
+    void (async () => {
+      const ws = await bootstrapWorkspace();
+      if (!ws.hasSupabase) {
         setLoaded(true);
         return;
       }
-      const list = await listProjects();
-      if (list.length === 0) {
-        clearCurrentProjectId();
+      if (ws.projects.length === 0) {
         setCurrentProjectIdState(null);
-        setProjectName("Sin proyecto");
+        setProjectName(ws.active.name);
+        toast.message("No hay proyectos en tu cuenta", {
+          description: "Menú del logo → «+ Nuevo» para crear uno.",
+        });
         setFiles(initialFiles);
         setOpenTabs([initialFiles[0].name]);
         setLoaded(true);
         return;
       }
-      let activeId = getCurrentProjectId();
-      if (!activeId || !list.some((p) => p.id === activeId)) {
-        activeId = list[0].id;
-        setCurrentProjectId(activeId);
-      }
-      setCurrentProjectIdState(activeId);
-      const row = list.find((p) => p.id === activeId);
-      if (row) setProjectName(row.name);
-
-      setRecentProjects(list.slice(0, 8));
+      setCurrentProjectIdState(ws.active.id);
+      setProjectName(ws.active.name);
+      setRecentProjects(ws.projects.slice(0, 8));
+      const activeId = ws.active.id!;
       const remote = await loadProjectFiles(activeId);
       await hydrateEditorFromRemote(remote, activeId);
+      const deploy = await loadDeploySummaryForProject(activeId);
+      setDeploySiteHost(deploy.siteHost);
+      setDeployGithubRepo(deploy.githubRepo);
       setLoaded(true);
     })();
   }, []);
@@ -507,19 +509,47 @@ export function GafCoreIDE() {
   useEffect(() => {
     if (!currentProjectId) {
       setDeploySiteHost(null);
+      setDeployGithubRepo(null);
+      setDeployLiveStatus("idle");
       return;
     }
-    void (async () => {
-      const meta = await getProjectDeployMeta(currentProjectId);
-      const cfg = getIdeConfig();
-      const host =
-        normalizeDeployHost(meta?.deploy_site_url ?? cfg.deploySiteUrl) ??
-        (meta?.github_repo || cfg.githubRepo
-          ? deployHostFromGithubRepo(meta?.github_repo ?? cfg.githubRepo ?? "")
-          : null);
-      setDeploySiteHost(host);
-    })();
+    void loadDeploySummaryForProject(currentProjectId).then((d) => {
+      setDeploySiteHost(d.siteHost);
+      setDeployGithubRepo(d.githubRepo);
+    });
   }, [currentProjectId, settingsOpen]);
+
+  useEffect(() => {
+    if (!currentProjectId) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const row = await callDeployStatus({ data: { projectId: currentProjectId } });
+        if (!cancelled) setDeployLiveStatus((row?.status ?? "idle") as ProjectDeployStatus);
+      } catch {
+        /* columnas/migración */
+      }
+    };
+    void tick();
+    const ms = deployLiveStatus === "building" ? 12_000 : 45_000;
+    const id = setInterval(() => void tick(), ms);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [currentProjectId, callDeployStatus, deployLiveStatus]);
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      setDeployGithubReady(isGithubDeployConfigured());
+      setSettingsFocusDeploy(false);
+    }
+  }, [settingsOpen]);
+
+  const openDeploySettings = () => {
+    setSettingsFocusDeploy(true);
+    setSettingsOpen(true);
+  };
 
   const openFile = (i: number) => {
     setActiveIndex(i);
@@ -537,17 +567,6 @@ export function GafCoreIDE() {
       throw new Error("Crea o selecciona un proyecto antes de publicar (+ Nuevo).");
     }
 
-    const cfg = getIdeConfig();
-    const meta = await getProjectDeployMeta(currentProjectId);
-    const githubRepo = (meta?.github_repo ?? cfg.githubRepo)?.trim();
-    const githubToken = cfg.githubToken?.trim();
-    const branch = meta?.github_branch ?? cfg.githubBranch ?? "main";
-    const hookUrl = (meta?.vercel_deploy_hook_url ?? cfg.vercelDeployHookUrl)?.trim();
-
-    if (!githubToken || !githubRepo) {
-      throw new Error("Configura GitHub Token y repo en Configuración.");
-    }
-
     setDeploying(true);
     try {
       const saved = await saveProjectFilesDetailed(files, currentProjectId);
@@ -561,89 +580,29 @@ export function GafCoreIDE() {
         );
       }
 
-      const check = await fetch(
-        `https://api.github.com/repos/${githubRepo}/branches/${encodeURIComponent(branch)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${githubToken}`,
-            Accept: "application/vnd.github+json",
-          },
-        },
-      );
-      if (!check.ok) {
-        if (check.status === 401 || check.status === 403) {
-          throw new Error("Token de GitHub inválido o sin permisos (scope repo).");
-        }
-        if (check.status === 404) {
-          throw new Error(`No se encontró ${githubRepo}@${branch}.`);
-        }
-        throw new Error(`GitHub respondió ${check.status} al verificar el repo.`);
-      }
-
       const secrets = await listSecrets();
-      const filesToDeploy = [...files];
-      const excludeEnv = cfg.githubExcludeEnv !== false;
-      if (secrets.length > 0 && !excludeEnv) {
-        const envContent =
-          "# Generado por GafCore — secretos del proyecto\n" +
-          secrets.map((s) => `${s.name}=${JSON.stringify(s.value)}`).join("\n") +
-          "\n";
-        filesToDeploy.push({ name: ".env", language: "plaintext", content: envContent });
-      }
-
-      if (excludeEnv) {
-        const giIdx = filesToDeploy.findIndex((f) => f.name === ".gitignore");
-        if (giIdx >= 0) {
-          const cur = filesToDeploy[giIdx].content;
-          if (!/^\.env\s*$/m.test(cur)) {
-            filesToDeploy[giIdx] = {
-              ...filesToDeploy[giIdx],
-              content: cur.replace(/\s*$/, "") + "\n.env\n",
-            };
-          }
-        } else {
-          filesToDeploy.push({
-            name: ".gitignore",
-            language: "plaintext",
-            content: "node_modules\ndist\n.env\n.DS_Store\n",
-          });
-        }
-      }
-
-      toast.message(`Subiendo ${filesToDeploy.length} archivos a ${githubRepo}…`);
-      const r = await deployToGithub(filesToDeploy, {
-        token: githubToken,
-        repo: githubRepo,
-        branch,
+      toast.message("Publicando automáticamente en GitHub…");
+      const result = await autoPublishProject({
+        projectId: currentProjectId,
+        projectName,
+        files,
+        secrets,
       });
 
-      if (!r.ok) {
-        return { ok: false, message: r.message };
+      if (result.ok && result.siteHost) {
+        setDeploySiteHost(result.siteHost);
       }
-
-      if (hookUrl) {
-        try {
-          await fetch(hookUrl, { method: "POST" });
-          toast.message("Deploy Hook de Vercel disparado");
-        } catch {
-          toast.error("Push OK, pero falló el Deploy Hook de Vercel");
-        }
+      if (result.ok && result.repoUrl) {
+        const m = result.repoUrl.match(/github\.com\/([^/]+\/[^/]+)/);
+        if (m?.[1]) setDeployGithubRepo(m[1]);
       }
-
-      const repoUrl = `https://github.com/${githubRepo}/tree/${branch}`;
-      const siteHost =
-        normalizeDeployHost(meta?.deploy_site_url ?? cfg.deploySiteUrl) ??
-        deployHostFromGithubRepo(githubRepo);
-
-      if (siteHost) setDeploySiteHost(siteHost);
-
-      return {
-        ok: true,
-        message: r.message,
-        repoUrl,
-        fileCount: filesToDeploy.length,
-        siteHost: siteHost ?? undefined,
-      };
+      if (result.deployStatus) {
+        setDeployLiveStatus(result.deployStatus);
+      }
+      if (result.ok) {
+        setDeployGithubReady(isGithubDeployConfigured());
+      }
+      return result;
     } finally {
       setDeploying(false);
     }
@@ -754,20 +713,25 @@ export function GafCoreIDE() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex min-w-0 max-w-[min(100vw-200px,420px)] flex-col items-start gap-0 rounded-md px-2 py-1 text-left hover:bg-muted sm:flex-row sm:items-center sm:gap-1"
+                className="flex min-w-0 max-w-[min(100vw-200px,440px)] items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2.5 py-1 text-left hover:bg-muted"
                 title={
                   currentProjectId
                     ? `Proyecto: ${projectName} · Cuenta: ${ideUserToolbarName(user)}`
                     : "Crea o elige un proyecto"
                 }
               >
-                <span className="truncate text-[13px] font-semibold text-foreground">
-                  {projectName}
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Proyecto
+                  </span>
+                  <span className="truncate text-[13px] font-semibold text-foreground">
+                    {projectName}
+                  </span>
+                  <span className="truncate text-[10px] text-muted-foreground">
+                    {ideUserToolbarName(user)}
+                  </span>
                 </span>
-                <span className="hidden truncate text-[11px] text-muted-foreground sm:inline sm:max-w-[140px]">
-                  {ideUserToolbarName(user)}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground sm:ml-0.5" aria-hidden />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -1213,20 +1177,42 @@ export function GafCoreIDE() {
             <Share2 className="h-3.5 w-3.5" />
             Compartir
           </Button>
+          {deployLiveStatus === "building" && (
+            <span className="hidden text-xs text-amber-600 sm:inline" title="Deploy en Vercel">
+              Compilando…
+            </span>
+          )}
+          {deployLiveStatus === "ready" && deploySiteHost && (
+            <span className="hidden text-xs text-primary sm:inline" title="Sitio en vivo">
+              En vivo
+            </span>
+          )}
           <PublishDialog
             siteHost={deploySiteHost}
+            githubRepo={deployGithubRepo}
             projectId={currentProjectId}
-            canPublish={Boolean(currentProjectId)}
+            hasProject={Boolean(currentProjectId)}
+            githubConfigured={deployGithubReady}
             isUpdating={deploying}
             onUpdate={onDeploy}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={openDeploySettings}
+            onOpenChange={(v) => {
+              if (v) {
+                setDeployGithubReady(isGithubDeployConfigured());
+                if (currentProjectId) {
+                  void callDeployStatus({ data: { projectId: currentProjectId } }).then((r) =>
+                    setDeployLiveStatus((r?.status ?? "idle") as ProjectDeployStatus),
+                  );
+                }
+              }
+            }}
           >
             <Button
               size="sm"
               disabled={deploying}
               className="h-8 gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-medium text-background hover:bg-foreground/90"
             >
-              {deploying ? (
+              {deploying || deployLiveStatus === "building" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Globe className="h-3.5 w-3.5" />
@@ -1251,7 +1237,8 @@ export function GafCoreIDE() {
         <main className="h-full overflow-hidden">
           <ResizablePanelGroup orientation="horizontal" className="h-full">
             {/* Left: Chat (fixed open) */}
-            <ResizablePanel id="chat" defaultSize="34%" minSize="28%" maxSize="55%">
+            <ResizablePanel id="chat" defaultSize="34%" minSize="28%" maxSize="55%" className="min-h-0">
+              <div className="h-full min-h-0">
               <ChatPanel
                 files={files}
                 setFiles={setFiles}
@@ -1264,6 +1251,7 @@ export function GafCoreIDE() {
                 onOpenHistory={() => setHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
               />
+              </div>
             </ResizablePanel>
             <ResizableHandle
               withHandle
@@ -1365,7 +1353,11 @@ export function GafCoreIDE() {
         ) : null}
       </div>
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        highlightDeploy={settingsFocusDeploy}
+      />
       <HistoryDialog
         open={historyOpen}
         onOpenChange={setHistoryOpen}
@@ -1384,6 +1376,12 @@ export function GafCoreIDE() {
         onOpenChange={setAnalyticsOpen}
         userId={user?.id}
       />
+      <NewProjectDialog
+        open={newProjectDialogOpen}
+        onOpenChange={setNewProjectDialogOpen}
+        onCreated={(project, projectFiles) => void onProjectCreatedFromTemplate(project, projectFiles)}
+      />
+
       <GafCoreAuthDialog open={authOpen} onOpenChange={setAuthOpen} initialMode={authMode} />
 
       <CreditsOutModal

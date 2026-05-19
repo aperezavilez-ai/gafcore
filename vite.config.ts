@@ -69,6 +69,10 @@ export default defineConfig(({ mode }) => {
       nitro({
         // En los builds de Vercel, `VERCEL=1`: salida compatible con Fluid Compute / Functions.
         preset: process.env.VERCEL ? "vercel" : "node-server",
+        // typescript (~10MB) solo en servidor; no empaquetar → menos RAM en build Vercel.
+        rollupConfig: {
+          external: (id) => id === "typescript" || id.startsWith("typescript/"),
+        },
       }),
       viteReact(),
     ],

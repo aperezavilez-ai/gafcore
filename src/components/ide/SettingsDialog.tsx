@@ -14,16 +14,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getIdeConfig, setIdeConfig } from "@/lib/ideConfig";
+import {
+  isBlockedDeployHost,
+  isGafcoreProductionHost,
+  isValidGithubRepo,
+  normalizeDeployHost,
+} from "@/lib/gafcore-deploy.shared";
+import { connectGithubOnServer } from "@/lib/gafcore-api";
+import { markGithubServerConnected } from "@/lib/gafcore-deploy.shared";
 import { ensureProjectId, saveProjectDeployMeta } from "@/lib/userSupabase";
 
 export function SettingsDialog({
   children,
   open: openProp,
   onOpenChange,
+  highlightDeploy = false,
 }: {
   children?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Al abrir, resalta la sección GitHub Deploy (desde Publicar). */
+  highlightDeploy?: boolean;
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = openProp ?? internalOpen;
@@ -49,7 +60,8 @@ export function SettingsDialog({
     setOpenaiKey(c.openaiKey ?? "");
     setOpenaiModel(c.openaiModel ?? "gpt-4o-mini");
     setGithubToken(c.githubToken ?? "");
-    setGithubRepo(c.githubRepo ?? "");
+    const repo = c.githubRepo ?? "";
+    setGithubRepo(isValidGithubRepo(repo) ? repo : "");
     setGithubBranch(c.githubBranch ?? "main");
     setGithubExcludeEnv(c.githubExcludeEnv ?? true);
     setDeploySiteUrl(c.deploySiteUrl ?? "");
@@ -63,20 +75,73 @@ export function SettingsDialog({
       if (meta?.vercel_deploy_hook_url && !c.vercelDeployHookUrl) {
         setVercelDeployHookUrl(meta.vercel_deploy_hook_url);
       }
-      if (meta?.github_repo && !c.githubRepo) setGithubRepo(meta.github_repo);
+      if (meta?.github_repo && !c.githubRepo) {
+        const mrepo = meta.github_repo;
+        if (isValidGithubRepo(mrepo)) setGithubRepo(mrepo);
+      }
       if (meta?.github_branch && c.githubBranch === "main") setGithubBranch(meta.github_branch);
     })();
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !highlightDeploy) return;
+    const t = window.setTimeout(() => {
+      document.getElementById("gafcore-deploy-github")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [open, highlightDeploy]);
+
   const save = () => {
     void (async () => {
+      const onProd = isGafcoreProductionHost();
+      const repoTrim = githubRepo.trim();
+      if (githubToken.trim() && repoTrim && !isValidGithubRepo(repoTrim)) {
+        toast.error("Repo de GitHub inválido", {
+          description: "Usa tu-usuario/nombre-repo real (no usuario/mi-app).",
+        });
+        return;
+      }
+      if (!onProd && supabaseUrl.trim() && !/^https:\/\/.+\.supabase\.co/i.test(supabaseUrl.trim())) {
+        toast.error("URL de Supabase incorrecta", {
+          description: "Debe ser https://xxxx.supabase.co — no un email.",
+        });
+        return;
+      }
+      const deployHost = normalizeDeployHost(deploySiteUrl);
+      if (deploySiteUrl.trim() && !deployHost) {
+        toast.error("URL del sitio incorrecta", {
+          description: "Usa tu dominio de Vercel (ej. mi-tienda.vercel.app), no gafcore.com.",
+        });
+        return;
+      }
+      if (deploySiteUrl.trim() && isBlockedDeployHost(deploySiteUrl)) {
+        toast.error("No uses gafcore.com como URL de tu tienda");
+        return;
+      }
+      if (githubToken.trim()) {
+        const linked = await connectGithubOnServer(githubToken.trim());
+        if (!linked.ok) {
+          toast.error("No se pudo guardar GitHub en el servidor", {
+            description: linked.message,
+          });
+          return;
+        }
+        markGithubServerConnected();
+      }
+
+      const prev = getIdeConfig();
       setIdeConfig({
-        supabaseUrl,
-        supabaseKey,
+        ...prev,
+        ...(onProd
+          ? { supabaseUrl: undefined, supabaseKey: undefined }
+          : {
+              supabaseUrl: supabaseUrl.trim() || undefined,
+              supabaseKey: supabaseKey.trim() || undefined,
+            }),
         openaiKey,
         openaiModel,
         githubToken,
-        githubRepo,
+        githubRepo: repoTrim,
         githubBranch,
         githubExcludeEnv,
         deploySiteUrl: deploySiteUrl.trim() || undefined,
@@ -91,7 +156,11 @@ export function SettingsDialog({
           vercel_deploy_hook_url: vercelDeployHookUrl.trim() || null,
         });
       }
-      toast.success("Configuración guardada");
+      toast.success(
+        githubToken.trim()
+          ? "GitHub conectado en el servidor. Ya puedes publicar."
+          : "Configuración guardada",
+      );
       setOpen(false);
     })();
   };
@@ -118,6 +187,14 @@ export function SettingsDialog({
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {isGafcoreProductionHost() ? (
+            <p className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              En <strong className="text-foreground">gafcore.com</strong> tus proyectos se guardan en
+              tu cuenta GafCore (no hace falta pegar URL de Supabase). Solo configura{" "}
+              <strong className="text-foreground">GitHub Deploy</strong> abajo para publicar.
+            </p>
+          ) : null}
+          {!isGafcoreProductionHost() ? (
           <section className="space-y-3">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">Supabase</h3>
             <div className="space-y-2">
@@ -129,6 +206,7 @@ export function SettingsDialog({
               <Input id="sb-key" type="password" placeholder="eyJhbGciOi..." value={supabaseKey} onChange={(e) => setSupabaseKey(e.target.value)} />
             </div>
           </section>
+          ) : null}
 
           <section className="space-y-3">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">OpenAI</h3>
@@ -142,16 +220,34 @@ export function SettingsDialog({
             </div>
           </section>
 
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">GitHub Deploy</h3>
+          <section
+            id="gafcore-deploy-github"
+            className={`space-y-3 rounded-lg border p-3 transition-colors ${
+              highlightDeploy ? "border-primary bg-primary/5" : "border-transparent"
+            }`}
+          >
+            <h3 className="text-xs font-semibold uppercase text-foreground">GitHub (automático)</h3>
+            <p className="text-xs text-muted-foreground">
+              Pega el token una vez. GafCore crea el repo y publica por ti; no hace falta crear el
+              repositorio a mano.
+            </p>
             <div className="space-y-2">
               <Label htmlFor="gh-token">Personal Access Token (repo scope)</Label>
               <Input id="gh-token" type="password" placeholder="ghp_..." value={githubToken} onChange={(e) => setGithubToken(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <Label htmlFor="gh-repo">Repo (owner/repo)</Label>
-                <Input id="gh-repo" placeholder="usuario/mi-app" value={githubRepo} onChange={(e) => setGithubRepo(e.target.value)} />
+            <details className="mt-2 text-xs">
+              <summary className="cursor-pointer font-medium text-foreground">
+                Opciones avanzadas (repo / Vercel)
+              </summary>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label htmlFor="gh-repo">Repo (opcional)</Label>
+                <Input
+                  id="gh-repo"
+                  placeholder="Se crea automáticamente"
+                  value={githubRepo}
+                  onChange={(e) => setGithubRepo(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="gh-branch">Rama</Label>
@@ -170,22 +266,15 @@ export function SettingsDialog({
                 <code>.gitignore</code> automáticamente.
               </span>
             </label>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground">Sitio publicado</h3>
+              <div className="mt-3 space-y-3 col-span-2">
             <div className="space-y-2">
-              <Label htmlFor="deploy-url">URL del sitio (Vercel o dominio)</Label>
+              <Label htmlFor="deploy-url">URL del sitio (Vercel, opcional)</Label>
               <Input
                 id="deploy-url"
                 placeholder="mi-app.vercel.app"
                 value={deploySiteUrl}
                 onChange={(e) => setDeploySiteUrl(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Tras conectar el repo en Vercel, pega aquí la URL donde se verá tu app. Se usa para
-                verificar la publicación.
-              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="vercel-hook">Deploy Hook de Vercel (opcional)</Label>
@@ -196,11 +285,9 @@ export function SettingsDialog({
                 value={vercelDeployHookUrl}
                 onChange={(e) => setVercelDeployHookUrl(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Vercel → proyecto → Settings → Git → Deploy Hooks. GafCore lo dispara tras subir a
-                GitHub.
-              </p>
             </div>
+              </div>
+            </details>
           </section>
         </div>
 

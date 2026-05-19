@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   gafcoreChatBodySchema,
   buildGafcoreMessages,
@@ -12,38 +11,48 @@ import {
   instructionKey,
   projectCacheFingerprint,
   COST_PER_REQUEST,
-  pickModel,
-  resolveGafcoreModelDefaults,
   type ProjFile,
 } from "@/lib/gafcore-chat.shared";
-import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
+import {
+  completeChatMessage,
+  consumeAiCredits,
+  getGafcoreAiGateway,
+  refundAiCredits,
+  resolveGatewayModel,
+} from "@/lib/gafcore-ai-gateway.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
+import { loadProjectMemoryHintsForUser } from "@/lib/gafcore-ai-memory.server";
+import {
+  shouldBypassGafcoreChatCache,
+  softenRoboticReply,
+} from "@/lib/gafcore-chat-intent.shared";
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => gafcoreChatBodySchema.parse(input))
   .handler(async ({ data, context }) => {
     const t0 = Date.now();
-    let aiCfg: ReturnType<typeof getAiChatConfig>;
+    let gateway: ReturnType<typeof getGafcoreAiGateway>;
     try {
-      aiCfg = getAiChatConfig();
+      gateway = getGafcoreAiGateway();
     } catch {
       throw new Error("AI no configurado");
     }
 
-    const defaults = resolveGafcoreModelDefaults(aiCfg.url);
-    const fast = process.env.AI_MODEL_FAST?.trim() || defaults.fast;
-    const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
-    const { messages, model, subset, ctxFiles } = buildGafcoreMessages(
-      data,
-      pickModel(data.instruction, fast, deep, extractVisionImageParts(data.files as ProjFile[]).length > 0),
-    );
+    const memoryHints = data.projectId
+      ? await loadProjectMemoryHintsForUser(data.projectId, context.userId)
+      : "";
+    const model = resolveGatewayModel(gateway, {
+      instruction: data.instruction,
+      hasVision: extractVisionImageParts(data.files as ProjFile[]).length > 0,
+    });
+    const { messages, subset, ctxFiles } = buildGafcoreMessages(data, model, memoryHints);
 
     const cacheKey = `${context.userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
-    const cached = cacheGet(cacheKey);
+    const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
     if (cached) {
       const bal = await fetchBalance(context.userId);
       console.info(
@@ -59,63 +68,51 @@ export const gafcoreChat = createServerFn({ method: "POST" })
           filesOut: cached.files.length,
         }),
       );
-      return { reply: sanitizeUserFacingAiText(cached.reply), files: cached.files, balance: bal };
+      return {
+        reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, cached.reply)),
+        files: cached.files,
+        balance: bal,
+      };
     }
 
     const skipCredits = await isGafcoreAdminUser(context.userId);
     let balanceAfterConsume: number | null = null;
     if (!skipCredits) {
-      const { data: credit, error: creditErr } = await supabaseAdmin.rpc("consume_credits", {
-        p_user_id: context.userId,
-        p_amount: COST_PER_REQUEST,
-        p_reason: "gafcore_chat",
-        p_metadata: {
-          instruction_len: data.instruction.length,
-          model,
-          ctx_files: ctxFiles.length,
-          subset,
-        } as never,
+      const credit = await consumeAiCredits(context.userId, COST_PER_REQUEST, "gafcore_chat", {
+        instruction_len: data.instruction.length,
+        model,
+        ctx_files: ctxFiles.length,
+        subset,
       });
-      if (creditErr) {
-        console.error("consume_credits error:", creditErr);
+      if (!credit.ok) {
+        if (credit.error === "insufficient_credits") {
+          const err: Error & { code?: string } = new Error("INSUFFICIENT_CREDITS");
+          err.code = "INSUFFICIENT_CREDITS";
+          throw err;
+        }
         throw new Error("No se pudo verificar tu saldo de créditos.");
       }
-      if (!(credit as { ok?: boolean } | null)?.ok) {
-        const err: Error & { code?: string } = new Error("INSUFFICIENT_CREDITS");
-        err.code = "INSUFFICIENT_CREDITS";
-        throw err;
-      }
-      balanceAfterConsume = (credit as { balance?: number } | null)?.balance ?? null;
+      balanceAfterConsume = credit.balance;
     }
 
-    const res = await postChatCompletions({
-      model,
-      messages,
-      response_format: { type: "json_object" },
-    });
-
-    if (!res.ok) {
+    let content: string;
+    try {
+      const completed = await completeChatMessage({ model, messages, json: true });
+      content = completed.content || "{}";
+    } catch (e: unknown) {
       if (!skipCredits) {
-        await supabaseAdmin.rpc("add_credits", {
-          p_user_id: context.userId,
-          p_amount: COST_PER_REQUEST,
-          p_reason: "gafcore_chat_refund",
-          p_metadata: { status: res.status } as never,
+        await refundAiCredits(context.userId, COST_PER_REQUEST, "gafcore_chat_refund", {
+          error: String((e as Error)?.message ?? e),
         });
       }
-      const t = await res.text().catch(() => "");
-      console.error("AI gateway error:", res.status, t);
-      if (res.status === 429) throw new Error("Límite alcanzado, intenta en un momento.");
-      if (res.status === 402) {
-        const err: any = new Error("INSUFFICIENT_CREDITS");
-        err.code = "INSUFFICIENT_CREDITS";
-        throw err;
+      const err = e as Error & { code?: string };
+      if (err.code === "provider_credits") {
+        const insuff: Error & { code?: string } = new Error("INSUFFICIENT_CREDITS");
+        insuff.code = "INSUFFICIENT_CREDITS";
+        throw insuff;
       }
-      throw new Error("No se pudo obtener respuesta del asistente.");
+      throw e;
     }
-
-    const json = await res.json();
-    const content: string = json?.choices?.[0]?.message?.content ?? "{}";
     let parsed: { reply?: string; files?: unknown };
     try {
       parsed = JSON.parse(content);
@@ -135,7 +132,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
         }),
       );
       return {
-        reply: sanitizeUserFacingAiText(content),
+        reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, content)),
         files: [],
         balance: balanceAfterConsume,
       };
@@ -151,7 +148,12 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     } catch (e) {
       console.warn("enrichGafcoreOutputFiles:", e);
     }
-    const reply = sanitizeUserFacingAiText(typeof parsed.reply === "string" ? parsed.reply : "Listo.");
+    const reply = sanitizeUserFacingAiText(
+      softenRoboticReply(
+        data.instruction,
+        typeof parsed.reply === "string" ? parsed.reply : "Listo.",
+      ),
+    );
 
     cacheSet(cacheKey, { reply, files: safeFiles });
 

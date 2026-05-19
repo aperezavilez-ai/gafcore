@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
-import { resolveGafcoreModelDefaults } from "@/lib/gafcore-chat.shared";
+import {
+  completeChatMessage,
+  getGafcoreAiGateway,
+  resolveGatewayModel,
+} from "@/lib/gafcore-ai-gateway.server";
 
 const SYSTEM_PROMPT = `Eres "Gafia", la asistente virtual de soporte de **GafCore**, la plataforma de creación con IA (chat, preview en vivo y editor de código).
 
@@ -35,24 +38,14 @@ export const supportChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => messageSchema.parse(input))
   .handler(async ({ data }) => {
-    const aiCfg = getAiChatConfig();
-    const { fast } = resolveGafcoreModelDefaults(aiCfg.url);
-    const model = process.env.AI_SUPPORT_MODEL?.trim() || fast;
+    const gateway = getGafcoreAiGateway();
+    const model = resolveGatewayModel(gateway, { tier: "support" });
 
-    const res = await postChatCompletions({
+    const completed = await completeChatMessage({
       model,
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...data.messages],
     });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.error("AI provider error:", res.status, txt);
-      if (res.status === 429) throw new Error("Límite alcanzado, intenta en un momento.");
-      throw new Error("No se pudo obtener respuesta del asistente.");
-    }
-
-    const json = await res.json();
-    const reply = json?.choices?.[0]?.message?.content || "Lo siento, no pude responder.";
+    const reply = completed.content || "Lo siento, no pude responder.";
     return { reply };
   });
 

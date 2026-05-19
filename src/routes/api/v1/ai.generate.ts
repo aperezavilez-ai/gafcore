@@ -4,8 +4,13 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { jsonOk, jsonError, requireApiAuth, requireScope } from "./-_auth";
 import { enforceRateLimit, AI_LIMIT } from "./-_ratelimit";
-import { resolveGafcoreModelDefaults } from "@/lib/gafcore-chat.shared";
-import { getAiChatConfig, postChatCompletions } from "@/lib/ai-chat-completions.server";
+import {
+  completeChatMessage,
+  consumeAiCredits,
+  getGafcoreAiGateway,
+  refundAiCredits,
+  resolveGatewayModel,
+} from "@/lib/gafcore-ai-gateway.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 
 const BodySchema = z.object({
@@ -45,30 +50,29 @@ export const Route = createFileRoute("/api/v1/ai/generate")({
         }
         const { prompt, system, json, module, save } = parsed.data;
 
-        let aiCfg: ReturnType<typeof getAiChatConfig>;
+        let gateway: ReturnType<typeof getGafcoreAiGateway>;
         try {
-          aiCfg = getAiChatConfig();
+          gateway = getGafcoreAiGateway();
         } catch {
           return jsonError(500, "ai_not_configured", "AI is not configured (set OPENROUTER_API_KEY or OPENAI_API_KEY).");
         }
 
-        const resolvedModel =
-          parsed.data.model?.trim() || resolveGafcoreModelDefaults(aiCfg.url).fast;
+        const resolvedModel = resolveGatewayModel(gateway, {
+          explicit: parsed.data.model,
+          tier: "fast",
+        });
 
         const skipCredits = await isGafcoreAdminUser(auth.userId);
         let balanceAfter: number | null = null;
         if (!skipCredits) {
-          const { data: credit, error: cErr } = await supabaseAdmin.rpc("consume_credits", {
-            p_user_id: auth.userId,
-            p_amount: COST,
-            p_reason: "api_v1_ai_generate",
-            p_metadata: { module },
-          });
-          if (cErr) return jsonError(500, "credits_error", "Could not verify credits.");
-          if (!(credit as { ok?: boolean } | null)?.ok) {
-            return jsonError(402, "insufficient_credits", "Not enough credits to perform this request.");
+          const credit = await consumeAiCredits(auth.userId, COST, "api_v1_ai_generate", { module });
+          if (!credit.ok) {
+            if (credit.error === "insufficient_credits") {
+              return jsonError(402, "insufficient_credits", "Not enough credits to perform this request.");
+            }
+            return jsonError(500, "credits_error", "Could not verify credits.");
           }
-          balanceAfter = (credit as { balance?: number } | null)?.balance ?? null;
+          balanceAfter = credit.balance;
         }
 
         const messages = [
@@ -82,29 +86,26 @@ export const Route = createFileRoute("/api/v1/ai/generate")({
           { role: "user", content: prompt },
         ];
 
-        const res = await postChatCompletions({
-          model: resolvedModel,
-          messages,
-          ...(json ? { response_format: { type: "json_object" } } : {}),
-        });
-
-        if (!res.ok) {
+        let content: string;
+        try {
+          const completed = await completeChatMessage({
+            model: resolvedModel,
+            messages,
+            json: Boolean(json),
+          });
+          content = completed.content;
+        } catch (e: unknown) {
           if (!skipCredits) {
-            await supabaseAdmin.rpc("add_credits", {
-              p_user_id: auth.userId,
-              p_amount: COST,
-              p_reason: "api_v1_ai_generate_refund",
-              p_metadata: { status: res.status },
+            await refundAiCredits(auth.userId, COST, "api_v1_ai_generate_refund", {
+              error: String((e as Error)?.message ?? e),
             });
           }
-          if (res.status === 429) return jsonError(429, "ai_rate_limited", "AI rate limit reached.");
-          if (res.status === 402)
-            return jsonError(402, "ai_credits_exhausted", "AI provider credits exhausted.");
-          return jsonError(502, "ai_upstream_error", `AI provider error (${res.status}).`);
+          const err = e as Error & { code?: string; status?: number };
+          if (err.code === "rate_limited") return jsonError(429, "ai_rate_limited", err.message);
+          if (err.code === "provider_credits")
+            return jsonError(402, "ai_credits_exhausted", err.message);
+          return jsonError(502, "ai_upstream_error", err.message);
         }
-
-        const payload: any = await res.json();
-        const content: string = payload?.choices?.[0]?.message?.content ?? "";
         const result = json
           ? (() => {
               try {

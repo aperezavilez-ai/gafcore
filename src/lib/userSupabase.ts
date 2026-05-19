@@ -228,6 +228,34 @@ export async function saveProjectFiles(
   return result.ok;
 }
 
+/** Inserta o actualiza un solo archivo sin borrar el resto del proyecto. */
+export async function upsertSingleProjectFile(
+  projectId: string,
+  file: FileItem,
+): Promise<{ ok: boolean; detail?: string }> {
+  const sb = getUserSupabase();
+  if (!sb) return { ok: false, detail: "no_client" };
+
+  const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
+  if (!owned?.id) return { ok: false, detail: "project_not_visible" };
+
+  const { error } = await sb.from("project_files").upsert(
+    {
+      project_id: projectId,
+      name: file.name,
+      language: file.language ?? "plaintext",
+      content: file.content,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "project_id,name" },
+  );
+  if (error) {
+    console.error("[Supabase] upsert single file:", error);
+    return { ok: false, detail: error.message };
+  }
+  return { ok: true };
+}
+
 export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,

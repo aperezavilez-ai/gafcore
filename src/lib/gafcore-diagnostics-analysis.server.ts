@@ -3,7 +3,11 @@ import {
   type DiagnosticAnalysis,
   type DiagnosticReportRow,
 } from "@/lib/gafcore-diagnostics.shared";
-import { postChatCompletions } from "@/lib/ai-chat-completions.server";
+import {
+  completeChatMessage,
+  getGafcoreAiGateway,
+  resolveGatewayModel,
+} from "@/lib/gafcore-ai-gateway.server";
 
 const SYSTEM = `Eres el motor de análisis de operaciones de GafCore (plataforma web/apps con Supabase, Stripe, IA).
 Responde SOLO con JSON válido (sin markdown) con esta forma:
@@ -38,24 +42,19 @@ export async function analyzeDiagnosticReport(
     2,
   );
 
-  const httpRes = await postChatCompletions({
-    model: process.env.AI_MODEL_FAST?.trim() || "gpt-4o-mini",
+  const gateway = getGafcoreAiGateway();
+  const model = resolveGatewayModel(gateway, { tier: "fast" });
+
+  const completed = await completeChatMessage({
+    model,
     messages: [
       { role: "system", content: SYSTEM },
       { role: "user", content: `Analiza este incidente de GafCore:\n${userContent}` },
     ],
     temperature: 0.2,
-    response_format: { type: "json_object" },
+    json: true,
   });
-
-  if (!httpRes.ok) {
-    throw new Error(`IA análisis falló: HTTP ${httpRes.status}`);
-  }
-
-  const json = (await httpRes.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const text = json.choices?.[0]?.message?.content?.trim() ?? "";
+  const text = completed.content.trim();
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
