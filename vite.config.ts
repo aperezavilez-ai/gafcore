@@ -74,7 +74,13 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       tsconfigPaths({ projects: ["./tsconfig.json"] }),
       tanstackStart({
-        server: { entry: "server" },
+        server: {
+          entry: "server",
+          build: {
+            // Evita request extra de CSS en el primer paint (Vercel).
+            inlineCss: true,
+          },
+        },
         importProtection: {
           behavior: "error",
           client: {

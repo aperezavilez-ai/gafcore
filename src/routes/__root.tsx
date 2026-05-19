@@ -10,7 +10,9 @@ if (typeof window !== "undefined") {
   installServerFnAuth();
 }
 
-import appCss from "../styles.css?url";
+// Side-effect import: Start manifest gestiona el CSS en SSR (evita hash distinto
+// client/server en Linux/Vercel con `?url`, que provoca HTTPError 500).
+import "../styles.css";
 
 function NotFoundComponent() {
   return (
@@ -56,10 +58,7 @@ export const Route = createRootRoute({
       { name: "twitter:image", content: `${site}/og-image.png` },
       { name: "theme-color", content: "#6366f1" },
     ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "canonical", href: site },
-    ],
+    links: [{ rel: "canonical", href: site }],
     };
   },
   shellComponent: RootShell,
