@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { getPublicSiteOrigin } from "@/lib/public-site-url";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { AIChatWidget } from "@/components/AIChatWidget";
+import { ClientOnly } from "@/components/ClientOnly";
 import { Toaster } from "@/components/ui/sonner";
 import { installServerFnAuth } from "@/lib/server-fn-auth";
 
@@ -85,8 +86,10 @@ function RootComponent() {
     <I18nProvider>
       <MobileViewportGuard />
       <Outlet />
-      <Toaster richColors position="top-right" />
-      <AIChatWidget />
+      <ClientOnly>
+        <Toaster richColors position="top-right" />
+        <AIChatWidget />
+      </ClientOnly>
     </I18nProvider>
   );
 }

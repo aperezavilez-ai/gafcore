@@ -75,15 +75,32 @@ function probeErrorMessage(error: unknown): string {
 
 async function ssrProbe(request: Request): Promise<Response> {
   const steps: Record<string, unknown> = {};
+  const failedFetches: string[] = [];
+  const origFetch = globalThis.fetch?.bind(globalThis);
+  if (origFetch) {
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const res = await origFetch(input, init);
+      if (!res.ok && url.includes("/assets/")) failedFetches.push(`${res.status} ${url}`);
+      return res;
+    };
+  }
   try {
     const handler = await getServerEntry();
     steps.serverEntry = "ok";
     const homeUrl = new URL("/", request.url).toString();
     const response = await handler.fetch(new Request(homeUrl, { method: "GET" }), {}, {});
     steps.homeStatus = response.status;
+    if (failedFetches.length) steps.failedAssetFetches = failedFetches;
     if (response.status >= 500) {
       const captured = consumeLastCapturedError();
-      if (captured) steps.capturedError = probeErrorMessage(captured);
+      if (captured) {
+        steps.capturedError = probeErrorMessage(captured);
+        if (captured instanceof Error && captured.stack) {
+          steps.capturedStack = captured.stack.split("\n").slice(0, 6).join("\n");
+        }
+      }
       const body = await response.clone().text();
       if (body.includes("This page didn't load")) steps.homeBody = "branded-500";
       else steps.homeBodyPreview = body.slice(0, 180);
@@ -100,6 +117,8 @@ async function ssrProbe(request: Request): Promise<Response> {
       status: 200,
       headers: { "content-type": "application/json", "cache-control": "no-store" },
     });
+  } finally {
+    if (origFetch) globalThis.fetch = origFetch;
   }
 }
 
