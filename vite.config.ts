@@ -20,8 +20,15 @@ export default defineConfig(({ mode }) => {
   }
 
   const loaded = loadEnv(mode, root, "VITE_");
+  /** En Vercel el build debe leer VITE_* de process.env (panel), no solo de .env del repo. */
+  const viteEnv: Record<string, string> = { ...loaded };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith("VITE_") && typeof value === "string" && value.trim()) {
+      viteEnv[key] = value.trim();
+    }
+  }
   const envDefine: Record<string, string> = {};
-  for (const [key, value] of Object.entries(loaded)) {
+  for (const [key, value] of Object.entries(viteEnv)) {
     envDefine[`import.meta.env.${key}`] = JSON.stringify(value);
   }
 
