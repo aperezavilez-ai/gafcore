@@ -24,7 +24,7 @@ import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
-import { loadProjectMemoryHintsForUser } from "@/lib/gafcore-ai-memory.server";
+import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
 import {
   shouldBypassGafcoreChatCache,
   softenRoboticReply,
@@ -42,14 +42,22 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       throw new Error("AI no configurado");
     }
 
-    const memoryHints = data.projectId
-      ? await loadProjectMemoryHintsForUser(data.projectId, context.userId)
-      : "";
+    const memory = await retrieveProjectMemoryContext({
+      projectId: data.projectId,
+      userId: context.userId,
+      instruction: data.instruction,
+      files: data.files as ProjFile[],
+    });
     const model = resolveGatewayModel(gateway, {
       instruction: data.instruction,
       hasVision: extractVisionImageParts(data.files as ProjFile[]).length > 0,
     });
-    const { messages, subset, ctxFiles } = buildGafcoreMessages(data, model, memoryHints);
+    const { messages, subset, ctxFiles } = buildGafcoreMessages(
+      data,
+      model,
+      memory.promptAppendix,
+      memory.priorityPaths,
+    );
 
     const cacheKey = `${context.userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
     const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);

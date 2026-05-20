@@ -135,13 +135,23 @@ function truncateForContext(f: ProjFile, max: number): ProjFile {
   };
 }
 
-export function selectContextFiles(instruction: string, files: ProjFile[]): ProjFile[] {
+export function selectContextFiles(
+  instruction: string,
+  files: ProjFile[],
+  priorityNames: string[] = [],
+): ProjFile[] {
   if (totalChars(files) <= CONTEXT_CHAR_BUDGET * 0.92) {
     return files.map((f) => truncateForContext(f, PER_FILE_CONTEXT_CAP));
   }
   const inst = instruction.toLowerCase();
   const tokens = [...new Set(inst.split(/[^a-z0-9áéíóúñ_/]+/gi).filter((t) => t.length > 2))];
   const pick = new Set<string>();
+  for (const name of priorityNames) {
+    const n = name.replace(/\\/g, "/");
+    for (const f of files) {
+      if (f.name.replace(/\\/g, "/") === n) pick.add(f.name);
+    }
+  }
   const always = [
     "package.json",
     "tsconfig.json",
@@ -307,6 +317,7 @@ export function buildGafcoreMessages(
   data: GafcoreChatBody,
   resolvedModel?: string,
   memoryHints = "",
+  priorityPaths: string[] = [],
 ): {
   messages: GafcoreChatMessage[];
   model: string;
@@ -318,7 +329,7 @@ export function buildGafcoreMessages(
   const hasVision = visionImages.length > 0;
   const model =
     resolvedModel ?? pickModel(data.instruction, MODEL_FAST, MODEL_DEEP, hasVision);
-  const ctxFiles = selectContextFiles(data.instruction, allFiles);
+  const ctxFiles = selectContextFiles(data.instruction, allFiles, priorityPaths);
   const subset =
     ctxFiles.length < allFiles.length ||
     totalChars(ctxFiles) < totalChars(allFiles) * 0.88;

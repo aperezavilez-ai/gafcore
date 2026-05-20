@@ -11,7 +11,7 @@ Evolución **incremental**. No refactor masivo. Auth, Stripe, webhooks y RLS se 
 | 2 | Publish en servidor (GitHub OAuth/token cifrado) | **Hecho (código)** — aplicar migración SQL |
 | 3 | Vercel automático (`VERCEL_TOKEN`) | **Hecho (código)** — token en Vercel + GitHub conectado en vercel.com |
 | 4 | IA unificada (gateway) | **Hecho (código)** — `gafcore-ai-gateway.server.ts` |
-| 5 | Memoria por proyecto (sin vectores) | **Hecho (código)** — `project_ai_memory` |
+| 5 | Memoria por proyecto (sin vectores) | **Hecho** — `project_ai_memory` + Memory Service M0/M1 (`src/memory/`) |
 | 6 | Templates en BD | **Hecho (código)** — migración + seed servidor |
 | 7 | Project Orchestrator | En curso — `docs/architecture/ORCHESTRATOR.md` |
 | 7b | AI Validation Layer | Planificado — `docs/architecture/VALIDATION_LAYER.md` |
