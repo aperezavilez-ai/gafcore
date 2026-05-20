@@ -40,6 +40,29 @@ export function buildConversationalInstructionPrefix(userText: string): string {
   );
 }
 
+/** Cambio visual de hero/fondo (p. ej. azul → foto de ciudad). */
+export function userWantsHeroBackgroundChange(text: string): boolean {
+  return /fondo|background|banner|hero|ciudad|city|skyline|imagen\s+de|azul|sustituye?\s+el\s+fondo|cambiar?\s+el\s+fondo/i.test(
+    text,
+  );
+}
+
+export function buildHeroBackgroundInstructionPrefix(userText: string): string {
+  if (!userWantsHeroBackgroundChange(userText)) return "";
+  return (
+    "[HERO CON IMAGEN] El usuario pide foto de ciudad/fondo en el hero, NO un bloque azul plano. " +
+    "Usa style backgroundImage: url('https://picsum.photos/seed/gafcore-travel-city/1280/720') con bg-cover bg-center " +
+    "o <img> absolute inset-0 object-cover bajo el texto. Mantén buscador de vuelos y registro si ya existen. "
+  );
+}
+
+/** Tweak visual: no gastar 2ª llamada IA en validación funcional pesada. */
+export function isVisualOnlyTweak(text: string): boolean {
+  const t = text.toLowerCase();
+  if (/registro|base\s+de\s+datos|api|backend|auth|persistencia/i.test(t)) return false;
+  return /fondo|background|color|azul|imagen|ciudad|banner|hero|estilo|visual|diseño/i.test(t);
+}
+
 export function buildCreativeBuildPrefix(userText: string): string {
   if (!isSubstantiveBuildRequest(userText)) return "";
   return (

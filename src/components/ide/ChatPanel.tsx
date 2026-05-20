@@ -82,13 +82,19 @@ import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.s
 import {
   buildConversationalInstructionPrefix,
   buildCreativeBuildPrefix,
+  buildHeroBackgroundInstructionPrefix,
   isConversationalOnly,
   isSubstantiveBuildRequest,
+  isVisualOnlyTweak,
   softenRoboticReply,
+  userWantsHeroBackgroundChange,
 } from "@/lib/gafcore-chat-intent.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
+
+/** Evita chat/preview “trabado” si el stream o la validación no terminan. */
+const CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
 
@@ -994,6 +1000,7 @@ export function ChatPanel({
     issues: ProjectValidationIssue[];
     patchedFiles?: Array<{ name: string; content: string; language?: string }>;
   }> => {
+    const validationRace = async () => {
     const payload = merged.map((f) => ({ name: f.name, content: f.content }));
     const runId = pipelineRunIdRef.current;
     if (runId && !options?.skipOrchestrator) {
@@ -1042,6 +1049,24 @@ export function ChatPanel({
       return { issues };
     } catch {
       return { issues: local.issues };
+    }
+    };
+
+    try {
+      return await Promise.race([
+        validationRace(),
+        new Promise<{
+          issues: ProjectValidationIssue[];
+          patchedFiles?: Array<{ name: string; content: string; language?: string }>;
+        }>((resolve) =>
+          window.setTimeout(
+            () => resolve({ issues: auditProjectLocally(merged.map((f) => ({ name: f.name, content: f.content }))).issues }),
+            45_000,
+          ),
+        ),
+      ]);
+    } catch {
+      return { issues: auditProjectLocally(merged.map((f) => ({ name: f.name, content: f.content }))).issues };
     }
   };
 
@@ -1280,11 +1305,13 @@ export function ChatPanel({
         ? "[modo profundo] Hay imagen de referencia pegada; analízala y aplícala al diseño. "
         : "";
     const layoutPrefix = buildLayoutInstructionPrefix(raw);
+    const heroBgPrefix = buildHeroBackgroundInstructionPrefix(raw);
     const instruction =
       conversationalPrefix +
       creativePrefix +
       functionalPrefix +
       preservePrefix +
+      heroBgPrefix +
       layoutPrefix +
       visionBoost +
       deepPrefix +
@@ -1322,6 +1349,13 @@ export function ChatPanel({
     setStreamChars(null);
     const ac = new AbortController();
     abortControllerRef.current = ac;
+    const chatTimeoutId = window.setTimeout(() => {
+      if (!sendInFlightRef.current) return;
+      ac.abort();
+      toast.error("La solicitud tardó demasiado. Pulsa el cuadrado (detener) o envía de nuevo.", {
+        duration: 8000,
+      });
+    }, CHAT_REQUEST_TIMEOUT_MS);
     try {
       const history: ChatMsg[] = [
         ...messages
@@ -1359,6 +1393,15 @@ export function ChatPanel({
       scrollChatToBottomSoon("auto");
       void persistMessage("assistant", replyText);
 
+      if (effectiveBuild && (!result.files || result.files.length === 0)) {
+        if (userWantsHeroBackgroundChange(raw) || /cambia|modifica|añade|agrega/i.test(raw)) {
+          toast.error("La IA respondió sin archivos — el preview no puede cambiar solo.", {
+            description: "Reenvía el mensaje o escribe: «En App.tsx: hero con foto de ciudad (picsum), conserva el buscador de vuelos».",
+            duration: 10_000,
+          });
+        }
+      }
+
       if (result.files && result.files.length > 0 && effectiveBuild) {
         const runFunctional = effectiveBuild && !visualEditOn;
         let { merged, issues } = await applyGenerationFiles(files, result.files, instruction, raw, {
@@ -1366,7 +1409,11 @@ export function ChatPanel({
           snapshotLabel: `auto: ${raw.slice(0, 60)}`,
         });
 
-        if (runFunctional && shouldAutoRetryValidation(issues)) {
+        if (
+          runFunctional &&
+          shouldAutoRetryValidation(issues) &&
+          !isVisualOnlyTweak(raw)
+        ) {
           const canRetry =
             isAdmin ||
             isUnlimitedDaily ||
@@ -1438,6 +1485,9 @@ export function ChatPanel({
         (error instanceof DOMException && error.name === "AbortError")
       ) {
         setStreamChars(null);
+        setPipelineStatus(null);
+        pipelineRunIdRef.current = null;
+        toast.message("Solicitud detenida o cancelada por tiempo.");
         return;
       }
       if (myEpoch !== requestEpochRef.current) return;
@@ -1468,6 +1518,7 @@ export function ChatPanel({
         scrollChatToBottomSoon("auto");
       }
     } finally {
+      window.clearTimeout(chatTimeoutId);
       abortControllerRef.current = null;
       setStreamChars(null);
       sendInFlightRef.current = false;
@@ -1905,9 +1956,12 @@ export function ChatPanel({
                   if (loading) {
                     abortControllerRef.current?.abort();
                     requestEpochRef.current += 1;
+                    sendInFlightRef.current = false;
                     setLoading(false);
                     setStreamChars(null);
-                    toast.message("Solicitud cancelada.");
+                    setPipelineStatus(null);
+                    pipelineRunIdRef.current = null;
+                    toast.message("Solicitud cancelada — ya puedes escribir de nuevo.");
                     return;
                   }
                   send();

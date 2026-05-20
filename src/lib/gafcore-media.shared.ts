@@ -247,6 +247,35 @@ export function sanitizeProjectJsxFiles<T extends { name: string; content: strin
   });
 }
 
+const TRAVEL_CITY_HERO_URL = picsumFallbackUrl("gafcore-travel-city-hero", 1280, 720);
+
+/** Si pidieron ciudad/fondo: reemplaza hero azul sólido por imagen visible en preview. */
+export function applyTravelHeroBackgroundFix(source: string, instruction: string): string {
+  if (!/ciudad|city|fondo|banner|hero|imagen|azul|skyline|viaje|cielos/i.test(instruction)) {
+    return source;
+  }
+  if (/backgroundImage|background-image|picsum\.photos/i.test(source)) return source;
+
+  const styleSnippet = `style={{ backgroundImage: "url('${TRAVEL_CITY_HERO_URL}')", backgroundSize: "cover", backgroundPosition: "center" }}`;
+
+  let out = source.replace(
+    /className="([^"]*\b(?:min-h-screen|min-h-\[[^\]]+|h-screen)[^"]*\bbg-(?:blue|primary)(?:-\d+)?[^"]*)"/gi,
+    (_m, cls) =>
+      `className="${cls.replace(/\bbg-(?:blue|primary)(?:-\d+)?\b/g, "bg-cover bg-center")}" ${styleSnippet}`,
+  );
+
+  out = out.replace(
+    /className="([^"]*\bbg-blue-\d+[^"]*)"/gi,
+    (m, cls) => {
+      if (!/\b(min-h-|h-screen|hero|flex-1)\b/i.test(cls)) return m;
+      if (/backgroundImage|picsum/i.test(m)) return m;
+      return `className="${cls.replace(/\bbg-blue-\d+\b/, "bg-cover bg-center")}" ${styleSnippet}`;
+    },
+  );
+
+  return out;
+}
+
 /** Repara HTML/JSX en archivos generados + contexto del proyecto. */
 export function repairGafcoreProjectMedia(
   generated: ProjFile[],
@@ -258,6 +287,7 @@ export function repairGafcoreProjectMedia(
     if (!/\.(html|htm|jsx|tsx|js|css)$/i.test(f.name)) return f;
     let content = repairHtmlMedia(f.content, assetMap);
     content = repairCommonJsxSyntaxErrors(content);
+    content = applyTravelHeroBackgroundFix(content, instruction);
     content = applyPicsumFallbacksInSource(content, instruction, assetMap);
     if (/\.html?$/i.test(f.name)) content = injectPreviewFallbackScript(content);
     return { ...f, content };
