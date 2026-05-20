@@ -21,7 +21,8 @@ export async function planAndCreateWorkflow(
   userId: string,
   instruction: string,
   files: ProjFile[],
-): Promise<{ workflowRunId: string; planSummary: string }> {
+  pipelineRunId?: string,
+): Promise<{ workflowRunId: string; planSummary: string; pipelineRunId?: string | null }> {
   const limit = await checkWorkflowStartLimit(userId);
   if (!limit.allowed) {
     const err = new Error("workflow_limit_reached");
@@ -32,11 +33,15 @@ export async function planAndCreateWorkflow(
   }
 
   const plan = await generateTaskPlan(instruction, files);
-  const { workflowRunId } = await createWorkflowRun(projectId, userId, instruction, plan, undefined, {
-    files,
-    planSummary: plan.summary,
-  });
-  return { workflowRunId, planSummary: plan.summary };
+  const { workflowRunId } = await createWorkflowRun(
+    projectId,
+    userId,
+    instruction,
+    plan,
+    pipelineRunId,
+    { files, planSummary: plan.summary },
+  );
+  return { workflowRunId, planSummary: plan.summary, pipelineRunId: pipelineRunId ?? null };
 }
 
 export async function syncWorkflowRunState(workflowRunId: string): Promise<string> {

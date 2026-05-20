@@ -88,8 +88,13 @@ import {
   getGafcoreWorkflowStatus,
   planAndStartGafcoreWorkflow,
   runGafcoreWorkflowWave,
+  syncGafcorePipelineWorkflow,
 } from "@/lib/gafcore-workflow.functions";
-import { WorkflowTaskStrip, type WorkflowTaskUi } from "@/components/ide/WorkflowTaskStrip";
+import {
+  WorkflowTaskStrip,
+  type WorkflowMetricsUi,
+  type WorkflowTaskUi,
+} from "@/components/ide/WorkflowTaskStrip";
 import { agentTypeLabel } from "@/tasks/artifacts.shared";
 import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
 import {
@@ -314,6 +319,7 @@ export function ChatPanel({
   const [workflowTasks, setWorkflowTasks] = useState<WorkflowTaskUi[]>([]);
   const [workflowPlanSummary, setWorkflowPlanSummary] = useState<string | null>(null);
   const [workflowState, setWorkflowState] = useState<string | null>(null);
+  const [workflowMetrics, setWorkflowMetrics] = useState<WorkflowMetricsUi | null>(null);
   const [workflowCancelPending, setWorkflowCancelPending] = useState(false);
   const bgWorkflowMetaRef = useRef<{
     instruction: string;
@@ -952,6 +958,7 @@ export function ChatPanel({
   const callRunWorkflowWave = useServerFn(runGafcoreWorkflowWave);
   const callGetWorkflowStatus = useServerFn(getGafcoreWorkflowStatus);
   const callCancelWorkflow = useServerFn(cancelGafcoreWorkflow);
+  const callSyncPipelineWorkflow = useServerFn(syncGafcorePipelineWorkflow);
   const callValidateSources = useServerFn(validateGafcoreSources);
   const callValidateProject = useServerFn(validateGafcoreProject);
   const callRecordMemory = useServerFn(recordProjectAiMemory);
@@ -1208,6 +1215,21 @@ export function ChatPanel({
 
   const workflowStorageKey = projectId ? `gafcore_workflow_${projectId}` : null;
 
+  const syncWorkflowToPipeline = useCallback(
+    async (workflowRunId: string, workflowState: string, planSummary: string) => {
+      const pipelineRunId = pipelineRunIdRef.current;
+      if (!pipelineRunId) return;
+      try {
+        await callSyncPipelineWorkflow({
+          data: { pipelineRunId, workflowRunId, workflowState, planSummary },
+        });
+      } catch {
+        /* pipeline opcional */
+      }
+    },
+    [callSyncPipelineWorkflow],
+  );
+
   const clearBackgroundWorkflow = useCallback(
     (workflowRunId: string) => {
       setBackgroundWorkflowRunId((cur) => (cur === workflowRunId ? null : cur));
@@ -1322,9 +1344,10 @@ export function ChatPanel({
       }
 
       setWorkflowState(wfState);
+      await syncWorkflowToPipeline(workflowRunId, wfState, snap.planSummary ?? "");
       clearBackgroundWorkflow(workflowRunId);
     },
-    [applyGenerationFiles, clearBackgroundWorkflow, files],
+    [applyGenerationFiles, clearBackgroundWorkflow, files, syncWorkflowToPipeline],
   );
 
   useEffect(() => {
@@ -1357,6 +1380,7 @@ export function ChatPanel({
         setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
         setWorkflowState(snap.run.state);
         if (snap.planSummary) setWorkflowPlanSummary(snap.planSummary);
+        if (snap.metrics) setWorkflowMetrics(snap.metrics);
 
         const terminal =
           snap.run.state === "completed" ||
@@ -1604,9 +1628,19 @@ export function ChatPanel({
     setWorkflowTasks([]);
     setWorkflowPlanSummary(null);
     setWorkflowState(null);
+    setWorkflowMetrics(null);
+
+    if (usePipelineOrchestrator) {
+      await startPipelineRun(instruction);
+    }
 
     const started = await callPlanAndStartWorkflow({
-      data: { projectId, instruction, files: ctxFiles },
+      data: {
+        projectId,
+        instruction,
+        files: ctxFiles,
+        ...(pipelineRunIdRef.current ? { pipelineRunId: pipelineRunIdRef.current } : {}),
+      },
     });
     if (!started.ok) {
       if (started.error === "workflow_limit_reached") {
@@ -1665,6 +1699,7 @@ export function ChatPanel({
       setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
       setWorkflowState(snap.run.state);
       if (snap.planSummary) setWorkflowPlanSummary(snap.planSummary);
+      if (snap.metrics) setWorkflowMetrics(snap.metrics);
     };
 
     await refreshStatus();
@@ -1730,6 +1765,7 @@ export function ChatPanel({
       wfState === "completed" ? "Multiagente: listo" : `Multiagente: ${wfState}`,
     );
     setActiveWorkflowRunId(null);
+    await syncWorkflowToPipeline(started.workflowRunId, wfState, started.planSummary);
 
     if (mergedPatches.length > 0 && effectiveBuild) {
       const patchFiles = mergedPatches.map((p) => ({
@@ -2135,6 +2171,7 @@ export function ChatPanel({
             tasks={workflowTasks}
             planSummary={workflowPlanSummary}
             workflowState={workflowState}
+            metrics={workflowMetrics}
             onCancel={
               activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
             }

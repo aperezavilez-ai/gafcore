@@ -6,6 +6,7 @@ import {
   persistWorkflowFilesSnapshot,
   type WorkflowPayload,
 } from "@/tasks/workflow-files.server";
+import { getWorkflowMetricsBundle } from "@/tasks/workflow-metrics.server";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 
 export async function createWorkflowRun(
@@ -86,12 +87,15 @@ export async function getWorkflowSnapshot(workflowRunId: string, userId: string)
       ? (run.payload_json as WorkflowPayload)
       : {};
 
+  const metrics = await getWorkflowMetricsBundle(workflowRunId, userId, run, tasks ?? []);
+
   return {
     run,
     tasks: tasks ?? [],
     filesSnapshot: payload.filesSnapshot ?? [],
     mergedPatches: payload.mergedPatches ?? [],
     planSummary: payload.planSummary ?? null,
+    metrics,
   };
 }
 

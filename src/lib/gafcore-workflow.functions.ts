@@ -4,6 +4,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { taskPlanSchema } from "@/tasks/artifacts.shared";
 import { claimNextReadyTask, completeTask } from "@/tasks/scheduler.server";
 import { cancelWorkflowRun, createWorkflowRun, getWorkflowSnapshot } from "@/tasks/workflow.server";
+import { listProjectWorkflowRuns } from "@/tasks/workflow-metrics.server";
+import { syncPipelineWithWorkflow } from "@/tasks/workflow-pipeline-bridge.server";
 import {
   planAndCreateWorkflow,
   runWorkflowBatch,
@@ -58,6 +60,7 @@ const planStartSchema = z.object({
   projectId: z.string().uuid(),
   instruction: z.string().min(1).max(8000),
   files: z.array(fileSchema).max(80),
+  pipelineRunId: z.string().uuid().optional(),
 });
 
 /** A2: Planner IA + crea workflow y tareas. */
@@ -75,13 +78,14 @@ export const planAndStartGafcoreWorkflow = createServerFn({ method: "POST" })
     if (!project) return { ok: false as const, error: "project_not_found" };
 
     try {
-      const { workflowRunId, planSummary } = await planAndCreateWorkflow(
+      const { workflowRunId, planSummary, pipelineRunId } = await planAndCreateWorkflow(
         data.projectId,
         userId,
         data.instruction,
         data.files,
+        data.pipelineRunId,
       );
-      return { ok: true as const, workflowRunId, planSummary };
+      return { ok: true as const, workflowRunId, planSummary, pipelineRunId };
     } catch (e) {
       const code = (e as Error & { code?: string })?.code;
       if (code === "workflow_limit_reached") {
@@ -159,6 +163,46 @@ export const cancelGafcoreWorkflow = createServerFn({ method: "POST" })
     const result = await cancelWorkflowRun(data.workflowRunId, context.userId!);
     if (!result.ok) return { ok: false as const, error: result.error ?? "not_found" };
     return { ok: true as const, alreadyTerminal: result.error === "already_terminal" };
+  });
+
+const projectWorkflowsSchema = z.object({
+  projectId: z.string().uuid(),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+
+export const listGafcoreProjectWorkflows = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => projectWorkflowsSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const userId = context.userId!;
+    const { data: project } = await context.supabase!
+      .from("projects")
+      .select("id")
+      .eq("id", data.projectId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!project) return { ok: false as const, error: "project_not_found" };
+    const runs = await listProjectWorkflowRuns(data.projectId, userId, data.limit ?? 8);
+    return { ok: true as const, runs };
+  });
+
+const syncPipelineSchema = z.object({
+  pipelineRunId: z.string().uuid(),
+  workflowRunId: z.string().uuid(),
+  workflowState: z.string().min(1).max(32),
+  planSummary: z.string().max(500).optional(),
+});
+
+export const syncGafcorePipelineWorkflow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => syncPipelineSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await syncPipelineWithWorkflow(context.supabase!, data.pipelineRunId, context.userId!, {
+      workflowRunId: data.workflowRunId,
+      workflowState: data.workflowState,
+      planSummary: data.planSummary,
+    });
+    return { ok: true as const };
   });
 
 export const getGafcoreWorkflowStatus = createServerFn({ method: "POST" })

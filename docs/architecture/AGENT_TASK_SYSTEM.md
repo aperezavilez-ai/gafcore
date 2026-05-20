@@ -71,7 +71,7 @@ src/agents/
 | A2 | Planner + executor + `planAndStart` / `runGafcoreWorkflowBatch` | **Hecho** |
 | B0–B2 | Ejecución distribuida (RPC claim, paralelo, drain) | **Hecho** — `DISTRIBUTED_EXECUTION.md` |
 | A3 | Merge parches en snapshot + UI árbol tareas (`WorkflowTaskStrip`) | **Hecho** |
-| A4 | Deploy/DB agents + métricas dashboard |
+| A4 | Métricas en status + enlace pipeline ↔ workflow | **Parcial** |
 | B4 | Límite workflows activos + segundo plano IDE | **Hecho** |
 
 ## Integración

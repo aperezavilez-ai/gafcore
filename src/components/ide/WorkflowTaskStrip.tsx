@@ -26,10 +26,24 @@ function stateIcon(state: string) {
 
 const CANCELLABLE_WORKFLOW_STATES = new Set(["planning", "executing", "validating", "merging"]);
 
+export type WorkflowMetricsUi = {
+  run?: {
+    taskCounts?: {
+      total: number;
+      succeeded: number;
+      failed: number;
+      running: number;
+    };
+    durationMs?: number | null;
+  };
+  quota?: { active: number; max: number };
+};
+
 type Props = {
   tasks: WorkflowTaskUi[];
   planSummary?: string | null;
   workflowState?: string | null;
+  metrics?: WorkflowMetricsUi | null;
   className?: string;
   onCancel?: () => void;
   cancelPending?: boolean;
@@ -39,6 +53,7 @@ export function WorkflowTaskStrip({
   tasks,
   planSummary,
   workflowState,
+  metrics,
   className,
   onCancel,
   cancelPending,
@@ -64,6 +79,29 @@ export function WorkflowTaskStrip({
       {planSummary ? (
         <p className="mb-1.5 line-clamp-2 text-muted-foreground">
           <span className="font-medium text-foreground">Plan:</span> {planSummary}
+        </p>
+      ) : null}
+      {metrics?.quota || metrics?.run?.durationMs != null ? (
+        <p className="mb-1.5 text-muted-foreground">
+          {metrics.quota ? (
+            <span>
+              Workflows activos: {metrics.quota.active}/{metrics.quota.max}
+            </span>
+          ) : null}
+          {metrics.run?.durationMs != null ? (
+            <span className={metrics.quota ? " · " : ""}>
+              {Math.round(metrics.run.durationMs / 1000)}s
+            </span>
+          ) : null}
+          {metrics.run?.taskCounts && metrics.run.taskCounts.total > 0 ? (
+            <span>
+              {" "}
+              · {metrics.run.taskCounts.succeeded}/{metrics.run.taskCounts.total} OK
+              {metrics.run.taskCounts.failed > 0
+                ? ` · ${metrics.run.taskCounts.failed} fallo(s)`
+                : ""}
+            </span>
+          ) : null}
         </p>
       ) : null}
       {workflowState ? (
