@@ -1,8 +1,5 @@
-import {
-  completeChatMessage,
-  getGafcoreAiGateway,
-  resolveGatewayModel,
-} from "@/lib/gafcore-ai-gateway.server";
+import { getGafcoreAiGateway, resolveGatewayModel } from "@/lib/gafcore-ai-gateway.server";
+import { completeChatMessageViaWorkflowQueue } from "@/tasks/workflow-ai-queue.server";
 import { taskPlanSchema, type TaskPlan } from "@/tasks/artifacts.shared";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 
@@ -66,7 +63,7 @@ export async function generateTaskPlan(
   try {
     const gateway = getGafcoreAiGateway();
     const model = resolveGatewayModel(gateway, { tier: "deep" });
-    const { content } = await completeChatMessage({
+    const { content } = await completeChatMessageViaWorkflowQueue({
       model,
       messages: [
         { role: "system", content: PLANNER_SYSTEM },

@@ -6,12 +6,12 @@ import {
   gafcoreChatBodySchema,
 } from "@/lib/gafcore-chat.shared";
 import {
-  completeChatMessage,
   consumeAiCredits,
   getGafcoreAiGateway,
   refundAiCredits,
   resolveGatewayModel,
 } from "@/lib/gafcore-ai-gateway.server";
+import { completeChatMessageViaWorkflowQueue } from "@/tasks/workflow-ai-queue.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
@@ -81,7 +81,7 @@ export async function runGafcoreChatForUser(opts: {
   }
 
   try {
-    const { content } = await completeChatMessage({ model, messages, json: true });
+    const { content } = await completeChatMessageViaWorkflowQueue({ model, messages, json: true });
     let parsedOut: { reply?: string; files?: unknown };
     try {
       parsedOut = JSON.parse(content || "{}");

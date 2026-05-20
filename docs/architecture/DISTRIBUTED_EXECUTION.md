@@ -38,6 +38,8 @@ Cron → `workflow/drain` → carga `filesSnapshot` del run → una ola por invo
 ```bash
 GAFCORE_WORKFLOW_MAX_PARALLEL=3
 GAFCORE_WORKFLOW_MAX_ACTIVE_PER_USER=2
+GAFCORE_WORKFLOW_MAX_AI_CONCURRENT=2   # llamadas IA simultáneas por instancia (B5)
+GAFCORE_WORKFLOW_AI_RETRY_MAX=3        # reintentos si el proveedor devuelve 429
 GAFCORE_CRON_SECRET=...          # header x-cron-secret en drain
 ```
 
@@ -54,7 +56,8 @@ Menú **Multiagente en 2º plano**: `planAndStart` → poll cada ~2,8s (`getGafc
 | B2 | Drain API + cron Vercel |
 | B3 | Snapshot `files` en `gafcore_workflow_runs.payload_json` + merge incremental | **Hecho** |
 | B4 | `GAFCORE_WORKFLOW_MAX_ACTIVE_PER_USER` + IDE segundo plano | **Hecho** |
-| B5 | Cola IA dedicada / rate limits global |
+| B5 | Cola IA in-process + reintentos 429 (`workflow-ai-queue`) | **Hecho** |
+| B6 | Cola IA distribuida (Redis) / rate limits global |
 
 ## Aplicar SQL
 
