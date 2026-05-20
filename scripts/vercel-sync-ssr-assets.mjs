@@ -4,6 +4,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const root = resolve(process.cwd());
 const outDir = join(root, ".vercel", "output");
@@ -81,15 +82,38 @@ for (const file of walk(serverFunc)) {
   }
 }
 
+/** Si el SSR local responde 200, guarda el markup de <body> para hidratar en fallback. */
+async function captureSpaBodyHtml() {
+  const entry = join(serverFunc, "index.mjs");
+  if (!existsSync(entry)) return undefined;
+  try {
+    const mod = await import(pathToFileURL(entry).href);
+    const handler = mod.default ?? mod;
+    if (typeof handler?.fetch !== "function") return undefined;
+    const res = await handler.fetch(new Request("http://127.0.0.1/"), {}, {});
+    if (res.status !== 200) return undefined;
+    const html = await res.text();
+    const match = html.match(/<body[^>]*>([\s\S]*?)<script/i);
+    if (!match?.[1]) return undefined;
+    return match[1].trim();
+  } catch {
+    return undefined;
+  }
+}
+
+let bodyCaptured = false;
 if (mainCss && mainIndexJs) {
+  const bodyHtml = await captureSpaBodyHtml();
+  bodyCaptured = Boolean(bodyHtml);
   const shellPath = join(serverFunc, "gafcore-spa-shell.json");
-  writeFileSync(
-    shellPath,
-    JSON.stringify({ css: `/assets/${mainCss}`, js: `/assets/${mainIndexJs}` }),
-    "utf8",
-  );
+  const payload = {
+    css: `/assets/${mainCss}`,
+    js: `/assets/${mainIndexJs}`,
+    ...(bodyHtml ? { bodyHtml } : {}),
+  };
+  writeFileSync(shellPath, JSON.stringify(payload), "utf8");
 }
 
 console.log(
-  `[vercel-sync-ssr-assets] css=${mainCss ?? "none"} js=${mainIndexJs ?? "none"} → ${filesPatched} files, ${replacements} fixes`,
+  `[vercel-sync-ssr-assets] css=${mainCss ?? "none"} js=${mainIndexJs ?? "none"} body=${bodyCaptured ? "captured" : "default"} → ${filesPatched} files, ${replacements} fixes`,
 );

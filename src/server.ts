@@ -159,6 +159,16 @@ export default {
     if (path === "/api/__ssr-probe") {
       return ssrProbe(request);
     }
+    if (path === "/api/__spa-fallback-preview") {
+      const fallback = spaFallbackResponse(request);
+      return (
+        fallback ??
+        new Response(JSON.stringify({ ok: false, error: "gafcore-spa-shell.json missing" }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        })
+      );
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
