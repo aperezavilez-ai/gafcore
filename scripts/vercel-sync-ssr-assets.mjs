@@ -31,6 +31,8 @@ const mainIndexJs =
     .map((name) => ({ name, size: statSync(join(staticAssets, name)).size }))
     .sort((a, b) => b.size - a.size)[0]?.name ?? null;
 
+const gafcoreCss = staticFiles.find((f) => f === "gafcore-app.css") ?? mainCss;
+
 /** index-Ab12Cd.js → resuelve al fichero real en static/ */
 function resolveAssetHref(href) {
   const file = href.replace(/^\/assets\//, "");
@@ -43,7 +45,10 @@ function resolveAssetHref(href) {
   const dash = baseWithHash.indexOf("-");
   const prefix = dash > 0 ? baseWithHash.slice(0, dash) : baseWithHash;
 
-  if (ext === "css" && mainCss) return `/assets/${mainCss}`;
+  if (ext === "css") {
+    if (gafcoreCss) return `/assets/${gafcoreCss}`;
+    if (mainCss) return `/assets/${mainCss}`;
+  }
 
   const candidates = staticFiles.filter((f) => f.startsWith(`${prefix}-`) && f.endsWith(`.${ext}`));
   if (candidates.length === 1) return `/assets/${candidates[0]}`;
@@ -63,23 +68,45 @@ function walk(dir, files = []) {
   return files;
 }
 
+function patchAssetRefs(content) {
+  assetPattern.lastIndex = 0;
+  let localReplacements = 0;
+  const next = content.replace(assetPattern, (match) => {
+    const resolved = resolveAssetHref(match);
+    if (resolved !== match) localReplacements++;
+    return resolved;
+  });
+  return { next, localReplacements, changed: next !== content };
+}
+
 let filesPatched = 0;
 let replacements = 0;
 
 for (const file of walk(serverFunc)) {
   const src = readFileSync(file, "utf8");
-  if (!src.match(assetPattern)) continue;
+  if (!assetPattern.test(src)) continue;
   assetPattern.lastIndex = 0;
-  const next = src.replace(assetPattern, (match) => {
-    const resolved = resolveAssetHref(match);
-    if (resolved === match) return match;
-    replacements++;
-    return resolved;
-  });
-  if (next !== src) {
+  const { next, localReplacements, changed } = patchAssetRefs(src);
+  if (changed) {
     writeFileSync(file, next, "utf8");
     filesPatched++;
+    replacements += localReplacements;
   }
+}
+
+/** Comprueba referencias huérfanas tras el parche (solo manifest + index). */
+function collectMissingAssets() {
+  const missing = new Set();
+  const manifestFiles = readdirSync(serverFunc).filter((n) => n.startsWith("_tanstack-start-manifest_"));
+  for (const name of manifestFiles) {
+    const src = readFileSync(join(serverFunc, name), "utf8");
+    assetPattern.lastIndex = 0;
+    for (const match of src.matchAll(assetPattern)) {
+      const file = match[0].replace(/^\/assets\//, "");
+      if (!staticSet.has(file)) missing.add(match[0]);
+    }
+  }
+  return [...missing];
 }
 
 /** Si el SSR local responde 200, guarda el markup de <body> para hidratar en fallback. */
@@ -101,19 +128,41 @@ async function captureSpaBodyHtml() {
   }
 }
 
+async function probeSsrHome() {
+  const entry = join(serverFunc, "index.mjs");
+  if (!existsSync(entry)) return { ok: false, reason: "no-entry" };
+  try {
+    const mod = await import(pathToFileURL(entry).href);
+    const handler = mod.default ?? mod;
+    const res = await handler.fetch(new Request("http://127.0.0.1/"), {}, {});
+    return { ok: res.status < 500, status: res.status };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 let bodyCaptured = false;
+let ssrProbe = { ok: false };
+
 if (mainCss && mainIndexJs) {
   const bodyHtml = await captureSpaBodyHtml();
   bodyCaptured = Boolean(bodyHtml);
   const shellPath = join(serverFunc, "gafcore-spa-shell.json");
+  const cssHref = gafcoreCss ? `/assets/${gafcoreCss}` : `/assets/${mainCss}`;
   const payload = {
-    css: `/assets/${mainCss}`,
+    css: cssHref,
     js: `/assets/${mainIndexJs}`,
     ...(bodyHtml ? { bodyHtml } : {}),
   };
   writeFileSync(shellPath, JSON.stringify(payload), "utf8");
 }
 
+const missingAfter = collectMissingAssets();
+ssrProbe = await probeSsrHome();
+
 console.log(
-  `[vercel-sync-ssr-assets] css=${mainCss ?? "none"} js=${mainIndexJs ?? "none"} body=${bodyCaptured ? "captured" : "default"} → ${filesPatched} files, ${replacements} fixes`,
+  `[vercel-sync-ssr-assets] css=${gafcoreCss ?? mainCss ?? "none"} js=${mainIndexJs ?? "none"} body=${bodyCaptured ? "captured" : "default"} ssrProbe=${ssrProbe.ok ? "ok" : JSON.stringify(ssrProbe)} missing=${missingAfter.length} → ${filesPatched} files, ${replacements} fixes`,
 );
+if (missingAfter.length > 0) {
+  console.warn("[vercel-sync-ssr-assets] orphan assets:", missingAfter.slice(0, 8).join(", "));
+}

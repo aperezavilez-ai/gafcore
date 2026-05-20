@@ -60,7 +60,10 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
-import { FUNCTIONAL_FIRST_BUILD_PREFIX } from "@/lib/gafcore-functional-first.shared";
+import {
+  FUNCTIONAL_FIRST_BUILD_PREFIX,
+  buildPreserveExistingPrefix,
+} from "@/lib/gafcore-functional-first.shared";
 import {
   auditProjectLocally,
   buildValidationFixInstruction,
@@ -91,7 +94,7 @@ type PendingComposerImage = { id: string; previewUrl: string; fileName: string }
 
 async function readSseJsonPayload(
   res: Response,
-  signal: AbortSignal,
+  signal: AbortSignal | undefined,
   onTextProgress: (charLen: number) => void,
 ): Promise<string> {
   if (!res.body) throw new Error("Sin cuerpo de respuesta");
@@ -103,7 +106,7 @@ async function readSseJsonPayload(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       buf += dec.decode(value, { stream: true });
       const lines = buf.split("\n");
       buf = lines.pop() ?? "";
@@ -1188,7 +1191,7 @@ export function ChatPanel({
         };
       }
 
-      const text = await readSseJsonPayload(res, ac.signal, (n) => {
+      const text = await readSseJsonPayload(res, ac?.signal, (n) => {
         if (myEpoch === requestEpochRef.current) setStreamChars(n);
       });
       let parsed: { reply?: string; files?: unknown };
@@ -1256,6 +1259,8 @@ export function ChatPanel({
 
     const functionalPrefix =
       effectiveBuild && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
+    const preservePrefix =
+      effectiveBuild && !visualEditOn ? buildPreserveExistingPrefix(files.length) : "";
     const conversationalPrefix = conversational ? buildConversationalInstructionPrefix(raw) : "";
     const creativePrefix =
       effectiveBuild && !visualEditOn ? buildCreativeBuildPrefix(raw) : "";
@@ -1279,6 +1284,7 @@ export function ChatPanel({
       conversationalPrefix +
       creativePrefix +
       functionalPrefix +
+      preservePrefix +
       layoutPrefix +
       visionBoost +
       deepPrefix +
@@ -1303,6 +1309,16 @@ export function ChatPanel({
     scrollChatToBottomSoon("auto");
     void persistMessage("user", userBubble);
     if (effectiveBuild && projectId) void startPipelineRun(instruction);
+    if (effectiveBuild && files.length > 0) {
+      void (async () => {
+        try {
+          const { createSnapshot } = await import("@/lib/userSupabase");
+          await createSnapshot(files, `antes: ${(raw || "build").slice(0, 48)}`);
+        } catch {
+          /* best-effort */
+        }
+      })();
+    }
     setStreamChars(null);
     const ac = new AbortController();
     abortControllerRef.current = ac;
