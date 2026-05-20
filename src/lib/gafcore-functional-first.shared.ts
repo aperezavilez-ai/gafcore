@@ -109,7 +109,15 @@ export function auditFunctionalFirst(
       });
     }
 
-    const needsPersistence = /guardar|persist|carrito|pedido|checkout|registro/i.test(raw);
+    const isSearchOnly =
+      /buscar\s+vuelo|buscar\s+destino|search\s+flight|type=["']search|placeholder=["'][^"']*destino/i.test(
+        raw,
+      ) && !/guardar|registrarse|signup|crear\s+cuenta|checkout|pedido/i.test(raw);
+    const needsPersistence =
+      !isSearchOnly &&
+      (/guardar|persist|carrito|checkout|pedido|registrarse|crear\s+cuenta/i.test(raw) ||
+        (/RegisterForm|registro/i.test(f.name) &&
+          /guardar|submit|registrarse|crear\s+cuenta/i.test(raw)));
     const hasPersistence =
       /\blocalStorage\b/.test(code) ||
       /\bsessionStorage\b/.test(code) ||

@@ -1,4 +1,5 @@
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
+import { resolveHeroImageFromInstruction } from "@/lib/gafcore-hero-image.shared";
 
 /** Mapa nombre de archivo → data URL o https para resolver rutas en preview. */
 export function buildAssetUrlMap(files: ProjFile[]): Record<string, string> {
@@ -49,6 +50,9 @@ export function themedPicsumUrl(
   if (paint) {
     const seed = PAINTING_SEEDS[slot % PAINTING_SEEDS.length];
     return picsumFallbackUrl(seed, w, h);
+  }
+  if (label === "hero" || /hero|banner|fondo|cielo|avion|avión|viaje|vuelo/i.test(ctx)) {
+    return resolveHeroImageFromInstruction(instruction).url;
   }
   return picsumFallbackUrl(label || `slot-${slot}`, w, h);
 }
@@ -247,16 +251,24 @@ export function sanitizeProjectJsxFiles<T extends { name: string; content: strin
   });
 }
 
-const TRAVEL_CITY_HERO_URL = picsumFallbackUrl("gafcore-travel-city-hero", 1280, 720);
-
-/** Si pidieron ciudad/fondo: reemplaza hero azul sólido por imagen visible en preview. */
+/** Si pidieron cambio de fondo/hero: reemplaza bloque azul por imagen acorde al pedido. */
 export function applyTravelHeroBackgroundFix(source: string, instruction: string): string {
-  if (!/ciudad|city|fondo|banner|hero|imagen|azul|skyline|viaje|cielos/i.test(instruction)) {
+  if (
+    !/ciudad|city|fondo|banner|hero|imagen|foto|azul|skyline|viaje|cielos?|avion|avión|recuadro|cambia|modifica|background/i.test(
+      instruction,
+    )
+  ) {
     return source;
   }
-  if (/backgroundImage|background-image|picsum\.photos/i.test(source)) return source;
+  const heroUrl = resolveHeroImageFromInstruction(instruction).url;
+  if (/backgroundImage|background-image|picsum\.photos/i.test(source)) {
+    return source.replace(
+      /https:\/\/picsum\.photos\/seed\/[^"'`)\s]+(?:\/\d+)?(?:\/\d+)?/gi,
+      heroUrl,
+    );
+  }
 
-  const styleSnippet = `style={{ backgroundImage: "url('${TRAVEL_CITY_HERO_URL}')", backgroundSize: "cover", backgroundPosition: "center" }}`;
+  const styleSnippet = `style={{ backgroundImage: "url('${heroUrl}')", backgroundSize: "cover", backgroundPosition: "center" }}`;
 
   let out = source.replace(
     /className="([^"]*\b(?:min-h-screen|min-h-\[[^\]]+|h-screen)[^"]*\bbg-(?:blue|primary)(?:-\d+)?[^"]*)"/gi,

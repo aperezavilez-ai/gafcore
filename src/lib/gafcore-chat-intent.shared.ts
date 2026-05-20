@@ -1,6 +1,10 @@
 /**
  * Detección de intención conversacional vs construcción (chat IDE).
  */
+import { resolveHeroImageFromInstruction } from "@/lib/gafcore-hero-image.shared";
+
+export { resolveHeroImageFromInstruction } from "@/lib/gafcore-hero-image.shared";
+export type { HeroImageTheme } from "@/lib/gafcore-hero-image.shared";
 
 const GREETING_RE =
   /^(hola|hola!?|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|hey|hi|hello|qu[eé]\s+tal|saludos|gracias|thank\s+you|ok|vale|perfecto|genial|listo)[\s!.?,:]*$/i;
@@ -40,19 +44,40 @@ export function buildConversationalInstructionPrefix(userText: string): string {
   );
 }
 
-/** Cambio visual de hero/fondo (p. ej. azul → foto de ciudad). */
+/** Cambio visual de hero/fondo (p. ej. azul → foto). */
 export function userWantsHeroBackgroundChange(text: string): boolean {
-  return /fondo|background|banner|hero|ciudad|city|skyline|imagen\s+de|azul|sustituye?\s+el\s+fondo|cambiar?\s+el\s+fondo/i.test(
+  return /fondo|background|banner|hero|recuadro|cuadro|bloque|ciudad|city|skyline|cielo|avion|avión|imagen\s+de|foto\s+de|azul|sustituye?|cambiar?|pon\s+.*foto/i.test(
     text,
   );
 }
 
 export function buildHeroBackgroundInstructionPrefix(userText: string): string {
   if (!userWantsHeroBackgroundChange(userText)) return "";
+  const theme = resolveHeroImageFromInstruction(userText);
+  const literal = userText.trim().slice(0, 280);
   return (
-    "[HERO CON IMAGEN] El usuario pide foto de ciudad/fondo en el hero, NO un bloque azul plano. " +
-    "Usa style backgroundImage: url('https://picsum.photos/seed/gafcore-travel-city/1280/720') con bg-cover bg-center " +
-    "o <img> absolute inset-0 object-cover bajo el texto. Mantén buscador de vuelos y registro si ya existen. "
+    `[HERO IMAGEN — PEDIDO LITERAL] El usuario pidió: «${literal}». ` +
+    `Implementa EXACTAMENTE eso en el hero (${theme.descriptionEs}). ` +
+    `PROHIBIDO sustituir por otra escena (si pidió cielo/avión, NO uses skyline de ciudad). ` +
+    `URL obligatoria del fondo: ${theme.url} — style backgroundImage o <img> absolute inset-0 object-cover bajo el texto. ` +
+    `Quita fondos azules/sólidos del hero. Conserva buscador, registro y secciones existentes salvo que pida quitarlas. `
+  );
+}
+
+/** Refuerzo cuando el usuario describe un cambio visual concreto (evita confundir con ciudad genérica). */
+export function buildLiteralVisualChangePrefix(userText: string): string {
+  const t = userText.trim();
+  if (!/cambia|modifica|sustituye?|reemplaza|pon\s+|quita\s+el\s+azul|recuadro|foto\s+de/i.test(t)) {
+    return "";
+  }
+  if (!/fondo|hero|banner|imagen|foto|cielo|avion|avión|color|azul|visual/i.test(t)) {
+    return "";
+  }
+  const theme = resolveHeroImageFromInstruction(t);
+  return (
+    `[CAMBIO VISUAL LITERAL] Respeta al pie de la letra: «${t.slice(0, 220)}». ` +
+    `Si aplica al hero, usa ${theme.url} (${theme.descriptionEs}). No inventes otra escena ni respondas solo con texto. ` +
+    `Devuelve el archivo del hero/App modificado en files[]. `
   );
 }
 
@@ -60,7 +85,9 @@ export function buildHeroBackgroundInstructionPrefix(userText: string): string {
 export function isVisualOnlyTweak(text: string): boolean {
   const t = text.toLowerCase();
   if (/registro|base\s+de\s+datos|api|backend|auth|persistencia/i.test(t)) return false;
-  return /fondo|background|color|azul|imagen|ciudad|banner|hero|estilo|visual|diseño/i.test(t);
+  return /fondo|background|color|azul|imagen|ciudad|cielo|avion|avión|banner|hero|recuadro|estilo|visual|diseño|foto/i.test(
+    t,
+  );
 }
 
 export function buildCreativeBuildPrefix(userText: string): string {

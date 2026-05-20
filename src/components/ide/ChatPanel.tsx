@@ -83,6 +83,11 @@ import {
   finalizeGafcorePipelineRun,
   startGafcorePipelineRun,
 } from "@/lib/gafcore-orchestrator.functions";
+import {
+  planAndStartGafcoreWorkflow,
+  runGafcoreWorkflowBatch,
+} from "@/lib/gafcore-workflow.functions";
+import { agentTypeLabel } from "@/tasks/artifacts.shared";
 import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
 import {
   buildConversationalInstructionPrefix,
@@ -93,6 +98,7 @@ import {
   isVisualOnlyTweak,
   softenRoboticReply,
   userWantsHeroBackgroundChange,
+  buildLiteralVisualChangePrefix,
 } from "@/lib/gafcore-chat-intent.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 
@@ -300,6 +306,14 @@ export function ChatPanel({
   /** Evita eco Realtime del mismo mensaje que acabamos de persistir. */
   const localMessageEchoRef = useRef<Set<string>>(new Set());
   const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
+  const [multiAgentMode, setMultiAgentMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("gafcore_multi_agent") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
   const freeCreditsRescueDone = useRef(false);
   const freeCreditsRescueUserId = useRef<string | null>(null);
@@ -910,6 +924,8 @@ export function ChatPanel({
   }, []);
 
   const callGafcoreChat = useServerFn(gafcoreChat);
+  const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);
+  const callRunWorkflowBatch = useServerFn(runGafcoreWorkflowBatch);
   const callValidateSources = useServerFn(validateGafcoreSources);
   const callValidateProject = useServerFn(validateGafcoreProject);
   const callRecordMemory = useServerFn(recordProjectAiMemory);
@@ -1143,15 +1159,21 @@ export function ChatPanel({
         );
       }
       if (issues.length > 0) {
-        const text = formatValidationForUser(issues);
-        setLastError((prev) =>
-          prev ? `${prev}\n\n[Validación GafCore]\n${text}` : `[Validación GafCore]\n${text}`,
-        );
-        if (!pipelineRunIdRef.current) {
-          void persistValidationMemory(
-            issues.filter((i) => i.severity === "error"),
-            false,
+        const blocking = issues.filter((i) => i.severity === "error");
+        const warnings = issues.filter((i) => i.severity !== "error");
+        if (blocking.length > 0) {
+          const text = formatValidationForUser(blocking);
+          setLastError((prev) =>
+            prev ? `${prev}\n\n[Validación GafCore]\n${text}` : `[Validación GafCore]\n${text}`,
           );
+        } else if (warnings.length > 0) {
+          toast.message("Listo con avisos menores", {
+            description: formatValidationForUser(warnings).slice(0, 240),
+            duration: 6000,
+          });
+        }
+        if (!pipelineRunIdRef.current) {
+          void persistValidationMemory(blocking, false);
         }
       }
     }
@@ -1338,6 +1360,94 @@ export function ChatPanel({
     }
   };
 
+  const runMultiAgentWorkflow = async (
+    instruction: string,
+    myEpoch: number,
+    userLabel: string,
+    effectiveBuild: boolean,
+    visualEditOn: boolean,
+  ): Promise<{ reply: string; files: Array<{ name: string; language?: string; content: string }> }> => {
+    if (!projectId) throw new Error("project_required");
+    const ctxFiles = files.map((f) => ({
+      name: f.name,
+      language: f.language,
+      content: f.content,
+    }));
+
+    setPipelineStatus("Multiagente: planificando…");
+    const started = await callPlanAndStartWorkflow({
+      data: { projectId, instruction, files: ctxFiles },
+    });
+    if (!started.ok) {
+      throw new Error(started.error === "plan_failed" ? "PLAN_FAILED" : "WORKFLOW_START_FAILED");
+    }
+    if (myEpoch !== requestEpochRef.current) {
+      return { reply: "Cancelado.", files: [] };
+    }
+
+    setPipelineStatus(`Plan: ${started.planSummary}`);
+    appendMessageDeduped(
+      "ai",
+      `**Plan multiagente:** ${started.planSummary}\n\nEjecutando tareas…`,
+    );
+    scrollChatToBottomSoon("auto");
+
+    const batch = await callRunWorkflowBatch({
+      data: {
+        workflowRunId: started.workflowRunId,
+        projectId,
+        files: ctxFiles,
+        maxSteps: 8,
+      },
+    });
+    if (myEpoch !== requestEpochRef.current) {
+      return { reply: "Cancelado.", files: [] };
+    }
+
+    const lines: string[] = [];
+    for (const step of batch.steps) {
+      if (!step.task) continue;
+      const label = agentTypeLabel(step.task.agent_type);
+      const status = step.error ? `❌ ${step.error}` : "✓";
+      lines.push(`- **${label}** · ${step.task.title} ${status}`);
+      if (step.reply && !step.error) {
+        lines.push(`  ${step.reply.slice(0, 180)}${step.reply.length > 180 ? "…" : ""}`);
+      }
+    }
+
+    const reply =
+      lines.length > 0
+        ? `Workflow **${batch.workflowState}**.\n\n${lines.join("\n")}`
+        : `Workflow **${batch.workflowState}** completado.`;
+
+    setPipelineStatus(
+      batch.workflowState === "completed" ? "Multiagente: listo" : `Multiagente: ${batch.workflowState}`,
+    );
+
+    if (batch.mergedPatches.length > 0 && effectiveBuild) {
+      const patchFiles = batch.mergedPatches.map((p) => ({
+        name: p.name,
+        language: p.language,
+        content: p.content,
+      }));
+      const { merged } = await applyGenerationFiles(files, patchFiles, instruction, userLabel, {
+        runFunctionalAudit: effectiveBuild && !visualEditOn,
+        snapshotLabel: `multiagent: ${userLabel.slice(0, 40)}`,
+      });
+      setFiles(merged);
+      onCodeGenerated?.();
+    }
+
+    return {
+      reply,
+      files: batch.mergedPatches.map((p) => ({
+        name: p.name,
+        language: p.language,
+        content: p.content,
+      })),
+    };
+  };
+
   const send = async (text?: string) => {
     const raw = (text ?? input).trim();
     const pendingSnapshot = [...pendingComposerImages];
@@ -1395,12 +1505,14 @@ export function ChatPanel({
         : "";
     const layoutPrefix = buildLayoutInstructionPrefix(raw);
     const heroBgPrefix = buildHeroBackgroundInstructionPrefix(raw);
+    const literalVisualPrefix = buildLiteralVisualChangePrefix(raw);
     const instruction =
       conversationalPrefix +
       creativePrefix +
       functionalPrefix +
       preservePrefix +
       heroBgPrefix +
+      literalVisualPrefix +
       layoutPrefix +
       visionBoost +
       deepPrefix +
@@ -1459,16 +1571,31 @@ export function ChatPanel({
         throw new Error("no_session");
       }
 
-      await advancePipeline("generate", "generating");
-      const result = await requestGafcoreGeneration(
-        tok,
-        history,
-        instruction,
-        files,
-        ac.signal,
-        myEpoch,
-        raw,
-      );
+      let result: {
+        reply: string;
+        files: Array<{ name: string; language?: string; content: string }>;
+      };
+
+      if (effectiveBuild && multiAgentMode && projectId) {
+        result = await runMultiAgentWorkflow(
+          instruction,
+          myEpoch,
+          raw,
+          effectiveBuild,
+          visualEditOn,
+        );
+      } else {
+        await advancePipeline("generate", "generating");
+        result = await requestGafcoreGeneration(
+          tok,
+          history,
+          instruction,
+          files,
+          ac.signal,
+          myEpoch,
+          raw,
+        );
+      }
 
       if (myEpoch !== requestEpochRef.current) return;
 
@@ -1950,6 +2077,34 @@ export function ChatPanel({
                     <Plug className="mr-2 h-4 w-4" />
                     <span className="flex-1">Conectores</span>
                     <ChevronRight className="h-4 w-4 text-foreground/70" />
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setMultiAgentMode((v) => {
+                        const next = !v;
+                        try {
+                          window.localStorage.setItem("gafcore_multi_agent", next ? "1" : "0");
+                        } catch {
+                          /* */
+                        }
+                        toast.message(
+                          next
+                            ? "Multiagente activado: el siguiente build usará planner + tareas."
+                            : "Multiagente desactivado: chat directo.",
+                        );
+                        return next;
+                      });
+                    }}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Multiagente (beta)</span>
+                    {multiAgentMode ? (
+                      <span className="text-[10px] font-medium text-primary">ON</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">OFF</span>
+                    )}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => void handleScreenshot()}>
