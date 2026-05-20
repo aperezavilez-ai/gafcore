@@ -276,6 +276,33 @@ export function applyTravelHeroBackgroundFix(source: string, instruction: string
   return out;
 }
 
+/** Si la IA devolvió files:[] pero el usuario pidió un cambio visual, parchea archivos del proyecto. */
+export function patchProjectFilesVisually(
+  projectFiles: ProjFile[],
+  instruction: string,
+): ProjFile[] {
+  if (!instruction.trim() || projectFiles.length === 0) return [];
+  const wants =
+    /ciudad|city|fondo|banner|hero|imagen|azul|skyline|viaje|cielos|cambia|modifica|aplica|background/i.test(
+      instruction,
+    );
+  if (!wants) return [];
+
+  const assetMap = buildAssetUrlMap(projectFiles);
+  const out: ProjFile[] = [];
+  for (const f of projectFiles) {
+    if (!/\.(html|htm|jsx|tsx|js|css)$/i.test(f.name)) continue;
+    let content = repairHtmlMedia(f.content, assetMap);
+    content = repairCommonJsxSyntaxErrors(content);
+    content = applyTravelHeroBackgroundFix(content, instruction);
+    content = applyPicsumFallbacksInSource(content, instruction, assetMap);
+    if (content !== f.content) {
+      out.push({ name: f.name, language: f.language, content });
+    }
+  }
+  return out;
+}
+
 /** Repara HTML/JSX en archivos generados + contexto del proyecto. */
 export function repairGafcoreProjectMedia(
   generated: ProjFile[],

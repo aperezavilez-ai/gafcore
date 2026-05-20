@@ -23,7 +23,7 @@ import {
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
-import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
+import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
 import { loadProjectMemoryHintsForUser } from "@/lib/gafcore-ai-memory.server";
 import {
   shouldBypassGafcoreChatCache,
@@ -139,6 +139,10 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     }
 
     let safeFiles = validateOutputFiles(parsed.files);
+    if (safeFiles.length === 0) {
+      const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
+      if (localPatch.length > 0) safeFiles = localPatch;
+    }
     try {
       safeFiles = await enrichGafcoreOutputFiles(
         safeFiles,

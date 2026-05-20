@@ -79,6 +79,9 @@ export function shouldBypassGafcoreChatCache(instruction: string): boolean {
   const t = instruction.trim();
   if (/^\[CONVERSACIÓN GafCore\]/i.test(t)) return true;
   if (/^\[Modo chat\]/i.test(t) && !/\[FUNCTIONAL-FIRST\]/i.test(t)) return true;
+  if (userWantsHeroBackgroundChange(t) || (isVisualOnlyTweak(t) && /cambia|modifica|aplica|hero|fondo/i.test(t))) {
+    return true;
+  }
   const quoted = t.match(/El usuario escribe[^"]*"([^"]{1,120})"/i);
   if (quoted?.[1] && isConversationalOnly(quoted[1])) return true;
   return false;

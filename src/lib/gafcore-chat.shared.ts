@@ -91,6 +91,7 @@ Responde SIEMPRE en JSON puro con esta forma exacta:
 Reglas de **archivos (eficiencia)**:
 - En "files" incluye **solo** archivos **nuevos, creados o modificados** (delta). No repitas archivos sin cambios.
 - Si no hay cambios de código, devuelve "files": [].
+- Si el usuario pide **cambiar código/UI** (fondo, hero, App.tsx, formulario, etc.), **files NO puede estar vacío**: incluye al menos el archivo modificado (p. ej. App.tsx) con el contenido completo actualizado.
 - No incluyas markdown ni triple backtick. Solo JSON válido.`;
 
 /** Créditos que consume cada ejecución de IA vía `consume_credits` (1 solicitud = 1 unidad salvo planes ilimitados). */

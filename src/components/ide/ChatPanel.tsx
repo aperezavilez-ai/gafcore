@@ -49,6 +49,7 @@ import {
 } from "@/lib/gafcore-validate.functions";
 import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import {
+  patchProjectFilesVisually,
   repairCommonJsxSyntaxErrors,
   repairGafcoreProjectMedia,
 } from "@/lib/gafcore-media.shared";
@@ -1388,23 +1389,34 @@ export function ChatPanel({
         softenRoboticReply(raw, result.reply || "Listo."),
       );
       setStreamChars(null);
-      appendMessageDeduped("ai", replyText);
-      forceScrollToBottom();
-      scrollChatToBottomSoon("auto");
-      void persistMessage("assistant", replyText);
 
-      if (effectiveBuild && (!result.files || result.files.length === 0)) {
-        if (userWantsHeroBackgroundChange(raw) || /cambia|modifica|añade|agrega/i.test(raw)) {
-          toast.error("La IA respondió sin archivos — el preview no puede cambiar solo.", {
-            description: "Reenvía el mensaje o escribe: «En App.tsx: hero con foto de ciudad (picsum), conserva el buscador de vuelos».",
+      let filesToApply = result.files ?? [];
+      if (effectiveBuild && filesToApply.length === 0) {
+        const localPatch = patchProjectFilesVisually(
+          files.map((f) => ({ name: f.name, language: f.language, content: f.content })),
+          instruction,
+        );
+        if (localPatch.length > 0) {
+          filesToApply = localPatch;
+          replyText = sanitizeUserFacingAiText(
+            `${replyText}\n\nApliqué el fondo de ciudad en ${localPatch.map((f) => f.name).join(", ")} (parche local; la IA no envió archivos).`,
+          );
+          toast.success("Fondo de ciudad aplicado en el preview", { duration: 5000 });
+        } else if (userWantsHeroBackgroundChange(raw) || /cambia|modifica|añade|agrega|aplica/i.test(raw)) {
+          toast.error("No encontré App.tsx/JSX para parchear. Abre Código y confirma que existe App.tsx.", {
             duration: 10_000,
           });
         }
       }
 
-      if (result.files && result.files.length > 0 && effectiveBuild) {
+      appendMessageDeduped("ai", replyText);
+      forceScrollToBottom();
+      scrollChatToBottomSoon("auto");
+      void persistMessage("assistant", replyText);
+
+      if (filesToApply.length > 0 && effectiveBuild) {
         const runFunctional = effectiveBuild && !visualEditOn;
-        let { merged, issues } = await applyGenerationFiles(files, result.files, instruction, raw, {
+        let { merged, issues } = await applyGenerationFiles(files, filesToApply, instruction, raw, {
           runFunctionalAudit: runFunctional,
           snapshotLabel: `auto: ${raw.slice(0, 60)}`,
         });
