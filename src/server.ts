@@ -55,10 +55,15 @@ function isCatastrophicSsrErrorBody(body: string, responseStatus: number): boole
 
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
+function isApiPath(pathname: string): boolean {
+  return pathname.startsWith("/api/") || pathname.includes("/_serverFn/");
+}
+
 async function normalizeCatastrophicSsrResponse(
   response: Response,
   request: Request,
 ): Promise<Response> {
+  if (isApiPath(new URL(request.url).pathname)) return response;
   if (response.status < 500) return response;
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return response;
@@ -143,6 +148,10 @@ function runtimeEnvDiag(): Response {
         SUPABASE_URL: flag("SUPABASE_URL"),
         SUPABASE_PUBLISHABLE_KEY: flag("SUPABASE_PUBLISHABLE_KEY"),
         SUPABASE_SERVICE_ROLE_KEY: flag("SUPABASE_SERVICE_ROLE_KEY"),
+        OPENAI_API_KEY: flag("OPENAI_API_KEY"),
+        OPENROUTER_API_KEY: flag("OPENROUTER_API_KEY"),
+        AI_API_KEY: flag("AI_API_KEY"),
+        AI_CHAT_COMPLETIONS_URL: flag("AI_CHAT_COMPLETIONS_URL"),
       },
     }),
     { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } },
@@ -169,12 +178,26 @@ export default {
         })
       );
     }
+    if (request.method === "POST" && path === "/api/gafcore/chat/stream") {
+      const { handleGafcoreChatStreamPost } = await import("./lib/gafcore-chat-api.server");
+      return handleGafcoreChatStreamPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/chat/complete") {
+      const { handleGafcoreChatCompletePost } = await import("./lib/gafcore-chat-api.server");
+      return handleGafcoreChatCompletePost(request);
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response, request);
     } catch (error) {
       console.error(error);
+      if (isApiPath(path)) {
+        return new Response(JSON.stringify({ error: "server_error" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
       if (wantsHtmlDocument(request)) {
         const fallback = spaFallbackResponse(request);
         if (fallback) return fallback;

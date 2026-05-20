@@ -2,7 +2,7 @@
  * Handlers HTTP del chat IDE — invocados desde `server.ts` sin pasar por el entry SSR
  * (en Vercel el server-entry devuelve HTTPError 500 y el chat quedaba en HTML de error).
  */
-import { requireUser } from "@/routes/api/elevenlabs/-_auth";
+import { requireGafcoreApiUser } from "@/lib/gafcore-api-auth.server";
 import {
   gafcoreChatBodySchema,
   buildGafcoreMessages,
@@ -40,7 +40,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 /** POST /api/gafcore/chat/stream */
 export async function handleGafcoreChatStreamPost(request: Request): Promise<Response> {
-  const userId = await requireUser(request);
+  const userId = await requireGafcoreApiUser(request);
   if (userId instanceof Response) return userId;
 
   let body: unknown;
@@ -114,6 +114,46 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
       });
     }
     const fail = await parseUpstreamFailure(upstream);
+    // Stream no disponible: misma petición en modo JSON (créditos ya consumidos).
+    if (fail.status >= 400 && fail.status !== 429) {
+      try {
+        const completed = await completeChatMessage({ model, messages, json: true });
+        const content = completed.content || "{}";
+        let parsedOut: { reply?: string; files?: unknown };
+        try {
+          parsedOut = JSON.parse(content);
+        } catch {
+          return jsonResponse({
+            reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, content)),
+            files: [],
+          });
+        }
+        let safeFiles = validateOutputFiles(parsedOut.files);
+        if (safeFiles.length === 0) {
+          const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
+          if (localPatch.length > 0) safeFiles = localPatch;
+        }
+        try {
+          safeFiles = await enrichGafcoreOutputFiles(
+            safeFiles,
+            data.files as ProjFile[],
+            data.instruction,
+          );
+        } catch {
+          /* optional */
+        }
+        const reply = sanitizeUserFacingAiText(
+          softenRoboticReply(
+            data.instruction,
+            typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.",
+          ),
+        );
+        cacheSet(cacheKey, { reply, files: safeFiles });
+        return jsonResponse({ reply, files: safeFiles, fallback: "complete" });
+      } catch {
+        /* sigue con error upstream */
+      }
+    }
     return jsonResponse(
       {
         error: fail.code === "rate_limited" ? "rate_limited" : "upstream",
@@ -145,7 +185,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
 
 /** POST /api/gafcore/chat/complete — JSON (fallback cuando el stream/SSR falla). */
 export async function handleGafcoreChatCompletePost(request: Request): Promise<Response> {
-  const userId = await requireUser(request);
+  const userId = await requireGafcoreApiUser(request);
   if (userId instanceof Response) return userId;
 
   let body: unknown;

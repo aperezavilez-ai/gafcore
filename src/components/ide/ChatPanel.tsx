@@ -29,7 +29,9 @@ import {
   Paperclip,
   Coins,
   Brain,
+  BookmarkPlus,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -42,6 +44,7 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import type { ChatMsg } from "@/lib/openaiChat";
 import { gafcoreChat } from "@/lib/gafcore-chat.functions";
+import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import {
   validateGafcoreSources,
@@ -56,6 +59,7 @@ import {
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { CreditsOutModal } from "@/components/CreditsOutModal";
 import { supabase } from "@/integrations/supabase/client";
+import { getAuthAccessToken } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
@@ -286,6 +290,8 @@ export function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [streamChars, setStreamChars] = useState<number | null>(null);
+  const [pinConventionOpen, setPinConventionOpen] = useState(false);
+  const [pinConventionBody, setPinConventionBody] = useState("");
   /** Invalida respuestas tardías si el usuario envía otra cosa o pulsa detener. */
   const requestEpochRef = useRef(0);
   const sendInFlightRef = useRef(false);
@@ -1155,6 +1161,59 @@ export function ChatPanel({
     return { merged: mergedForReturn, issues };
   };
 
+  const fetchGafcoreChatComplete = async (
+    tok: string,
+    history: ChatMsg[],
+    instruction: string,
+    contextFiles: FileItem[],
+    ac: AbortSignal,
+    userTextForTone: string,
+  ): Promise<{
+    reply: string;
+    files: Array<{ name: string; language?: string; content: string }>;
+  }> => {
+    const res = await fetch("/api/gafcore/chat/complete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${tok}`,
+      },
+      body: JSON.stringify({
+        history,
+        instruction,
+        files: contextFiles,
+        ...(projectId ? { projectId } : {}),
+      }),
+      signal: ac.signal,
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok || ct.includes("text/html")) {
+      let errCode = `HTTP ${res.status}`;
+      try {
+        if (!ct.includes("text/html")) {
+          const ej = (await res.json()) as { error?: string };
+          if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
+          else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
+          else if (typeof ej?.error === "string") errCode = ej.error;
+        } else {
+          errCode = "HTML_RESPONSE";
+        }
+      } catch {
+        /* */
+      }
+      throw new Error(errCode);
+    }
+    const j = (await res.json()) as {
+      reply?: string;
+      files?: Array<{ name: string; language?: string; content: string }>;
+    };
+    return {
+      reply: softenRoboticReply(userTextForTone, typeof j.reply === "string" ? j.reply : "Listo."),
+      files: Array.isArray(j.files) ? j.files : [],
+    };
+  };
+
   const requestGafcoreGeneration = async (
     tok: string,
     history: ChatMsg[],
@@ -1167,23 +1226,36 @@ export function ChatPanel({
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
   }> => {
+    const chatPayload = {
+      history,
+      instruction,
+      files: contextFiles,
+      ...(projectId ? { projectId } : {}),
+    };
     try {
       const res = await fetch("/api/gafcore/chat/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
           Authorization: `Bearer ${tok}`,
         },
-        body: JSON.stringify({
-          history,
-          instruction,
-          files: contextFiles,
-          ...(projectId ? { projectId } : {}),
-        }),
+        body: JSON.stringify(chatPayload),
         signal: ac.signal,
       });
 
       const ct = res.headers.get("content-type") || "";
+
+      if (ct.includes("text/html")) {
+        return fetchGafcoreChatComplete(
+          tok,
+          history,
+          instruction,
+          contextFiles,
+          ac,
+          userTextForTone,
+        );
+      }
 
       if (!res.ok) {
         let errCode = `HTTP ${res.status}`;
@@ -1236,15 +1308,34 @@ export function ChatPanel({
       if (err instanceof DOMException && err.name === "AbortError") throw err;
       if ((err as Error)?.name === "AbortError") throw err;
       const msg = String((err as Error)?.message || "");
-      if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        return callGafcoreChat({
-          data: {
+      if (
+        msg.includes("Failed to fetch") ||
+        msg.includes("NetworkError") ||
+        msg.includes("HTML_RESPONSE") ||
+        msg.startsWith("HTTP 5")
+      ) {
+        try {
+          return await fetchGafcoreChatComplete(
+            tok,
             history,
             instruction,
-            files: contextFiles as any,
-            ...(projectId ? { projectId } : {}),
-          },
-        });
+            contextFiles,
+            ac,
+            userTextForTone,
+          );
+        } catch (fallbackErr) {
+          if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+            return callGafcoreChat({
+              data: {
+                history,
+                instruction,
+                files: contextFiles as any,
+                ...(projectId ? { projectId } : {}),
+              },
+            });
+          }
+          throw fallbackErr;
+        }
       }
       throw err;
     }
@@ -1365,8 +1456,7 @@ export function ChatPanel({
         { role: "user", content: conversational ? userBubble : instruction },
       ];
 
-      const { data: sess } = await supabase.auth.getSession();
-      const tok = sess.session?.access_token;
+      const tok = await getAuthAccessToken();
       if (!tok) {
         toast.error("Inicia sesión para usar el asistente.");
         throw new Error("no_session");
@@ -1543,9 +1633,19 @@ export function ChatPanel({
 
   const empty = messages.length === 0;
 
+  const openPinConvention = (content: string) => {
+    setPinConventionBody(content);
+    setPinConventionOpen(true);
+  };
+
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-background">
-      {/* Plan + créditos (chat) + recarga */}
+      <FixConventionDialog
+        open={pinConventionOpen}
+        onOpenChange={setPinConventionOpen}
+        projectId={projectId}
+        initialBody={pinConventionBody}
+      />
       <div className="shrink-0 border-b border-border/60 px-3 py-1.5">
         <div className="flex items-center justify-between gap-2">
           <span
@@ -1554,6 +1654,16 @@ export function ChatPanel({
           >
             {planDisplayLabel}
           </span>
+          {projectId ? (
+            <Link
+              to="/gafcore/settings/project"
+              search={{ section: "memory" }}
+              className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-primary"
+              title="Memoria IA del proyecto"
+            >
+              <Brain className="h-3.5 w-3.5" />
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => user?.id && setCreditsOut(true)}
@@ -1643,11 +1753,27 @@ export function ChatPanel({
                     </div>
                   </div>
                 ) : (
-                  <div
-                    key={i}
-                    className="flex-1 text-[13px] leading-relaxed text-foreground whitespace-pre-wrap break-words"
-                  >
-                    {m.content}
+                  <div key={i} className="group flex flex-col gap-1.5">
+                    <div className="flex gap-2">
+                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1 text-[13px] leading-relaxed text-foreground whitespace-pre-wrap break-words">
+                        {m.content}
+                      </div>
+                    </div>
+                    {projectId && m.content.trim().length > 0 ? (
+                      <div className="flex flex-wrap gap-1 pl-9">
+                        <button
+                          type="button"
+                          onClick={() => openPinConvention(m.content)}
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground hover:border-primary/40 hover:bg-primary/10"
+                        >
+                          <BookmarkPlus className="h-3 w-3" />
+                          Fijar convención
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 ),
               )}
@@ -2007,3 +2133,5 @@ export function ChatPanel({
     </div>
   );
 }
+
+

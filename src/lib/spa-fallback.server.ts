@@ -45,8 +45,11 @@ function buildTsrBootstrapScript(js: string, css: string): string {
 const DEFAULT_BODY_HTML = `<!--$--><!--$--><div class="flex min-h-screen items-center justify-center bg-background text-foreground"><div class="flex flex-col items-center gap-3"><div role="status" aria-label="Cargando" class="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div><p class="text-sm text-muted-foreground">Cargando GafCore…</p></div></div><!--/$-->`;
 
 export function wantsHtmlDocument(request: Request): boolean {
+  const path = new URL(request.url).pathname;
+  if (path.startsWith("/api/") || path.includes("/_serverFn/")) return false;
   const accept = request.headers.get("accept") ?? "";
-  return accept.includes("text/html") || accept.includes("*/*");
+  // No usar */* — fetch del chat envía Accept: */* y convertía errores API en HTML SPA.
+  return accept.includes("text/html");
 }
 
 /** HTML con bootstrap TSR: el client entry hidrata y renderiza en el navegador sin SSR. */

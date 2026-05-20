@@ -73,13 +73,12 @@ export default defineConfig(({ mode }) => {
     },
     // 127.0.0.1: el Simple Browser / preview de Cursor y muchos navegadores en Windows
     // fallan o muestran pantalla en blanco con host "::" (solo IPv6).
-    // strictPort: false — si 8080 está ocupado (otra instancia de Vite, otro programa),
-    // Vite usa 8081, 8082… Evita "Port already in use" y el Simple Browser cargando
-    // chunks contra un proceso que no es el servidor actual (pantalla "Something went wrong").
+    // Puerto dedicado: GafSuite u otros proyectos suelen usar 8080 en 0.0.0.0;
+    // localhost:8080 puede abrir la app equivocada. Usar siempre 127.0.0.1:5174.
     server: {
       host: "127.0.0.1",
-      port: 8080,
-      strictPort: false,
+      port: 5174,
+      strictPort: true,
       hmr: {
         host: "127.0.0.1",
       },
