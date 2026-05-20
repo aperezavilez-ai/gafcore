@@ -186,6 +186,17 @@ export default {
       const { handleGafcoreChatCompletePost } = await import("./lib/gafcore-chat-api.server");
       return handleGafcoreChatCompletePost(request);
     }
+    if (
+      (request.method === "POST" || request.method === "GET") &&
+      path === "/api/gafcore/workflow/drain"
+    ) {
+      const { drainWorkflowQueue } = await import("./tasks/workflow-drain.server");
+      const result = await drainWorkflowQueue(request);
+      return new Response(JSON.stringify(result), {
+        status: result.ok ? 200 : 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

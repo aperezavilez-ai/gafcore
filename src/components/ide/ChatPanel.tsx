@@ -1415,10 +1415,14 @@ export function ChatPanel({
       }
     }
 
+    const waveNote =
+      typeof batch.waves === "number" && batch.waves > 0
+        ? ` (${batch.waves} ola(s) paralelas)`
+        : "";
     const reply =
       lines.length > 0
-        ? `Workflow **${batch.workflowState}**.\n\n${lines.join("\n")}`
-        : `Workflow **${batch.workflowState}** completado.`;
+        ? `Workflow **${batch.workflowState}**${waveNote}.\n\n${lines.join("\n")}`
+        : `Workflow **${batch.workflowState}**${waveNote} completado.`;
 
     setPipelineStatus(
       batch.workflowState === "completed" ? "Multiagente: listo" : `Multiagente: ${batch.workflowState}`,

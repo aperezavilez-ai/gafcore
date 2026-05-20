@@ -1,6 +1,6 @@
 # GafCore — Agent Task System + Multiagent Coordination
 
-> **Estado:** A0 + A1 **hecho en código** (build OK). Falta aplicar migración SQL en Supabase. A2 = planner + executor. Ver `ORCHESTRATOR.md` O8.
+> **Estado:** A0–A2 **hecho en código**. Migración `20260528120000` en Supabase. IDE: menú **Multiagente (beta)** en Construir. Ver `ORCHESTRATOR.md` O8.
 
 ## Aplicar en Supabase
 
@@ -68,7 +68,8 @@ src/agents/
 |------|------------|
 | A0 | Este doc + types |
 | A1 | SQL + scheduler shell + `startWorkflow` server fn |
-| A2 | Planner + executor único (chat API) |
+| A2 | Planner + executor + `planAndStart` / `runGafcoreWorkflowBatch` | **Hecho** |
+| B0–B2 | Ejecución distribuida (RPC claim, paralelo, drain) | **Hecho** — `DISTRIBUTED_EXECUTION.md` |
 | A3 | Agentes especializados + merge parches |
 | A4 | Deploy/DB agents + UI árbol tareas |
 
