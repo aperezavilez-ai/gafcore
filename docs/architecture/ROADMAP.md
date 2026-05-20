@@ -15,6 +15,7 @@ Evolución **incremental**. No refactor masivo. Auth, Stripe, webhooks y RLS se 
 | 6 | Templates en BD | **Hecho (código)** — migración + seed servidor |
 | 7 | Project Orchestrator | En curso — `docs/architecture/ORCHESTRATOR.md` |
 | 7b | AI Validation Layer | Planificado — `docs/architecture/VALIDATION_LAYER.md` |
+| 7c | Agent Task System + multiagente | **A0–A1 shell** — `docs/architecture/AGENT_TASK_SYSTEM.md`, migración `20260528120000` |
 | 8 | Aislamiento infra por proyecto | Pendiente |
 | 9 | Embeddings / vector DB | Pendiente |
 
@@ -61,7 +62,8 @@ Ver análisis completo en historial de planificación (chat arquitectura). Prior
 ```
 src/core/project/     ← Etapa 1
 src/orchestrator/     ← Etapa 2–3, 7
-src/agents/           ← Etapa 4, 7
+src/agents/           ← Etapa 4, 7, 7c
+src/tasks/            ← Etapa 7c (scheduler, workflow)
 src/services/github/  ← Etapa 2
 src/services/vercel/  ← Etapa 3
 src/memory/           ← Etapa 5, 9
