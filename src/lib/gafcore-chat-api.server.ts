@@ -100,7 +100,8 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
       subset,
     });
     if (!credit.ok) {
-      const err = credit.error === "insufficient_credits" ? "insufficient_credits" : "credits_error";
+      const err =
+        credit.error === "insufficient_credits" ? "insufficient_credits" : "credits_error";
       return jsonResponse({ error: err }, credit.error === "insufficient_credits" ? 402 : 500);
     }
   }
@@ -246,7 +247,8 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
       subset,
     });
     if (!credit.ok) {
-      const err = credit.error === "insufficient_credits" ? "insufficient_credits" : "credits_error";
+      const err =
+        credit.error === "insufficient_credits" ? "insufficient_credits" : "credits_error";
       return jsonResponse({ error: err }, credit.error === "insufficient_credits" ? 402 : 500);
     }
     balanceAfterConsume = credit.balance;

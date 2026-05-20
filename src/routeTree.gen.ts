@@ -44,6 +44,7 @@ import { Route as ApiPublicGafcoreSupportFaqRouteImport } from './routes/api/pub
 import { Route as ApiPublicBillingCheckRouteImport } from './routes/api/public/billing.check'
 import { Route as ApiGafcoreOrchestratorEventsRouteImport } from './routes/api/gafcore/orchestrator.events'
 import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/chat.stream'
+import { Route as ApiGafcoreChatCompleteRouteImport } from './routes/api/gafcore/chat.complete'
 import { Route as ApiGafcoreAdminSeedTemplatesRouteImport } from './routes/api/gafcore/admin/seed-templates'
 import { Route as ApiGafcoreAdminDiagnosticsIngestRouteImport } from './routes/api/gafcore/admin/diagnostics-ingest'
 
@@ -227,6 +228,11 @@ const ApiGafcoreChatStreamRoute = ApiGafcoreChatStreamRouteImport.update({
   path: '/api/gafcore/chat/stream',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreChatCompleteRoute = ApiGafcoreChatCompleteRouteImport.update({
+  id: '/api/gafcore/chat/complete',
+  path: '/api/gafcore/chat/complete',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGafcoreAdminSeedTemplatesRoute =
   ApiGafcoreAdminSeedTemplatesRouteImport.update({
     id: '/api/gafcore/admin/seed-templates',
@@ -270,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
+  '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
@@ -309,6 +316,7 @@ export interface FileRoutesByTo {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
+  '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
@@ -349,6 +357,7 @@ export interface FileRoutesById {
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
+  '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
@@ -390,6 +399,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
+    | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
     | '/api/public/billing/check'
@@ -429,6 +439,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
+    | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
     | '/api/public/billing/check'
@@ -468,6 +479,7 @@ export interface FileRouteTypes {
     | '/gafcore_/settings/project'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
+    | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
     | '/api/public/billing/check'
@@ -508,6 +520,7 @@ export interface RootRouteChildren {
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
   ApiGafcoreAdminDiagnosticsIngestRoute: typeof ApiGafcoreAdminDiagnosticsIngestRoute
   ApiGafcoreAdminSeedTemplatesRoute: typeof ApiGafcoreAdminSeedTemplatesRoute
+  ApiGafcoreChatCompleteRoute: typeof ApiGafcoreChatCompleteRoute
   ApiGafcoreChatStreamRoute: typeof ApiGafcoreChatStreamRoute
   ApiGafcoreOrchestratorEventsRoute: typeof ApiGafcoreOrchestratorEventsRoute
   ApiPublicBillingCheckRoute: typeof ApiPublicBillingCheckRoute
@@ -764,6 +777,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreChatStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/chat/complete': {
+      id: '/api/gafcore/chat/complete'
+      path: '/api/gafcore/chat/complete'
+      fullPath: '/api/gafcore/chat/complete'
+      preLoaderRoute: typeof ApiGafcoreChatCompleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/admin/seed-templates': {
       id: '/api/gafcore/admin/seed-templates'
       path: '/api/gafcore/admin/seed-templates'
@@ -823,6 +843,7 @@ const rootRouteChildren: RootRouteChildren = {
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
   ApiGafcoreAdminDiagnosticsIngestRoute: ApiGafcoreAdminDiagnosticsIngestRoute,
   ApiGafcoreAdminSeedTemplatesRoute: ApiGafcoreAdminSeedTemplatesRoute,
+  ApiGafcoreChatCompleteRoute: ApiGafcoreChatCompleteRoute,
   ApiGafcoreChatStreamRoute: ApiGafcoreChatStreamRoute,
   ApiGafcoreOrchestratorEventsRoute: ApiGafcoreOrchestratorEventsRoute,
   ApiPublicBillingCheckRoute: ApiPublicBillingCheckRoute,

@@ -337,6 +337,7 @@ export function ChatPanel({
           ts: new Date(r.created_at).getTime(),
         })),
       );
+      stickToBottomRef.current = true;
     })();
     return () => {
       cancelled = true;
@@ -778,35 +779,25 @@ export function ChatPanel({
     ta.style.height = Math.min(Math.max(ta.scrollHeight, 64), 320) + "px";
   }, [input]);
 
+  /** Solo el contenedor del chat — scrollIntoView desplaza paneles padre (ResizablePanel) y falla. */
   const forceScrollToBottom = useCallback(() => {
     const el = scrollContainerRef.current;
-    if (el) {
-      const top = Math.max(0, el.scrollHeight - el.clientHeight);
-      el.scrollTop = top;
-      try {
-        el.scrollTo({ top, behavior: "auto" });
-      } catch {
-        /* */
-      }
-    }
-    messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    if (!el) return;
+    const top = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = top;
   }, []);
 
-  const scrollChatToBottom = useCallback(
-    (behavior: ScrollBehavior = "auto") => {
-      if (!stickToBottomRef.current) return;
-      const el = scrollContainerRef.current;
-      if (!el) return;
-      const top = Math.max(0, el.scrollHeight - el.clientHeight);
-      try {
-        el.scrollTo({ top, behavior });
-      } catch {
-        el.scrollTop = top;
-      }
-      messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
-    },
-    [],
-  );
+  const scrollChatToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    if (!stickToBottomRef.current) return;
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const top = Math.max(0, el.scrollHeight - el.clientHeight);
+    try {
+      el.scrollTo({ top, behavior });
+    } catch {
+      el.scrollTop = top;
+    }
+  }, []);
 
   const scrollChatToBottomSoon = useCallback(
     (behavior: ScrollBehavior = "auto") => {
@@ -837,20 +828,26 @@ export function ChatPanel({
 
     const onScroll = () => {
       const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
-      stickToBottomRef.current = distance < 96;
+      stickToBottomRef.current = distance < 120;
     };
     container.addEventListener("scroll", onScroll, { passive: true });
 
     const ro = new ResizeObserver(() => {
-      if (stickToBottomRef.current) scrollChatToBottom("auto");
+      if (stickToBottomRef.current) forceScrollToBottom();
     });
     ro.observe(content);
+
+    const mo = new MutationObserver(() => {
+      if (stickToBottomRef.current) forceScrollToBottom();
+    });
+    mo.observe(content, { childList: true, subtree: true, characterData: true });
 
     return () => {
       container.removeEventListener("scroll", onScroll);
       ro.disconnect();
+      mo.disconnect();
     };
-  }, [scrollChatToBottom]);
+  }, [scrollChatToBottom, forceScrollToBottom]);
 
   useEffect(() => {
     if (!loading) return;
@@ -1717,7 +1714,7 @@ export function ChatPanel({
       {/* Conversation */}
       <div
         ref={scrollContainerRef}
-        className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
       >
         <div ref={messagesContentRef} className="px-4 py-5 pb-32">
           {empty ? (
