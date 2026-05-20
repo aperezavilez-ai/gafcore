@@ -14,7 +14,7 @@ Cerebro central de coordinación para generación, validación, memoria y deploy
 | O5 | SSE `/api/gafcore/orchestrator/events?runId=` | Hecho |
 | O6 | Docs agent | Pendiente |
 | O7 | Deploy gate | Pendiente |
-| O8 | Multiagente (`src/agents/`, `src/tasks/`) | **A0–A1 shell** — ver `AGENT_TASK_SYSTEM.md` |
+| O8 | Multiagente (`src/agents/`, `src/tasks/`) | **A2** — planner + batch executor, IDE beta |
 
 ## Arquitectura
 

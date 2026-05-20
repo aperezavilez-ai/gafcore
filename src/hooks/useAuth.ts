@@ -8,10 +8,21 @@ export interface AuthState {
   loading: boolean;
 }
 
+const AUTH_INIT_TIMEOUT_MS = 8_000;
+
 let authState: AuthState = { user: null, session: null, loading: true };
 let authInitPromise: Promise<void> | null = null;
 let lastProfileUserId: string | null = null;
 const authListeners = new Set<(state: AuthState) => void>();
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) => {
+      setTimeout(() => resolve("timeout"), ms);
+    }),
+  ]);
+}
 
 function emitAuthState(next: AuthState) {
   authState = next;
@@ -54,8 +65,12 @@ export function initAuthOnce() {
     });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      applySession(session ?? null);
+      const result = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
+      if (result === "timeout") {
+        applySession(null);
+        return;
+      }
+      applySession(result.data.session ?? null);
     } catch {
       applySession(null);
     }
@@ -86,4 +101,10 @@ export function useAuth() {
   }, []);
 
   return { ...state, signOut };
+}
+
+/** Si la verificación de sesión tarda demasiado, deja de bloquear la UI. */
+export function forceAuthLoadingComplete() {
+  if (!authState.loading) return;
+  emitAuthState({ ...authState, loading: false });
 }

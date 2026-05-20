@@ -65,6 +65,7 @@ import {
   Upload,
   CreditCard,
   Check,
+  Brain,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -861,6 +862,14 @@ export function GafCoreIDE() {
                 <SettingsIcon className="mr-2 h-4 w-4" />
                 <span className="flex-1">Ajustes</span>
                 <span className="text-[11px] text-muted-foreground">Ctrl ,</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  navigate({ to: "/gafcore/settings/project", search: { section: "memory" } })
+                }
+              >
+                <Brain className="mr-2 h-4 w-4" />
+                Memoria IA del proyecto
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setConnectorsOpen(true)}>
                 <Plug className="mr-2 h-4 w-4" />

@@ -42,6 +42,7 @@ import { Route as ApiV1AiGenerateRouteImport } from './routes/api/v1/ai.generate
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
 import { Route as ApiPublicGafcoreSupportFaqRouteImport } from './routes/api/public/gafcore.support-faq'
 import { Route as ApiPublicBillingCheckRouteImport } from './routes/api/public/billing.check'
+import { Route as ApiGafcoreWorkflowDrainRouteImport } from './routes/api/gafcore/workflow.drain'
 import { Route as ApiGafcoreOrchestratorEventsRouteImport } from './routes/api/gafcore/orchestrator.events'
 import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/chat.stream'
 import { Route as ApiGafcoreChatCompleteRouteImport } from './routes/api/gafcore/chat.complete'
@@ -217,6 +218,11 @@ const ApiPublicBillingCheckRoute = ApiPublicBillingCheckRouteImport.update({
   path: '/api/public/billing/check',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreWorkflowDrainRoute = ApiGafcoreWorkflowDrainRouteImport.update({
+  id: '/api/gafcore/workflow/drain',
+  path: '/api/gafcore/workflow/drain',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGafcoreOrchestratorEventsRoute =
   ApiGafcoreOrchestratorEventsRouteImport.update({
     id: '/api/gafcore/orchestrator/events',
@@ -279,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
+  '/api/gafcore/workflow/drain': typeof ApiGafcoreWorkflowDrainRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
   '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -319,6 +326,7 @@ export interface FileRoutesByTo {
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
+  '/api/gafcore/workflow/drain': typeof ApiGafcoreWorkflowDrainRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
   '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -360,6 +368,7 @@ export interface FileRoutesById {
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
+  '/api/gafcore/workflow/drain': typeof ApiGafcoreWorkflowDrainRoute
   '/api/public/billing/check': typeof ApiPublicBillingCheckRoute
   '/api/public/gafcore/support-faq': typeof ApiPublicGafcoreSupportFaqRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
@@ -402,6 +411,7 @@ export interface FileRouteTypes {
     | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
+    | '/api/gafcore/workflow/drain'
     | '/api/public/billing/check'
     | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
@@ -442,6 +452,7 @@ export interface FileRouteTypes {
     | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
+    | '/api/gafcore/workflow/drain'
     | '/api/public/billing/check'
     | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
@@ -482,6 +493,7 @@ export interface FileRouteTypes {
     | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
+    | '/api/gafcore/workflow/drain'
     | '/api/public/billing/check'
     | '/api/public/gafcore/support-faq'
     | '/api/public/payments/webhook'
@@ -523,6 +535,7 @@ export interface RootRouteChildren {
   ApiGafcoreChatCompleteRoute: typeof ApiGafcoreChatCompleteRoute
   ApiGafcoreChatStreamRoute: typeof ApiGafcoreChatStreamRoute
   ApiGafcoreOrchestratorEventsRoute: typeof ApiGafcoreOrchestratorEventsRoute
+  ApiGafcoreWorkflowDrainRoute: typeof ApiGafcoreWorkflowDrainRoute
   ApiPublicBillingCheckRoute: typeof ApiPublicBillingCheckRoute
   ApiPublicGafcoreSupportFaqRoute: typeof ApiPublicGafcoreSupportFaqRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -763,6 +776,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/workflow/drain': {
+      id: '/api/gafcore/workflow/drain'
+      path: '/api/gafcore/workflow/drain'
+      fullPath: '/api/gafcore/workflow/drain'
+      preLoaderRoute: typeof ApiGafcoreWorkflowDrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/orchestrator/events': {
       id: '/api/gafcore/orchestrator/events'
       path: '/api/gafcore/orchestrator/events'
@@ -846,6 +866,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGafcoreChatCompleteRoute: ApiGafcoreChatCompleteRoute,
   ApiGafcoreChatStreamRoute: ApiGafcoreChatStreamRoute,
   ApiGafcoreOrchestratorEventsRoute: ApiGafcoreOrchestratorEventsRoute,
+  ApiGafcoreWorkflowDrainRoute: ApiGafcoreWorkflowDrainRoute,
   ApiPublicBillingCheckRoute: ApiPublicBillingCheckRoute,
   ApiPublicGafcoreSupportFaqRoute: ApiPublicGafcoreSupportFaqRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,

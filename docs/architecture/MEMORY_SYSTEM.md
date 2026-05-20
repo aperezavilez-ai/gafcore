@@ -57,7 +57,16 @@ RLS: lectura usuario autenticado; escritura **service role** (servidor).
 ## Server functions
 
 - `recordProjectDecision` — guardar decisión manual o desde UI
+- `listProjectDecisions` / `updateProjectDecision` / `deleteProjectDecision` — CRUD en ajustes
 - `previewProjectMemoryPack` — debug del pack generado
+
+## UI (usuario del proyecto, no admin plataforma)
+
+| Dónde | Qué |
+|-------|-----|
+| **IDE → chat** | Botón «Fijar convención» bajo cada respuesta de la IA; icono cerebro → ajustes |
+| **Ajustes → Memoria IA** | `/gafcore/settings/project?section=memory` — listar, crear, editar, borrar |
+| **Admin ops** (`/gafcore/admin/ops`) | No — es operación interna de la plataforma |
 
 ## Flujo
 

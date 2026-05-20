@@ -11,6 +11,7 @@ import {
   Cloud,
   Shield,
   Smartphone,
+  Brain,
   User as UserIcon,
   ExternalLink,
   Lock,
@@ -34,6 +35,7 @@ import { getStripeEnvironment } from "@/lib/stripe";
 import { createStripeCustomerPortalSession } from "@/lib/server-fns/payments.functions";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { Badge } from "@/components/ui/badge";
+import { ProjectMemoryConventionsPanel } from "@/components/gafcore/ProjectMemoryConventionsPanel";
 
 const SETTINGS_SECTION_IDS = [
   "project",
@@ -46,6 +48,7 @@ const SETTINGS_SECTION_IDS = [
   "wsdomains",
   "privacy",
   "devices",
+  "memory",
 ] as const;
 type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
@@ -71,6 +74,7 @@ const SIDEBAR_GROUPS = [
       { id: "project", label: "Configuración del proyecto", icon: SettingsIcon },
       { id: "domains", label: "Dominios", icon: Globe },
       { id: "git", label: "Git", icon: GitBranch },
+      { id: "memory", label: "Memoria IA", icon: Brain },
     ],
   },
   {
@@ -272,6 +276,7 @@ function SectionPanel(p: PanelProps) {
     case "wsdomains": return <DomainsPanel subdomain={p.subdomain} workspace />;
     case "privacy": return <PrivacyPanel />;
     case "devices": return <DevicesPanel />;
+    case "memory": return <ProjectMemoryConventionsPanel />;
     default: return <ProjectOverviewPanel {...p} />;
   }
 }

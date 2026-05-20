@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2, Lock, ArrowRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, forceAuthLoadingComplete } from "@/hooks/useAuth";
+import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { supabase } from "@/integrations/supabase/client";
 import { GafCoreIDE } from "@/components/gafcore/GafCoreIDE";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -24,6 +25,10 @@ function GafCoreAppPage() {
   const [hasSession, setHasSession] = useState(false);
   /** Tras auth: comprobar si debe ir a elegir plan antes de montar el IDE. */
   const [planGateChecked, setPlanGateChecked] = useState(false);
+  const [authSlow, setAuthSlow] = useState(false);
+  const [forceContinue, setForceContinue] = useState(false);
+
+  const accessPending = (authLoading || graceChecking) && !forceContinue;
 
   /** Asegura créditos de bienvenida si el backend los dejó en 0 (p. ej. cuenta ya existía). */
   useEffect(() => {
@@ -48,6 +53,15 @@ function GafCoreAppPage() {
       }
     })();
   }, [authLoading, graceChecking, user?.id, hasSession, assignUserWelcome]);
+
+  useEffect(() => {
+    if (!accessPending) {
+      setAuthSlow(false);
+      return;
+    }
+    const t = window.setTimeout(() => setAuthSlow(true), 8_000);
+    return () => window.clearTimeout(t);
+  }, [accessPending]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -82,6 +96,7 @@ function GafCoreAppPage() {
       setPlanGateChecked(false);
       return;
     }
+    const planTimeout = window.setTimeout(() => setPlanGateChecked(true), 6_000);
     void (async () => {
       const uid = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
       if (!uid) {
@@ -103,14 +118,35 @@ function GafCoreAppPage() {
       }
       setPlanGateChecked(true);
     })();
+    return () => window.clearTimeout(planTimeout);
   }, [authLoading, graceChecking, user?.id, hasSession]);
 
-  if (authLoading || graceChecking) {
+  if (accessPending) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center gap-3">
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <DevPortBanner />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Verificando acceso seguro…</p>
+          {authSlow ? (
+            <div className="mt-2 flex max-w-sm flex-col items-center gap-2 text-center">
+              <p className="text-xs text-muted-foreground">
+                Tardando más de lo habitual. Puedes entrar manualmente o comprobar tu conexión.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  forceAuthLoadingComplete();
+                  setGraceChecking(false);
+                  setForceContinue(true);
+                }}
+              >
+                Continuar sin esperar
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -118,19 +154,23 @@ function GafCoreAppPage() {
 
   if (!user && !hasSession) {
     return (
-      <AccessMessage
-        title="Entrar a GafCore"
-        message="Usa tu cuenta para acceder a la plataforma."
-        primaryLabel="Entrar"
-        primaryTo="/gafcore/login"
-      />
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <DevPortBanner />
+        <AccessMessage
+          title="Entrar a GafCore"
+          message="Usa tu cuenta para acceder a la plataforma."
+          primaryLabel="Entrar"
+          primaryTo="/gafcore/login"
+        />
+      </div>
     );
   }
 
   if (!planGateChecked) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center gap-3">
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <DevPortBanner />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Preparando tu espacio…</p>
         </div>
@@ -140,6 +180,7 @@ function GafCoreAppPage() {
 
   return (
     <ErrorBoundary>
+      <DevPortBanner />
       <GafCoreIDE />
     </ErrorBoundary>
   );
@@ -157,7 +198,7 @@ function AccessMessage({
   primaryTo: "/gafcore/login";
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
+    <div className="flex flex-1 items-center justify-center px-4">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-lg">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Lock className="h-6 w-6" />

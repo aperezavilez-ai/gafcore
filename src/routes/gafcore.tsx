@@ -17,6 +17,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/I18nProvider";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { toast } from "sonner";
+import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 
 type ThemeKey = "black" | "white" | "blue" | "gray";
 const THEME_KEY = "gafcore-theme";
@@ -191,6 +192,7 @@ function GafCoreLanding() {
 
   return (
     <div className={`gafcore-theme-${theme} gc-surface min-h-screen`}>
+      <DevPortBanner targetPath="/gafcore" />
       {/* Header */}
       <header className="border-b gc-border" style={{ background: "color-mix(in oklab, var(--gc-bg) 80%, transparent)", backdropFilter: "blur(10px)" }}>
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
