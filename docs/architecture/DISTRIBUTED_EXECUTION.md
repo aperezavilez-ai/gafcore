@@ -1,4 +1,4 @@
-# GafCore — Ejecución distribuida (B0–B2)
+# GafCore — Ejecución distribuida (B0–B3)
 
 > Compatible con chat directo, Orchestrator y Agent Task System (A0–A2).
 
@@ -27,18 +27,23 @@ Escalar ejecución sin romper el monolito: **cola Postgres + funciones cortas** 
 
 ### IDE (síncrono, mejorado)
 
-`planAndStart` → `runGafcoreWorkflowBatch` → olas paralelas hasta fin o límite.
+`planAndStart` (guarda snapshot en `payload_json`) → `runGafcoreWorkflowWave` por ola → UI `WorkflowTaskStrip` con `getGafcoreWorkflowStatus` entre olas.
 
-### Background (B2)
+### Background (B2 + B3)
 
-Cron → `workflow/drain` → reclama workflows en `executing` → una ola por invocación.
+Cron → `workflow/drain` → carga `filesSnapshot` del run → una ola por invocación → merge de parches persiste en DB.
 
 ## Variables
 
 ```bash
 GAFCORE_WORKFLOW_MAX_PARALLEL=3
+GAFCORE_WORKFLOW_MAX_ACTIVE_PER_USER=2
 GAFCORE_CRON_SECRET=...          # header x-cron-secret en drain
 ```
+
+## IDE segundo plano
+
+Menú **Multiagente en 2º plano**: `planAndStart` → poll cada ~2,8s (`getGafcoreWorkflowStatus` + `runGafcoreWorkflowWave`) → toast y parches al completar. El `workflowRunId` se guarda en `localStorage` por proyecto para reanudar tras recargar.
 
 ## Roadmap
 
@@ -47,8 +52,9 @@ GAFCORE_CRON_SECRET=...          # header x-cron-secret en drain
 | B0 | RPC claim + este doc |
 | B1 | Paralelo por ola |
 | B2 | Drain API + cron Vercel |
-| B3 | Métricas + límites por usuario |
-| B4 | Cola IA dedicada / rate limits |
+| B3 | Snapshot `files` en `gafcore_workflow_runs.payload_json` + merge incremental | **Hecho** |
+| B4 | `GAFCORE_WORKFLOW_MAX_ACTIVE_PER_USER` + IDE segundo plano | **Hecho** |
+| B5 | Cola IA dedicada / rate limits global |
 
 ## Aplicar SQL
 

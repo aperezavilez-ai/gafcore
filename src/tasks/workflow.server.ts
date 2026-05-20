@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { taskPlanSchema, type TaskPlan } from "@/tasks/artifacts.shared";
 import { seedTasksFromPlan } from "@/tasks/scheduler.server";
+import {
+  persistWorkflowFilesSnapshot,
+  type WorkflowPayload,
+} from "@/tasks/workflow-files.server";
+import type { ProjFile } from "@/lib/gafcore-chat.shared";
 
 export async function createWorkflowRun(
   projectId: string,
@@ -9,7 +14,9 @@ export async function createWorkflowRun(
   instruction: string,
   plan?: TaskPlan,
   pipelineRunId?: string,
+  opts?: { files?: ProjFile[]; planSummary?: string },
 ): Promise<{ workflowRunId: string; planArtifactId?: string }> {
+  const initialPayload: WorkflowPayload = { version: 1 };
   const { data: run, error } = await supabaseAdmin
     .from("gafcore_workflow_runs")
     .insert({
@@ -18,6 +25,7 @@ export async function createWorkflowRun(
       instruction,
       state: plan ? "executing" : "planning",
       pipeline_run_id: pipelineRunId ?? null,
+      payload_json: initialPayload,
     })
     .select("id")
     .single();
@@ -49,6 +57,9 @@ export async function createWorkflowRun(
     }
 
     await seedTasksFromPlan(run.id, projectId, userId, parsed);
+    if (opts?.files?.length) {
+      await persistWorkflowFilesSnapshot(run.id, opts.files, opts.planSummary ?? parsed.summary);
+    }
   }
 
   return { workflowRunId: run.id, planArtifactId };
@@ -70,5 +81,55 @@ export async function getWorkflowSnapshot(workflowRunId: string, userId: string)
     .eq("workflow_run_id", workflowRunId)
     .order("created_at", { ascending: true });
 
-  return { run, tasks: tasks ?? [] };
+  const payload =
+    run.payload_json && typeof run.payload_json === "object" && !Array.isArray(run.payload_json)
+      ? (run.payload_json as WorkflowPayload)
+      : {};
+
+  return {
+    run,
+    tasks: tasks ?? [],
+    filesSnapshot: payload.filesSnapshot ?? [],
+    mergedPatches: payload.mergedPatches ?? [],
+    planSummary: payload.planSummary ?? null,
+  };
+}
+
+const TERMINAL_WORKFLOW_STATES = new Set(["completed", "failed", "cancelled"]);
+
+/** Cancela workflow y tareas no terminales (usuario). */
+export async function cancelWorkflowRun(
+  workflowRunId: string,
+  userId: string,
+): Promise<{ ok: boolean; error?: "not_found" | "already_terminal" }> {
+  const { data: run } = await supabaseAdmin
+    .from("gafcore_workflow_runs")
+    .select("state")
+    .eq("id", workflowRunId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!run) return { ok: false, error: "not_found" };
+  if (TERMINAL_WORKFLOW_STATES.has(run.state)) {
+    return { ok: true, error: "already_terminal" };
+  }
+
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("gafcore_agent_tasks")
+    .update({
+      state: "cancelled",
+      lease_expires_at: null,
+      finished_at: now,
+      updated_at: now,
+    })
+    .eq("workflow_run_id", workflowRunId)
+    .in("state", ["pending", "blocked", "ready", "running", "validating"]);
+
+  await supabaseAdmin
+    .from("gafcore_workflow_runs")
+    .update({ state: "cancelled", updated_at: now })
+    .eq("id", workflowRunId);
+
+  return { ok: true };
 }

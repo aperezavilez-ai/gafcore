@@ -70,12 +70,13 @@ src/agents/
 | A1 | SQL + scheduler shell + `startWorkflow` server fn |
 | A2 | Planner + executor + `planAndStart` / `runGafcoreWorkflowBatch` | **Hecho** |
 | B0–B2 | Ejecución distribuida (RPC claim, paralelo, drain) | **Hecho** — `DISTRIBUTED_EXECUTION.md` |
-| A3 | Agentes especializados + merge parches |
-| A4 | Deploy/DB agents + UI árbol tareas |
+| A3 | Merge parches en snapshot + UI árbol tareas (`WorkflowTaskStrip`) | **Hecho** |
+| A4 | Deploy/DB agents + métricas dashboard |
+| B4 | Límite workflows activos + segundo plano IDE | **Hecho** |
 
 ## Integración
 
 - **Orchestrator:** `gafcore_pipeline_runs` puede referenciar `workflow_run_id`.
 - **Memory:** `retrieveProjectMemoryContext` por tarea.
 - **Validation:** tarea `validation` tras escritura.
-- **IDE:** modo simple (chat) vs `useMultiAgentWorkflow` (futuro).
+- **IDE:** menú Multiagente → `planAndStart` + olas + strip de tareas en chat.

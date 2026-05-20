@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { runWorkflowParallelWave } from "@/tasks/workflow-run.server";
+import { loadWorkflowProjectFiles } from "@/tasks/workflow-files.server";
 
 export type WorkflowDrainResult = {
   ok: boolean;
@@ -46,11 +47,12 @@ export async function drainWorkflowQueue(request: Request): Promise<WorkflowDrai
       .maybeSingle();
 
     if (run) {
+      const files = await loadWorkflowProjectFiles(run.id);
       const wave = await runWorkflowParallelWave({
         workflowRunId: run.id,
         projectId: run.project_id,
         userId: run.user_id,
-        files: [],
+        files,
       });
       workflows.push({
         workflowRunId: run.id,
@@ -69,11 +71,12 @@ export async function drainWorkflowQueue(request: Request): Promise<WorkflowDrai
     .limit(limit);
 
   for (const run of runs ?? []) {
+    const files = await loadWorkflowProjectFiles(run.id);
     const wave = await runWorkflowParallelWave({
       workflowRunId: run.id,
       projectId: run.project_id,
       userId: run.user_id,
-      files: [],
+      files,
     });
     workflows.push({
       workflowRunId: run.id,

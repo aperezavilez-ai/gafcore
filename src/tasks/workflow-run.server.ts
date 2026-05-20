@@ -2,6 +2,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { generateTaskPlan } from "@/tasks/planner.server";
 import { createWorkflowRun } from "@/tasks/workflow.server";
+import { applyWorkflowPatches, loadWorkflowProjectFiles } from "@/tasks/workflow-files.server";
+import { checkWorkflowStartLimit } from "@/tasks/workflow-limits.server";
 import {
   claimReadyTasksForWorkflow,
   completeTask,
@@ -20,8 +22,20 @@ export async function planAndCreateWorkflow(
   instruction: string,
   files: ProjFile[],
 ): Promise<{ workflowRunId: string; planSummary: string }> {
+  const limit = await checkWorkflowStartLimit(userId);
+  if (!limit.allowed) {
+    const err = new Error("workflow_limit_reached");
+    (err as Error & { code: string; active: number; max: number }).code = "workflow_limit_reached";
+    (err as Error & { active: number; max: number }).active = limit.active;
+    (err as Error & { max: number }).max = limit.max;
+    throw err;
+  }
+
   const plan = await generateTaskPlan(instruction, files);
-  const { workflowRunId } = await createWorkflowRun(projectId, userId, instruction, plan);
+  const { workflowRunId } = await createWorkflowRun(projectId, userId, instruction, plan, undefined, {
+    files,
+    planSummary: plan.summary,
+  });
   return { workflowRunId, planSummary: plan.summary };
 }
 
@@ -98,6 +112,9 @@ export async function executeClaimedTask(opts: {
     });
     await completeTask(task.id, "succeeded", { artifactIds: artifactId ? [artifactId] : [] });
     await appendTaskLog(task.id, "executed", result.reply.slice(0, 200));
+    if (result.patches.length > 0) {
+      await applyWorkflowPatches(workflowRunId, result.patches);
+    }
     const workflowState = await syncWorkflowRunState(workflowRunId);
     return {
       done: workflowState === "completed" || workflowState === "failed",
@@ -166,8 +183,12 @@ export async function runWorkflowParallelWave(opts: {
   done: boolean;
   workflowState: string;
 }> {
-  const { workflowRunId, userId, files } = opts;
+  const { workflowRunId, userId } = opts;
   const maxParallel = opts.maxParallel ?? getWorkflowMaxParallel();
+  let files = opts.files;
+  if (!files.length) {
+    files = await loadWorkflowProjectFiles(workflowRunId);
+  }
 
   const { data: run } = await loadWorkflowRun(workflowRunId, userId);
   if (!run) {
@@ -234,8 +255,11 @@ export async function runWorkflowBatch(opts: {
   let tasksRun = 0;
 
   while (tasksRun < maxSteps) {
+    const snapFiles = await loadWorkflowProjectFiles(opts.workflowRunId);
+    const waveFiles = snapFiles.length > 0 ? snapFiles : opts.files;
     const wave = await runWorkflowParallelWave({
       ...opts,
+      files: waveFiles,
       maxParallel: opts.maxParallel,
     });
     waves += 1;
@@ -251,9 +275,23 @@ export async function runWorkflowBatch(opts: {
   }
 
   const workflowState = await syncWorkflowRunState(opts.workflowRunId);
+  const mergedFromDb = await loadWorkflowProjectFiles(opts.workflowRunId);
+  const patchList = [...patchMap.values()];
+  if (mergedFromDb.length > 0) {
+    return {
+      steps,
+      mergedPatches: mergedFromDb.map((f) => ({
+        name: f.name,
+        content: f.content,
+        language: f.language,
+      })),
+      workflowState,
+      waves,
+    };
+  }
   return {
     steps,
-    mergedPatches: [...patchMap.values()],
+    mergedPatches: patchList,
     workflowState,
     waves,
   };

@@ -3,10 +3,11 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { taskPlanSchema } from "@/tasks/artifacts.shared";
 import { claimNextReadyTask, completeTask } from "@/tasks/scheduler.server";
-import { createWorkflowRun, getWorkflowSnapshot } from "@/tasks/workflow.server";
+import { cancelWorkflowRun, createWorkflowRun, getWorkflowSnapshot } from "@/tasks/workflow.server";
 import {
   planAndCreateWorkflow,
   runWorkflowBatch,
+  runWorkflowParallelWave,
   runWorkflowStep,
 } from "@/tasks/workflow-run.server";
 
@@ -82,6 +83,12 @@ export const planAndStartGafcoreWorkflow = createServerFn({ method: "POST" })
       );
       return { ok: true as const, workflowRunId, planSummary };
     } catch (e) {
+      const code = (e as Error & { code?: string })?.code;
+      if (code === "workflow_limit_reached") {
+        const active = (e as Error & { active?: number }).active ?? 0;
+        const max = (e as Error & { max?: number }).max ?? 2;
+        return { ok: false as const, error: "workflow_limit_reached" as const, active, max };
+      }
       console.error("[workflow] plan:", e);
       return { ok: false as const, error: "plan_failed" };
     }
@@ -112,6 +119,21 @@ const runBatchSchema = runStepSchema.extend({
   maxSteps: z.number().int().min(1).max(12).optional(),
 });
 
+/** B1/B3: Una ola paralela (archivos vacíos → snapshot en DB). */
+export const runGafcoreWorkflowWave = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => runStepSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const userId = context.userId!;
+    const wave = await runWorkflowParallelWave({
+      workflowRunId: data.workflowRunId,
+      projectId: data.projectId,
+      userId,
+      files: data.files,
+    });
+    return { ok: true as const, ...wave };
+  });
+
 /** A2: Ejecuta varias tareas en el servidor (máx. 12). */
 export const runGafcoreWorkflowBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -129,6 +151,15 @@ export const runGafcoreWorkflowBatch = createServerFn({ method: "POST" })
   });
 
 const snapshotSchema = z.object({ workflowRunId: z.string().uuid() });
+
+export const cancelGafcoreWorkflow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => snapshotSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const result = await cancelWorkflowRun(data.workflowRunId, context.userId!);
+    if (!result.ok) return { ok: false as const, error: result.error ?? "not_found" };
+    return { ok: true as const, alreadyTerminal: result.error === "already_terminal" };
+  });
 
 export const getGafcoreWorkflowStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

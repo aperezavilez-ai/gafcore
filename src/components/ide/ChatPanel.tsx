@@ -84,9 +84,12 @@ import {
   startGafcorePipelineRun,
 } from "@/lib/gafcore-orchestrator.functions";
 import {
+  cancelGafcoreWorkflow,
+  getGafcoreWorkflowStatus,
   planAndStartGafcoreWorkflow,
-  runGafcoreWorkflowBatch,
+  runGafcoreWorkflowWave,
 } from "@/lib/gafcore-workflow.functions";
+import { WorkflowTaskStrip, type WorkflowTaskUi } from "@/components/ide/WorkflowTaskStrip";
 import { agentTypeLabel } from "@/tasks/artifacts.shared";
 import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
 import {
@@ -306,10 +309,31 @@ export function ChatPanel({
   /** Evita eco Realtime del mismo mensaje que acabamos de persistir. */
   const localMessageEchoRef = useRef<Set<string>>(new Set());
   const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
+  const [activeWorkflowRunId, setActiveWorkflowRunId] = useState<string | null>(null);
+  const [backgroundWorkflowRunId, setBackgroundWorkflowRunId] = useState<string | null>(null);
+  const [workflowTasks, setWorkflowTasks] = useState<WorkflowTaskUi[]>([]);
+  const [workflowPlanSummary, setWorkflowPlanSummary] = useState<string | null>(null);
+  const [workflowState, setWorkflowState] = useState<string | null>(null);
+  const [workflowCancelPending, setWorkflowCancelPending] = useState(false);
+  const bgWorkflowMetaRef = useRef<{
+    instruction: string;
+    userLabel: string;
+    effectiveBuild: boolean;
+    visualEditOn: boolean;
+  } | null>(null);
+  const bgWorkflowFinishedRef = useRef<Set<string>>(new Set());
   const [multiAgentMode, setMultiAgentMode] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
       return window.localStorage.getItem("gafcore_multi_agent") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [multiAgentBg, setMultiAgentBg] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("gafcore_multi_agent_bg") === "1";
     } catch {
       return false;
     }
@@ -925,7 +949,9 @@ export function ChatPanel({
 
   const callGafcoreChat = useServerFn(gafcoreChat);
   const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);
-  const callRunWorkflowBatch = useServerFn(runGafcoreWorkflowBatch);
+  const callRunWorkflowWave = useServerFn(runGafcoreWorkflowWave);
+  const callGetWorkflowStatus = useServerFn(getGafcoreWorkflowStatus);
+  const callCancelWorkflow = useServerFn(cancelGafcoreWorkflow);
   const callValidateSources = useServerFn(validateGafcoreSources);
   const callValidateProject = useServerFn(validateGafcoreProject);
   const callRecordMemory = useServerFn(recordProjectAiMemory);
@@ -1180,6 +1206,205 @@ export function ChatPanel({
     return { merged: mergedForReturn, issues };
   };
 
+  const workflowStorageKey = projectId ? `gafcore_workflow_${projectId}` : null;
+
+  const clearBackgroundWorkflow = useCallback(
+    (workflowRunId: string) => {
+      setBackgroundWorkflowRunId((cur) => (cur === workflowRunId ? null : cur));
+      if (workflowStorageKey) {
+        try {
+          if (localStorage.getItem(workflowStorageKey) === workflowRunId) {
+            localStorage.removeItem(workflowStorageKey);
+          }
+        } catch {
+          /* */
+        }
+      }
+      bgWorkflowMetaRef.current = null;
+    },
+    [workflowStorageKey],
+  );
+
+  const handleCancelWorkflow = useCallback(async () => {
+    const runId = backgroundWorkflowRunId ?? activeWorkflowRunId;
+    if (!runId) return;
+    setWorkflowCancelPending(true);
+    requestEpochRef.current += 1;
+    try {
+      const res = await callCancelWorkflow({ data: { workflowRunId: runId } });
+      if (!res.ok) {
+        toast.error("No se pudo cancelar el workflow");
+        return;
+      }
+      bgWorkflowFinishedRef.current.add(runId);
+      clearBackgroundWorkflow(runId);
+      setActiveWorkflowRunId(null);
+      setWorkflowState("cancelled");
+      setPipelineStatus(null);
+      toast.message("Workflow multiagente cancelado");
+      const snap = await callGetWorkflowStatus({ data: { workflowRunId: runId } });
+      if (snap.ok) setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
+    } catch (e) {
+      console.error("[workflow] cancel:", e);
+      toast.error("Error al cancelar");
+    } finally {
+      setWorkflowCancelPending(false);
+    }
+  }, [
+    activeWorkflowRunId,
+    backgroundWorkflowRunId,
+    callCancelWorkflow,
+    callGetWorkflowStatus,
+    clearBackgroundWorkflow,
+  ]);
+
+  const finishBackgroundWorkflow = useCallback(
+    async (
+      workflowRunId: string,
+      snap: Awaited<ReturnType<typeof callGetWorkflowStatus>>,
+    ) => {
+      if (!snap.ok) {
+        clearBackgroundWorkflow(workflowRunId);
+        return;
+      }
+      const meta = bgWorkflowMetaRef.current;
+      const wfState = snap.run.state;
+      const mergedPatches =
+        snap.filesSnapshot?.length > 0
+          ? snap.filesSnapshot.map((f) => ({
+              name: f.name,
+              language: f.language,
+              content: f.content,
+            }))
+          : [];
+
+      const lines: string[] = [];
+      for (const t of snap.tasks) {
+        const label = agentTypeLabel(t.agent_type as Parameters<typeof agentTypeLabel>[0]);
+        const status =
+          t.state === "succeeded" ? "✓" : t.state === "failed" ? `❌ ${t.error_message ?? "error"}` : "…";
+        lines.push(`- **${label}** · ${t.title} ${status}`);
+      }
+      const reply =
+        lines.length > 0
+          ? `Workflow en segundo plano **${wfState}**.\n\n${lines.join("\n")}`
+          : `Workflow en segundo plano **${wfState}**.`;
+
+      appendMessageDeduped("ai", reply);
+      scrollChatToBottomSoon("auto");
+
+      if (mergedPatches.length > 0) {
+        const instruction =
+          meta?.instruction ??
+          (typeof snap.run.instruction === "string" ? snap.run.instruction : "workflow");
+        const userLabel = meta?.userLabel ?? "workflow";
+        const runAudit = meta ? meta.effectiveBuild && !meta.visualEditOn : false;
+        await applyGenerationFiles(files, mergedPatches, instruction, userLabel, {
+          runFunctionalAudit: runAudit,
+          snapshotLabel: meta
+            ? `multiagent-bg: ${meta.userLabel.slice(0, 40)}`
+            : "multiagent-bg: resume",
+        });
+      }
+
+      if (wfState === "completed") {
+        toast.success("Multiagente terminado", {
+          description: snap.planSummary?.slice(0, 120) ?? "Cambios aplicados al proyecto.",
+        });
+        setPipelineStatus("Multiagente: listo");
+      } else if (wfState === "failed") {
+        toast.error("Multiagente falló", {
+          description: "Revisa las tareas en el panel del chat.",
+        });
+        setPipelineStatus("Multiagente: falló");
+      } else {
+        setPipelineStatus(null);
+      }
+
+      setWorkflowState(wfState);
+      clearBackgroundWorkflow(workflowRunId);
+    },
+    [applyGenerationFiles, clearBackgroundWorkflow, files],
+  );
+
+  useEffect(() => {
+    if (!projectId || !multiAgentBg || !workflowStorageKey) return;
+    try {
+      const stored = localStorage.getItem(workflowStorageKey);
+      if (stored && !backgroundWorkflowRunId) {
+        setBackgroundWorkflowRunId(stored);
+        setPipelineStatus("Multiagente (2º plano): reanudando…");
+      }
+    } catch {
+      /* */
+    }
+  }, [projectId, multiAgentBg, workflowStorageKey, backgroundWorkflowRunId]);
+
+  useEffect(() => {
+    const runId = backgroundWorkflowRunId;
+    if (!runId || !projectId || !multiAgentBg) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (cancelled || inFlight || bgWorkflowFinishedRef.current.has(runId)) return;
+      inFlight = true;
+      try {
+        const snap = await callGetWorkflowStatus({ data: { workflowRunId: runId } });
+        if (!snap.ok || cancelled) return;
+
+        setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
+        setWorkflowState(snap.run.state);
+        if (snap.planSummary) setWorkflowPlanSummary(snap.planSummary);
+
+        const terminal =
+          snap.run.state === "completed" ||
+          snap.run.state === "failed" ||
+          snap.run.state === "cancelled";
+
+        if (terminal) {
+          if (!bgWorkflowFinishedRef.current.has(runId)) {
+            bgWorkflowFinishedRef.current.add(runId);
+            if (snap.run.state === "cancelled") {
+              setWorkflowState("cancelled");
+              setPipelineStatus(null);
+              clearBackgroundWorkflow(runId);
+            } else {
+              await finishBackgroundWorkflow(runId, snap);
+            }
+          }
+          return;
+        }
+
+        setPipelineStatus(`Multiagente (2º plano): ${snap.run.state}…`);
+        await callRunWorkflowWave({
+          data: { workflowRunId: runId, projectId, files: [] },
+        });
+      } catch (e) {
+        console.error("[workflow-bg] poll:", e);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => void tick(), 2800);
+    void tick();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    backgroundWorkflowRunId,
+    projectId,
+    multiAgentBg,
+    callGetWorkflowStatus,
+    callRunWorkflowWave,
+    finishBackgroundWorkflow,
+    clearBackgroundWorkflow,
+  ]);
+
   const fetchGafcoreChatComplete = async (
     tok: string,
     history: ChatMsg[],
@@ -1375,16 +1600,56 @@ export function ChatPanel({
     }));
 
     setPipelineStatus("Multiagente: planificando…");
+    setActiveWorkflowRunId(null);
+    setWorkflowTasks([]);
+    setWorkflowPlanSummary(null);
+    setWorkflowState(null);
+
     const started = await callPlanAndStartWorkflow({
       data: { projectId, instruction, files: ctxFiles },
     });
     if (!started.ok) {
+      if (started.error === "workflow_limit_reached") {
+        const active = "active" in started ? started.active : 0;
+        const max = "max" in started ? started.max : 2;
+        toast.error(`Límite de workflows activos (${active}/${max})`, {
+          description: "Espera a que termine uno o desactiva multiagente en segundo plano.",
+          duration: 8000,
+        });
+        throw new Error("WORKFLOW_LIMIT_REACHED");
+      }
       throw new Error(started.error === "plan_failed" ? "PLAN_FAILED" : "WORKFLOW_START_FAILED");
     }
     if (myEpoch !== requestEpochRef.current) {
       return { reply: "Cancelado.", files: [] };
     }
 
+    if (multiAgentBg) {
+      if (workflowStorageKey) {
+        try {
+          localStorage.setItem(workflowStorageKey, started.workflowRunId);
+        } catch {
+          /* */
+        }
+      }
+      bgWorkflowMetaRef.current = { instruction, userLabel, effectiveBuild, visualEditOn };
+      setBackgroundWorkflowRunId(started.workflowRunId);
+      setWorkflowPlanSummary(started.planSummary);
+      setWorkflowState("executing");
+      setPipelineStatus("Multiagente (2º plano): plan listo, ejecutando…");
+      appendMessageDeduped(
+        "ai",
+        `**Plan multiagente (segundo plano):** ${started.planSummary}\n\nPuedes seguir usando el chat; te avisamos al terminar.`,
+      );
+      scrollChatToBottomSoon("auto");
+      return {
+        reply: `Workflow en segundo plano iniciado.\n\n**Plan:** ${started.planSummary}`,
+        files: [],
+      };
+    }
+
+    setActiveWorkflowRunId(started.workflowRunId);
+    setWorkflowPlanSummary(started.planSummary);
     setPipelineStatus(`Plan: ${started.planSummary}`);
     appendMessageDeduped(
       "ai",
@@ -1392,20 +1657,59 @@ export function ChatPanel({
     );
     scrollChatToBottomSoon("auto");
 
-    const batch = await callRunWorkflowBatch({
-      data: {
-        workflowRunId: started.workflowRunId,
-        projectId,
-        files: ctxFiles,
-        maxSteps: 8,
-      },
-    });
+    const refreshStatus = async () => {
+      const snap = await callGetWorkflowStatus({
+        data: { workflowRunId: started.workflowRunId },
+      });
+      if (!snap.ok) return;
+      setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
+      setWorkflowState(snap.run.state);
+      if (snap.planSummary) setWorkflowPlanSummary(snap.planSummary);
+    };
+
+    await refreshStatus();
+
+    const allSteps: Awaited<ReturnType<typeof callRunWorkflowWave>>["steps"] = [];
+    let waves = 0;
+    let done = false;
+    const maxWaves = 12;
+
+    while (!done && waves < maxWaves && myEpoch === requestEpochRef.current) {
+      setPipelineStatus(`Multiagente: ola ${waves + 1}…`);
+      const wave = await callRunWorkflowWave({
+        data: {
+          workflowRunId: started.workflowRunId,
+          projectId,
+          files: [],
+        },
+      });
+      waves += 1;
+      allSteps.push(...wave.steps);
+      done = wave.done;
+      setWorkflowState(wave.workflowState);
+      await refreshStatus();
+      if (wave.claimed === 0) break;
+    }
+
     if (myEpoch !== requestEpochRef.current) {
+      setActiveWorkflowRunId(null);
       return { reply: "Cancelado.", files: [] };
     }
 
+    const finalSnap = await callGetWorkflowStatus({
+      data: { workflowRunId: started.workflowRunId },
+    });
+    const mergedPatches =
+      finalSnap.ok && finalSnap.filesSnapshot?.length
+        ? finalSnap.filesSnapshot.map((f) => ({
+            name: f.name,
+            language: f.language,
+            content: f.content,
+          }))
+        : [];
+
     const lines: string[] = [];
-    for (const step of batch.steps) {
+    for (const step of allSteps) {
       if (!step.task) continue;
       const label = agentTypeLabel(step.task.agent_type);
       const status = step.error ? `❌ ${step.error}` : "✓";
@@ -1415,21 +1719,20 @@ export function ChatPanel({
       }
     }
 
-    const waveNote =
-      typeof batch.waves === "number" && batch.waves > 0
-        ? ` (${batch.waves} ola(s) paralelas)`
-        : "";
+    const wfState = finalSnap.ok ? finalSnap.run.state : "unknown";
+    const waveNote = waves > 0 ? ` (${waves} ola(s) paralelas)` : "";
     const reply =
       lines.length > 0
-        ? `Workflow **${batch.workflowState}**${waveNote}.\n\n${lines.join("\n")}`
-        : `Workflow **${batch.workflowState}**${waveNote} completado.`;
+        ? `Workflow **${wfState}**${waveNote}.\n\n${lines.join("\n")}`
+        : `Workflow **${wfState}**${waveNote} completado.`;
 
     setPipelineStatus(
-      batch.workflowState === "completed" ? "Multiagente: listo" : `Multiagente: ${batch.workflowState}`,
+      wfState === "completed" ? "Multiagente: listo" : `Multiagente: ${wfState}`,
     );
+    setActiveWorkflowRunId(null);
 
-    if (batch.mergedPatches.length > 0 && effectiveBuild) {
-      const patchFiles = batch.mergedPatches.map((p) => ({
+    if (mergedPatches.length > 0 && effectiveBuild) {
+      const patchFiles = mergedPatches.map((p) => ({
         name: p.name,
         language: p.language,
         content: p.content,
@@ -1444,11 +1747,7 @@ export function ChatPanel({
 
     return {
       reply,
-      files: batch.mergedPatches.map((p) => ({
-        name: p.name,
-        language: p.language,
-        content: p.content,
-      })),
+      files: mergedPatches,
     };
   };
 
@@ -1830,6 +2129,18 @@ export function ChatPanel({
             {[pipelineStatus, validationLabel].filter(Boolean).join(" · ")}
           </p>
         ) : null}
+        {activeWorkflowRunId || backgroundWorkflowRunId || workflowTasks.length > 0 ? (
+          <WorkflowTaskStrip
+            className="mt-2"
+            tasks={workflowTasks}
+            planSummary={workflowPlanSummary}
+            workflowState={workflowState}
+            onCancel={
+              activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
+            }
+            cancelPending={workflowCancelPending}
+          />
+        ) : null}
         {!isAdmin ? (
           <Button
             type="button"
@@ -2105,6 +2416,38 @@ export function ChatPanel({
                     <Sparkles className="mr-2 h-4 w-4" />
                     <span className="flex-1">Multiagente (beta)</span>
                     {multiAgentMode ? (
+                      <span className="text-[10px] font-medium text-primary">ON</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">OFF</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!multiAgentMode}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (!multiAgentMode) {
+                        toast.message("Activa Multiagente (beta) primero.");
+                        return;
+                      }
+                      setMultiAgentBg((v) => {
+                        const next = !v;
+                        try {
+                          window.localStorage.setItem("gafcore_multi_agent_bg", next ? "1" : "0");
+                        } catch {
+                          /* */
+                        }
+                        toast.message(
+                          next
+                            ? "Segundo plano: planifica y ejecuta sin bloquear el chat."
+                            : "Segundo plano desactivado: ejecución síncrona por olas.",
+                        );
+                        return next;
+                      });
+                    }}
+                  >
+                    <GitFork className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Multiagente en 2º plano</span>
+                    {multiAgentBg ? (
                       <span className="text-[10px] font-medium text-primary">ON</span>
                     ) : (
                       <span className="text-[10px] text-muted-foreground">OFF</span>
