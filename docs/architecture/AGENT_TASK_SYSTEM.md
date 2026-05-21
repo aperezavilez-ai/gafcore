@@ -19,7 +19,7 @@ Archivos sueltos (si ya tienes pipeline):
 1. Solo el **Scheduler** cambia estados y asigna trabajo.
 2. Solo el **Planner** crea tareas (DAG).
 3. Agentes hablan por **artefactos** (`TaskPlan`, `FilePatch[]`, `ValidationReport`), no chat libre.
-4. **Un escritor activo por path** (`file_locks` + 1 worker/proyecto en v1).
+4. **Un escritor activo por path** (`file_locks` en `gafcore_agent_tasks` + 1 escritor por ola).
 5. **Validation** entre tareas que escriben código.
 
 ## Capas
@@ -79,7 +79,7 @@ src/agents/
 | A2 | Planner + executor + `planAndStart` / `runGafcoreWorkflowBatch` | **Hecho** |
 | B0–B2 | Ejecución distribuida (RPC claim, paralelo, drain) | **Hecho** — `DISTRIBUTED_EXECUTION.md` |
 | A3 | Merge parches en snapshot + UI árbol tareas (`WorkflowTaskStrip`) | **Hecho** |
-| A4 | Métricas en status + enlace pipeline ↔ workflow | **Parcial** |
+| A4 | Métricas, pipeline ↔ workflow, historial en ajustes, file_locks | **Hecho** |
 | B4 | Límite workflows activos + segundo plano IDE | **Hecho** |
 
 ## Integración

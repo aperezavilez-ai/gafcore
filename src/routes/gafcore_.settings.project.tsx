@@ -6,6 +6,7 @@ import {
   Settings as SettingsIcon,
   Globe,
   GitBranch,
+  GitFork,
   Users,
   CreditCard,
   Cloud,
@@ -36,6 +37,7 @@ import { createStripeCustomerPortalSession } from "@/lib/server-fns/payments.fun
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { Badge } from "@/components/ui/badge";
 import { ProjectMemoryConventionsPanel } from "@/components/gafcore/ProjectMemoryConventionsPanel";
+import { WorkflowHistoryPanel } from "@/components/gafcore/WorkflowHistoryPanel";
 
 const SETTINGS_SECTION_IDS = [
   "project",
@@ -49,6 +51,7 @@ const SETTINGS_SECTION_IDS = [
   "privacy",
   "devices",
   "memory",
+  "workflows",
 ] as const;
 type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
@@ -75,6 +78,7 @@ const SIDEBAR_GROUPS = [
       { id: "domains", label: "Dominios", icon: Globe },
       { id: "git", label: "Git", icon: GitBranch },
       { id: "memory", label: "Memoria IA", icon: Brain },
+      { id: "workflows", label: "Multiagente", icon: GitFork },
     ],
   },
   {
@@ -277,6 +281,18 @@ function SectionPanel(p: PanelProps) {
     case "privacy": return <PrivacyPanel />;
     case "devices": return <DevicesPanel />;
     case "memory": return <ProjectMemoryConventionsPanel />;
+    case "workflows":
+      return (
+        <>
+          <PanelHeader
+            title="Workflows multiagente"
+            subtitle="Historial de planes y ejecuciones en servidor."
+          />
+          <div className="mt-6">
+            <WorkflowHistoryPanel />
+          </div>
+        </>
+      );
     default: return <ProjectOverviewPanel {...p} />;
   }
 }

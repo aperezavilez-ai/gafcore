@@ -39,8 +39,9 @@ export async function executeAgentTask(opts: {
   }
 
   if (task.agent_type === "deployment") {
-    const reply = "Tarea de despliegue registrada (ejecución manual desde Publicar).";
-    await appendTaskLog(task.id, "deploy_skip", reply);
+    const reply =
+      "Despliegue: usa el botón **Publicar** en la barra del IDE (GitHub + Vercel). Esta tarea no publica automáticamente en v1.";
+    await appendTaskLog(task.id, "deploy_hint", reply);
     return { reply, patches: [] };
   }
 

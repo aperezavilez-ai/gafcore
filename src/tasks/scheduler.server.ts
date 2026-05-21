@@ -2,6 +2,11 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { TaskPlan } from "@/tasks/artifacts.shared";
 import { AGENT_REGISTRY } from "@/agents/registry.shared";
 import type { AgentTaskRow, TaskState } from "@/tasks/types";
+import {
+  clearTaskFileLocks,
+  filterTasksByFileLocks,
+  getActiveLocksForWorkflow,
+} from "@/tasks/file-locks.server";
 
 const LEASE_MS = 5 * 60 * 1000;
 
@@ -260,6 +265,7 @@ export async function completeTask(
   opts?: { errorCode?: string; errorMessage?: string; artifactIds?: string[] },
 ): Promise<void> {
   const state: TaskState = outcome === "succeeded" ? "succeeded" : "failed";
+  await clearTaskFileLocks(taskId);
   await supabaseAdmin
     .from("gafcore_agent_tasks")
     .update({

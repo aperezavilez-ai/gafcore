@@ -12,6 +12,12 @@ import {
   releaseTaskToReady,
   getWorkflowMaxParallel,
 } from "@/tasks/scheduler.server";
+import {
+  filterTasksByFileLocks,
+  getActiveLocksForWorkflow,
+  pathsFromPatches,
+  setTaskFileLocks,
+} from "@/tasks/file-locks.server";
 import { executeAgentTask, persistTaskArtifact } from "@/tasks/executor.server";
 import type { AgentTaskRow } from "@/tasks/types";
 import type { FilePatch } from "@/tasks/artifacts.shared";
@@ -45,15 +51,22 @@ export async function planAndCreateWorkflow(
 }
 
 export async function syncWorkflowRunState(workflowRunId: string): Promise<string> {
-  const { data: tasks } = await supabaseAdmin
+  const { data: taskRows } = await supabaseAdmin
     .from("gafcore_agent_tasks")
-    .select("state")
+    .select("state, agent_type")
     .eq("workflow_run_id", workflowRunId);
 
-  const states = (tasks ?? []).map((t) => t.state);
+  const states = (taskRows ?? []).map((t) => t.state);
   if (states.length === 0) return "planning";
 
   let next = "executing";
+  if (taskRows?.some((t) => t.state === "running" && t.agent_type === "validation")) {
+    next = "validating";
+  } else if (
+    taskRows?.some((t) => t.state === "running" && ["frontend", "backend", "refactor"].includes(t.agent_type))
+  ) {
+    next = "executing";
+  }
   if (states.every((s) => s === "succeeded" || s === "cancelled")) {
     next = "completed";
   } else if (states.some((s) => s === "failed")) {
@@ -119,6 +132,7 @@ export async function executeClaimedTask(opts: {
     await appendTaskLog(task.id, "executed", result.reply.slice(0, 200));
     if (result.patches.length > 0) {
       await applyWorkflowPatches(workflowRunId, result.patches);
+      await setTaskFileLocks(task.id, pathsFromPatches(result.patches));
     }
     const workflowState = await syncWorkflowRunState(workflowRunId);
     return {
@@ -216,7 +230,17 @@ export async function runWorkflowParallelWave(opts: {
     };
   }
 
-  const { toRun, deferredWriters } = pickTasksForParallelWave(claimed);
+  const activeLocks = await getActiveLocksForWorkflow(workflowRunId);
+  const { toRun: lockFiltered, deferred: lockDeferred } = filterTasksByFileLocks(
+    claimed,
+    activeLocks,
+  );
+  for (const t of lockDeferred) {
+    await releaseTaskToReady(t.id);
+    await appendTaskLog(t.id, "deferred", "Path bloqueado por otra tarea", "info");
+  }
+
+  const { toRun, deferredWriters } = pickTasksForParallelWave(lockFiltered);
   for (const w of deferredWriters) {
     await releaseTaskToReady(w.id);
     await appendTaskLog(w.id, "deferred", "Escritor en cola (1 por ola)", "info");
