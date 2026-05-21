@@ -23,4 +23,4 @@ additional_redirect_urls = [
 
 [auth.email.template.recovery]
 subject = "Restablecer contraseña — GafCore"
-content_path = "./templates/recovery.html"
+content_path = "./supabase/templates/recovery.html"

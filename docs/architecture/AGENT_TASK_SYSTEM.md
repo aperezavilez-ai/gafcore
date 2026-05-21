@@ -4,7 +4,15 @@
 
 ## Aplicar en Supabase
 
-Ejecutar `supabase/migrations/20260528120000_gafcore_agent_tasks.sql` en el SQL Editor (mismo flujo que memoria M1).
+**Opción A (recomendada):** Supabase → **SQL Editor** → pegar y ejecutar todo  
+`supabase/scripts/apply-workflow-migrations.sql` (incluye pipeline + agent tasks + claim RPC).  
+Al final debe mostrar 3 filas con `ok = 1`.
+
+**Opción B (CLI):** `npx supabase login` → `npx supabase link --project-ref hbfbqqwetaynblmkezeu` →  
+`npm run gafcore:migrate-workflow`
+
+Archivos sueltos (si ya tienes pipeline):  
+`20260528120000_gafcore_agent_tasks.sql`, luego `20260529120000_gafcore_task_claim_rpc.sql`.
 
 ## Principios
 
