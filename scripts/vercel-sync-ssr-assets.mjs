@@ -160,6 +160,7 @@ if (mainCss && mainIndexJs) {
 const publicDir = join(root, "public");
 const staticRoot = join(outDir, "static");
 const publicIcons = [
+  "favicon.ico",
   "favicon.svg",
   "favicon.png",
   "favicon-32.png",

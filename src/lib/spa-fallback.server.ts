@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   GAFCORE_APPLE_TOUCH_ICON_PATH,
+  GAFCORE_FAVICON_INLINE,
   GAFCORE_FAVICON_PATH,
   GAFCORE_FAVICON_SVG_PATH,
 } from "./site-icons.shared";
@@ -72,6 +73,8 @@ export function spaFallbackResponse(_request: Request): Response | null {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GafCore</title>
+    <link rel="icon" href="${GAFCORE_FAVICON_INLINE}" />
+    <link rel="shortcut icon" href="${GAFCORE_FAVICON_INLINE}" />
     <link rel="icon" type="image/svg+xml" href="${GAFCORE_FAVICON_SVG_PATH}" />
     <link rel="icon" type="image/png" sizes="32x32" href="${GAFCORE_FAVICON_PATH}" />
     <link rel="apple-touch-icon" href="${GAFCORE_APPLE_TOUCH_ICON_PATH}" />

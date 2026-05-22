@@ -13,11 +13,12 @@ const PATH_TO_FILE: Record<string, string> = {
   "/favicon-32.png": "favicon-32.png",
   [GAFCORE_APPLE_TOUCH_ICON_PATH]: "apple-touch-icon.png",
   "/og-image.png": "og-image.png",
-  "/favicon.ico": "favicon.png",
+  "/favicon.ico": "favicon.ico",
 };
 
 const MIME_BY_FILE: Record<string, string> = {
   "favicon.svg": "image/svg+xml",
+  "favicon.ico": "image/png",
   "favicon.png": "image/png",
   "favicon-32.png": "image/png",
   "apple-touch-icon.png": "image/png",
