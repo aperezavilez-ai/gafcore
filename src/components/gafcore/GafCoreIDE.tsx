@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { GafCoreAuthDialog } from "@/components/ide/GafCoreAuthDialog";
@@ -66,6 +66,7 @@ import {
   CreditCard,
   Check,
   Brain,
+  Search,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -87,6 +88,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ChatPanel } from "@/components/ide/ChatPanel";
 import { CodeEditor, initialFiles, type FileItem } from "@/components/ide/CodeEditor";
 import { LivePreview } from "@/components/ide/LivePreview";
@@ -103,6 +105,7 @@ import { getProjectDeployStatus } from "@/lib/gafcore-deploy.functions";
 import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
 import { getStripeEnvironment } from "@/lib/stripe";
@@ -130,9 +133,31 @@ function ideUserToolbarName(
   return "Tu cuenta";
 }
 
+/** Etiqueta corta junto al logo G: primer nombre de registro o primer token del nombre. */
+function ideUserToolbarShortName(
+  user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined,
+  profile?: { first_name?: string | null } | null,
+): string {
+  if (!user) return "";
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const firstToken = (s: string) => s.split(/\s+/).filter(Boolean)[0] ?? s;
+  const pfn = str(profile?.first_name);
+  if (pfn) return firstToken(pfn);
+  const meta = user.user_metadata ?? {};
+  const fn = str(meta.first_name) || str(meta.given_name);
+  if (fn) return firstToken(fn);
+  const full = str(meta.full_name);
+  if (full) return firstToken(full);
+  const local = user.email?.split("@")[0]?.trim();
+  if (local) return local;
+  return "Cuenta";
+}
+
 export function GafCoreIDE() {
   const { user } = useAuth();
+  const { profile } = useProfile(user?.id);
   const navigate = useNavigate();
+  const userShortLabel = ideUserToolbarShortName(user, profile);
   const {
     balance,
     monthlyAllowance,
@@ -160,7 +185,10 @@ export function GafCoreIDE() {
   /** ID del proyecto activo (sincronizado con `setCurrentProjectId` en userSupabase). */
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(null);
   const [userProjects, setUserProjects] = useState<ProjectRow[]>([]);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
   const [switchingProject, setSwitchingProject] = useState(false);
+  const projectSearchRef = useRef<HTMLInputElement>(null);
   const [deploySiteHost, setDeploySiteHost] = useState<string | null>(null);
   const [deployGithubRepo, setDeployGithubRepo] = useState<string | null>(null);
   const [deployGithubReady, setDeployGithubReady] = useState(() => isGithubDeployConfigured());
@@ -256,6 +284,14 @@ export function GafCoreIDE() {
       ? 100
       : Math.max(0, Math.min(100, (balance / displayMonthly) * 100));
 
+  const filteredUserProjects = useMemo(() => {
+    const q = projectSearch.trim().toLowerCase();
+    if (!q) return userProjects;
+    return userProjects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [userProjects, projectSearch]);
+
+  const showProjectSearch = userProjects.length > 4 || projectSearch.length > 0;
+
   const refreshProjects = async () => {
     const list = await listProjects();
     setUserProjects(list);
@@ -263,6 +299,33 @@ export function GafCoreIDE() {
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
   };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (key !== "p" || !(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey) return;
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      setProjectMenuOpen(true);
+      void refreshProjects();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!projectMenuOpen || !showProjectSearch) return;
+    const t = window.setTimeout(() => projectSearchRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [projectMenuOpen, showProjectSearch]);
 
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
     const appFile = remote?.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
@@ -705,6 +768,14 @@ export function GafCoreIDE() {
           >
             G
           </div>
+          {userShortLabel ? (
+            <span
+              className="ml-1 min-w-0 max-w-[min(32vw,180px)] shrink truncate text-[13px] font-semibold text-foreground"
+              title={ideUserToolbarName(user)}
+            >
+              {userShortLabel}
+            </span>
+          ) : null}
           <div className="ml-1 flex items-center md:hidden">
             <button
               type="button"
@@ -770,7 +841,10 @@ export function GafCoreIDE() {
           )}
           <DropdownMenu
             modal={false}
+            open={projectMenuOpen}
             onOpenChange={(open) => {
+              setProjectMenuOpen(open);
+              if (!open) setProjectSearch("");
               if (open) void refreshProjects();
             }}
           >
@@ -780,8 +854,8 @@ export function GafCoreIDE() {
                 className="flex h-7 min-w-0 max-w-[200px] items-center gap-1 rounded-md border border-border/80 bg-muted/30 px-2 text-left hover:bg-muted"
                 title={
                   currentProjectId
-                    ? `Proyecto abierto: ${projectName}`
-                    : "Crea o elige un proyecto"
+                    ? `Proyecto abierto: ${projectName} · Ctrl+Shift+P`
+                    : "Crea o elige un proyecto · Ctrl+Shift+P"
                 }
                 aria-label={`Proyecto: ${projectName}. Abrir lista de proyectos`}
               >
@@ -813,28 +887,54 @@ export function GafCoreIDE() {
                   <Plus className="h-3 w-3" /> Nuevo
                 </button>
               </DropdownMenuLabel>
+              {showProjectSearch ? (
+                <div
+                  className="px-2 pb-1"
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      ref={projectSearchRef}
+                      value={projectSearch}
+                      onChange={(e) => setProjectSearch(e.target.value)}
+                      placeholder="Buscar proyecto…"
+                      className="h-8 pl-7 text-xs"
+                      aria-label="Buscar proyecto"
+                    />
+                  </div>
+                </div>
+              ) : null}
               {userProjects.length === 0 ? (
                 <div className="px-2 py-1.5 text-xs text-muted-foreground">
                   Sin proyectos. Usa «+ Nuevo» para crear uno.
                 </div>
+              ) : filteredUserProjects.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                  Ningún proyecto coincide con «{projectSearch.trim()}».
+                </div>
               ) : (
-                userProjects.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    disabled={switchingProject}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      void switchToProject(p);
-                    }}
-                  >
-                    {p.id === currentProjectId ? (
-                      <Check className="mr-2 h-4 w-4 text-primary" />
-                    ) : (
-                      <Folder className="mr-2 h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span className="flex-1 truncate">{p.name}</span>
-                  </DropdownMenuItem>
-                ))
+                <div className="max-h-[min(50vh,280px)] overflow-y-auto">
+                  {filteredUserProjects.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      disabled={switchingProject}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setProjectMenuOpen(false);
+                        setProjectSearch("");
+                        void switchToProject(p);
+                      }}
+                    >
+                      {p.id === currentProjectId ? (
+                        <Check className="mr-2 h-4 w-4 text-primary" />
+                      ) : (
+                        <Folder className="mr-2 h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="flex-1 truncate">{p.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </div>
               )}
               <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/projects" })}>
                 <LayoutGrid className="mr-2 h-4 w-4" />
@@ -1484,6 +1584,7 @@ export function GafCoreIDE() {
               ["Ctrl + S", "Guardar archivos"],
               ["Ctrl + B", "Mostrar/ocultar archivos"],
               ["Ctrl + K", "Buscar"],
+              ["Ctrl + Shift + P", "Cambiar de proyecto"],
               ["Ctrl + Enter", "Enviar mensaje al chat"],
               ["Esc", "Cerrar diálogo"],
             ].map(([k, d]) => (
