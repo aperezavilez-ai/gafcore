@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requireGafcoreAdmin } from "@/lib/server-fns/require-gafcore-admin.middleware";
 import {
+  ensurePublisherForUser,
   listAdminMarketplaceListings,
+  listCreatorMarketplaceListings,
   setListingState,
   upsertListingFromManifest,
 } from "@/extensions/publisher.server";
@@ -50,4 +53,44 @@ export const setAdminMarketplaceListingStateFn = createServerFn({ method: "POST"
     const result = await setListingState(data.listingId, data.state);
     if (!result.ok) return { ok: false as const, error: result.error };
     return { ok: true as const };
+  });
+
+export const getMyGafcorePublisherFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const result = await ensurePublisherForUser(context.userId);
+    if (!result.ok) return { ok: false as const, error: result.error };
+    return { ok: true as const, publisher: result.publisher };
+  });
+
+export const listMyMarketplaceListingsFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const listings = await listCreatorMarketplaceListings(context.userId);
+    return { ok: true as const, listings };
+  });
+
+const creatorPublishSchema = publishSchema.omit({ publisherSlug: true });
+
+export const submitCreatorMarketplaceListingFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => creatorPublishSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const ensured = await ensurePublisherForUser(context.userId);
+    if (!ensured.ok) return { ok: false as const, error: ensured.error };
+
+    const result = await upsertListingFromManifest({
+      publisherSlug: ensured.publisher.slug,
+      listingSlug: data.listingSlug,
+      name: data.name,
+      description: data.description,
+      kind: data.kind,
+      versionLabel: data.versionLabel,
+      manifestJson: data.manifestJson,
+      publish: data.publish,
+      creatorUserId: context.userId,
+      priceCents: 0,
+    });
+    if (!result.ok) return { ok: false as const, error: result.error };
+    return { ok: true as const, listingId: result.listingId, state: result.state };
   });

@@ -41,6 +41,12 @@ export function MarketplaceInstallsPanel() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const onChange = () => void load();
+    window.addEventListener("gafcore:extensions-changed", onChange);
+    return () => window.removeEventListener("gafcore:extensions-changed", onChange);
+  }, [load]);
+
   const onUninstall = async (listingId: string) => {
     setBusyId(listingId);
     try {
@@ -74,9 +80,14 @@ export function MarketplaceInstallsPanel() {
         <p className="text-sm text-muted-foreground">
           No tienes extensiones instaladas. Explora plantillas y plugins IA en el marketplace.
         </p>
-        <Button asChild>
-          <Link to="/gafcore/marketplace">Abrir marketplace</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link to="/gafcore/marketplace">Abrir marketplace</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/gafcore/publisher">Publicar extensión</Link>
+          </Button>
+        </div>
       </div>
     );
   }

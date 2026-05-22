@@ -47,7 +47,8 @@ El IDE y `createProjectFromTemplate` **no cambian** su API; solo el servidor res
 ## UI
 
 - `/gafcore/marketplace` — listado + instalar plantillas publicadas
-- Ajustes proyecto → sección **Marketplace** → enlace al catálogo
+- `/gafcore/publisher` — enviar extensiones a revisión
+- Ajustes proyecto → sección **Marketplace** → extensiones instaladas + enlace al catálogo
 
 ## Server functions
 
@@ -70,11 +71,18 @@ GAFCORE_EXTENSIONS_ENABLED=1
 GAFCORE_MAX_EXTENSIONS_PER_USER=20
 ```
 
+## Publisher
+
+| Ruta | Quién |
+|------|--------|
+| `/gafcore/publisher` | Cualquier usuario logueado — envía listings a estado `review` |
+| `/gafcore/admin/marketplace` | Solo `admin` — publica/revoca directamente |
+
+Migración E2: `price_cents` / `currency` en listings; instalación bloqueada si `price_cents > 0` hasta Stripe.
+
 ## Fases siguientes
 
-- **E2:** Pagos (publisher admin en `/gafcore/admin/marketplace` — sin pagos aún)
-- **E3:** Plugin IA `before_chat`
-- **E4:** Agentes `webhook` — en progreso (notify al terminar workflow; prueba en marketplace)
-- **E5:** API keys publisher + revisión listings
+- **E2 (pagos):** Checkout Stripe para listings con precio &gt; 0
+- **E5:** API keys publisher + moderación automática
 
 Ver también `WORKFLOW_DEPLOY_CHECKLIST.md` (workflow independiente).

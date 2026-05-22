@@ -14,23 +14,27 @@ export type AdminListingRow = {
   state: string;
   versionLabel: string;
   updatedAt: string;
+  priceCents: number;
 };
 
-export async function listAdminMarketplaceListings(): Promise<AdminListingRow[]> {
-  if (!extensionsEnabled()) return [];
+export type PublisherIdentity = {
+  publisherId: string;
+  slug: string;
+  displayName: string;
+};
 
-  const { data, error } = await supabaseAdmin
-    .from("gafcore_marketplace_listings")
-    .select("id, slug, name, description, kind, state, version_label, updated_at")
-    .order("updated_at", { ascending: false })
-    .limit(100);
-
-  if (error) {
-    console.error("[publisher] list:", error);
-    return [];
-  }
-
-  return (data ?? []).map((r) => ({
+function mapListingRow(r: {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  kind: string;
+  state: string;
+  version_label: string | null;
+  updated_at: string;
+  price_cents?: number | null;
+}): AdminListingRow {
+  return {
     id: r.id,
     slug: r.slug,
     name: r.name,
@@ -39,7 +43,129 @@ export async function listAdminMarketplaceListings(): Promise<AdminListingRow[]>
     state: r.state,
     versionLabel: r.version_label ?? "1.0.0",
     updatedAt: r.updated_at,
-  }));
+    priceCents: r.price_cents ?? 0,
+  };
+}
+
+export async function listAdminMarketplaceListings(): Promise<AdminListingRow[]> {
+  if (!extensionsEnabled()) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from("gafcore_marketplace_listings")
+    .select(
+      "id, slug, name, description, kind, state, version_label, updated_at, price_cents",
+    )
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error("[publisher] list:", error);
+    return [];
+  }
+
+  return (data ?? []).map(mapListingRow);
+}
+
+/** Publisher vinculado al usuario (creador). */
+export async function ensurePublisherForUser(
+  userId: string,
+): Promise<{ ok: true; publisher: PublisherIdentity } | { ok: false; error: string }> {
+  if (!extensionsEnabled()) return { ok: false, error: "extensions_disabled" };
+
+  const { data: existing } = await supabaseAdmin
+    .from("gafcore_publishers")
+    .select("id, slug, display_name")
+    .eq("owner_user_id", userId)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return {
+      ok: true,
+      publisher: {
+        publisherId: existing.id,
+        slug: existing.slug,
+        displayName: existing.display_name,
+      },
+    };
+  }
+
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("first_name, artist_name, email")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const rawName =
+    profile?.artist_name?.trim() ||
+    profile?.first_name?.trim() ||
+    profile?.email?.split("@")[0] ||
+    "creator";
+  const baseSlug = rawName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+  const suffix = userId.replace(/-/g, "").slice(0, 6);
+  let slug = baseSlug ? `${baseSlug}-${suffix}` : `creator-${suffix}`;
+  if (slug.length < 3) slug = `creator-${suffix}`;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const trySlug = attempt === 0 ? slug : `${slug}-${attempt}`;
+    const { data: created, error: pubErr } = await supabaseAdmin
+      .from("gafcore_publishers")
+      .insert({
+        slug: trySlug,
+        display_name: rawName,
+        verified: false,
+        owner_user_id: userId,
+      })
+      .select("id, slug, display_name")
+      .single();
+
+    if (!pubErr && created?.id) {
+      return {
+        ok: true,
+        publisher: {
+          publisherId: created.id,
+          slug: created.slug,
+          displayName: created.display_name,
+        },
+      };
+    }
+    if (pubErr?.code !== "23505") {
+      console.error("[publisher] ensure:", pubErr);
+      return { ok: false, error: "publisher_create_failed" };
+    }
+  }
+
+  return { ok: false, error: "publisher_create_failed" };
+}
+
+export async function listCreatorMarketplaceListings(
+  userId: string,
+): Promise<AdminListingRow[]> {
+  if (!extensionsEnabled()) return [];
+
+  const ensured = await ensurePublisherForUser(userId);
+  if (!ensured.ok) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from("gafcore_marketplace_listings")
+    .select(
+      "id, slug, name, description, kind, state, version_label, updated_at, price_cents",
+    )
+    .eq("publisher_id", ensured.publisher.publisherId)
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error("[publisher] creator list:", error);
+    return [];
+  }
+
+  return (data ?? []).map(mapListingRow);
 }
 
 export async function setListingState(
@@ -67,7 +193,11 @@ export async function upsertListingFromManifest(input: {
   versionLabel: string;
   manifestJson: string;
   publish: boolean;
-}): Promise<{ ok: true; listingId: string } | { ok: false; error: string }> {
+  /** Si está definido, el listing queda en `review` al enviar (no publicación directa). */
+  creatorUserId?: string;
+  priceCents?: number;
+  currency?: string;
+}): Promise<{ ok: true; listingId: string; state: string } | { ok: false; error: string }> {
   if (!extensionsEnabled()) return { ok: false, error: "extensions_disabled" };
 
   let manifestRaw: unknown;
@@ -100,28 +230,44 @@ export async function upsertListingFromManifest(input: {
     return { ok: false, error: "agent_slug_must_match_listing" };
   }
 
-  const { data: publisher } = await supabaseAdmin
-    .from("gafcore_publishers")
-    .select("id")
-    .eq("slug", input.publisherSlug)
-    .maybeSingle();
+  let publisherId: string | undefined;
 
-  let publisherId = publisher?.id;
-  if (!publisherId) {
-    const { data: created, error: pubErr } = await supabaseAdmin
+  if (input.creatorUserId) {
+    const ensured = await ensurePublisherForUser(input.creatorUserId);
+    if (!ensured.ok) return { ok: false, error: ensured.error };
+    publisherId = ensured.publisher.publisherId;
+  } else {
+    const { data: publisher } = await supabaseAdmin
       .from("gafcore_publishers")
-      .insert({
-        slug: input.publisherSlug,
-        display_name: input.publisherSlug,
-        verified: true,
-      })
       .select("id")
-      .single();
-    if (pubErr || !created?.id) return { ok: false, error: "publisher_create_failed" };
-    publisherId = created.id;
+      .eq("slug", input.publisherSlug)
+      .maybeSingle();
+
+    publisherId = publisher?.id;
+    if (!publisherId) {
+      const { data: created, error: pubErr } = await supabaseAdmin
+        .from("gafcore_publishers")
+        .insert({
+          slug: input.publisherSlug,
+          display_name: input.publisherSlug,
+          verified: true,
+        })
+        .select("id")
+        .single();
+      if (pubErr || !created?.id) return { ok: false, error: "publisher_create_failed" };
+      publisherId = created.id;
+    }
   }
 
-  const state = input.publish ? "published" : "draft";
+  const priceCents = Math.max(0, Math.floor(input.priceCents ?? 0));
+  const currency = (input.currency ?? "eur").trim().toLowerCase() || "eur";
+  const state = input.creatorUserId
+    ? input.publish
+      ? "review"
+      : "draft"
+    : input.publish
+      ? "published"
+      : "draft";
 
   const { data: listing, error: listErr } = await supabaseAdmin
     .from("gafcore_marketplace_listings")
@@ -134,6 +280,8 @@ export async function upsertListingFromManifest(input: {
         kind: input.kind,
         state,
         version_label: input.versionLabel,
+        price_cents: priceCents,
+        currency,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "slug" },
@@ -174,5 +322,5 @@ export async function upsertListingFromManifest(input: {
     })
     .eq("id", listing.id);
 
-  return { ok: true, listingId: listing.id };
+  return { ok: true, listingId: listing.id, state };
 }

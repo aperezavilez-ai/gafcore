@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -38,14 +38,13 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const callList = useServerFn(listGafcoreProjectTemplates);
   const callCreate = useServerFn(createProjectFromTemplate);
 
-  useEffect(() => {
-    if (!open) return;
+  const refreshTemplates = useCallback(() => {
     setLoadingList(true);
     void callList()
       .then((r) => {
         const list = r?.templates ?? [];
         setTemplates(list);
-        if (list.length > 0) setSlug(list[0].slug);
+        if (list.length > 0 && !list.some((t) => t.slug === slug)) setSlug(list[0].slug);
       })
       .catch(() => {
         setTemplates([
@@ -57,7 +56,20 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
         ]);
       })
       .finally(() => setLoadingList(false));
-  }, [open, callList]);
+  }, [callList, slug]);
+
+  useEffect(() => {
+    if (!open) return;
+    refreshTemplates();
+  }, [open, refreshTemplates]);
+
+  useEffect(() => {
+    const onExt = () => {
+      if (open) refreshTemplates();
+    };
+    window.addEventListener("gafcore:extensions-changed", onExt);
+    return () => window.removeEventListener("gafcore:extensions-changed", onExt);
+  }, [open, refreshTemplates]);
 
   const submit = async () => {
     const trimmed = name.trim();

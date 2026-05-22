@@ -21,6 +21,7 @@ const INSTALL_ERRORS: Record<string, string> = {
   kind_not_supported_yet: "Este tipo de extensión aún no está soportado.",
   agent_webhook_required: "El agente debe definir webhookUrl en el manifest.",
   install_failed: "Error al guardar la instalación.",
+  paid_listing_not_available: "Extensiones de pago próximamente (Stripe E2).",
 };
 
 const UNINSTALL_ERRORS: Record<string, string> = {
@@ -180,12 +181,17 @@ function MarketplacePage() {
               IDE
             </Link>
           </Button>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-semibold">Marketplace GafCore</h1>
             <p className="text-sm text-muted-foreground">
               Plantillas, plugins de chat y agentes webhook para workflows.
             </p>
           </div>
+          {user ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/gafcore/publisher">Publicar extensión</Link>
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -223,18 +229,10 @@ function MarketplacePage() {
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>No hay extensiones publicadas en esta categoría.</p>
             <p>
-              Si acabas de desplegar: aplica las migraciones en el proyecto Supabase de producción
-              (SQL Editor →{" "}
-              <code className="text-xs">supabase/migrations/20260531120000_gafcore_extensions.sql</code>{" "}
-              y seeds) o ejecuta{" "}
-              <code className="text-xs">npm run gafcore:migrate-extensions</code> con el repo enlazado.
-            </p>
-            <p>
-              Comprueba{" "}
+              Diagnóstico:{" "}
               <a href="/api/__extensions-diag" className="text-primary underline" target="_blank" rel="noreferrer">
                 /api/__extensions-diag
-              </a>{" "}
-              (debe mostrar <code className="text-xs">publishedCount</code> &gt; 0).
+              </a>
             </p>
           </div>
         ) : (
@@ -262,7 +260,7 @@ function MarketplacePage() {
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {item.publisherName} · v{item.version}
+                      {item.publisherName} · v{item.version} · {item.priceLabel}
                     </p>
                   </div>
                 </div>
@@ -291,6 +289,10 @@ function MarketplacePage() {
                       {busyId === item.id ? "Quitando…" : "Quitar de mi cuenta"}
                     </Button>
                   </div>
+                ) : item.priceCents > 0 ? (
+                  <Button className="mt-4 w-full" size="sm" variant="secondary" disabled>
+                    Próximamente (de pago)
+                  </Button>
                 ) : (
                   <Button
                     className="mt-4 w-full"

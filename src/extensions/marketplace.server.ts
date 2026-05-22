@@ -12,6 +12,7 @@ import {
   templateFilesFromManifest,
 } from "@/extensions/extension-host.server";
 import type { GafcoreTemplateFile } from "@/lib/gafcore-templates.shared";
+import { formatExtensionPrice } from "@/extensions/pricing.shared";
 
 export type CatalogListing = {
   id: string;
@@ -22,6 +23,8 @@ export type CatalogListing = {
   publisherName: string;
   version: string;
   installed: boolean;
+  priceCents: number;
+  priceLabel: string;
 };
 
 export async function listPublishedCatalog(
@@ -32,7 +35,9 @@ export async function listPublishedCatalog(
 
   let query = supabaseAdmin
     .from("gafcore_marketplace_listings")
-    .select("id, slug, name, description, kind, version_label, publisher_id")
+    .select(
+      "id, slug, name, description, kind, version_label, publisher_id, price_cents, currency",
+    )
     .eq("state", "published")
     .order("sort_order", { ascending: true });
 
@@ -80,6 +85,8 @@ export async function listPublishedCatalog(
     publisherName: publisherNames.get(row.publisher_id) ?? "Publisher",
     version: row.version_label ?? "1.0.0",
     installed: installedIds.has(row.id),
+    priceCents: row.price_cents ?? 0,
+    priceLabel: formatExtensionPrice(row.price_cents ?? 0, row.currency ?? "eur"),
   }));
 }
 
@@ -169,11 +176,15 @@ export async function installListingForUser(
 
   const { data: listingRow } = await supabaseAdmin
     .from("gafcore_marketplace_listings")
-    .select("slug, current_version_id")
+    .select("slug, current_version_id, price_cents")
     .eq("id", listingId)
     .single();
 
   if (!listingRow?.current_version_id) return { ok: false, error: "listing_not_found" };
+
+  if ((listingRow.price_cents ?? 0) > 0) {
+    return { ok: false, error: "paid_listing_not_available" };
+  }
 
   const installSlug =
     manifest.kind === "template"

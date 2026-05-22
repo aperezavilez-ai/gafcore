@@ -20,6 +20,7 @@ import { Route as GafcoreRouteImport } from './routes/gafcore'
 import { Route as CreditsRouteImport } from './routes/credits'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GafcoreRegisterRouteImport } from './routes/gafcore_.register'
+import { Route as GafcorePublisherRouteImport } from './routes/gafcore_.publisher'
 import { Route as GafcoreProjectsRouteImport } from './routes/gafcore_.projects'
 import { Route as GafcoreMarketplaceRouteImport } from './routes/gafcore_.marketplace'
 import { Route as GafcoreLoginRouteImport } from './routes/gafcore_.login'
@@ -108,6 +109,11 @@ const IndexRoute = IndexRouteImport.update({
 const GafcoreRegisterRoute = GafcoreRegisterRouteImport.update({
   id: '/gafcore_/register',
   path: '/gafcore/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GafcorePublisherRoute = GafcorePublisherRouteImport.update({
+  id: '/gafcore_/publisher',
+  path: '/gafcore/publisher',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GafcoreProjectsRoute = GafcoreProjectsRouteImport.update({
@@ -305,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/gafcore/login': typeof GafcoreLoginRoute
   '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
+  '/gafcore/publisher': typeof GafcorePublisherRoute
   '/gafcore/register': typeof GafcoreRegisterRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
@@ -352,6 +359,7 @@ export interface FileRoutesByTo {
   '/gafcore/login': typeof GafcoreLoginRoute
   '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
+  '/gafcore/publisher': typeof GafcorePublisherRoute
   '/gafcore/register': typeof GafcoreRegisterRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
@@ -400,6 +408,7 @@ export interface FileRoutesById {
   '/gafcore_/login': typeof GafcoreLoginRoute
   '/gafcore_/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore_/projects': typeof GafcoreProjectsRoute
+  '/gafcore_/publisher': typeof GafcorePublisherRoute
   '/gafcore_/register': typeof GafcoreRegisterRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
@@ -449,6 +458,7 @@ export interface FileRouteTypes {
     | '/gafcore/login'
     | '/gafcore/marketplace'
     | '/gafcore/projects'
+    | '/gafcore/publisher'
     | '/gafcore/register'
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
@@ -496,6 +506,7 @@ export interface FileRouteTypes {
     | '/gafcore/login'
     | '/gafcore/marketplace'
     | '/gafcore/projects'
+    | '/gafcore/publisher'
     | '/gafcore/register'
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
@@ -543,6 +554,7 @@ export interface FileRouteTypes {
     | '/gafcore_/login'
     | '/gafcore_/marketplace'
     | '/gafcore_/projects'
+    | '/gafcore_/publisher'
     | '/gafcore_/register'
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
@@ -591,6 +603,7 @@ export interface RootRouteChildren {
   GafcoreLoginRoute: typeof GafcoreLoginRoute
   GafcoreMarketplaceRoute: typeof GafcoreMarketplaceRoute
   GafcoreProjectsRoute: typeof GafcoreProjectsRoute
+  GafcorePublisherRoute: typeof GafcorePublisherRoute
   GafcoreRegisterRoute: typeof GafcoreRegisterRoute
   ApiGafcoreCheckoutConfirmRoute: typeof ApiGafcoreCheckoutConfirmRoute
   ApiGafcoreCheckoutSessionRoute: typeof ApiGafcoreCheckoutSessionRoute
@@ -699,6 +712,13 @@ declare module '@tanstack/react-router' {
       path: '/gafcore/register'
       fullPath: '/gafcore/register'
       preLoaderRoute: typeof GafcoreRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gafcore_/publisher': {
+      id: '/gafcore_/publisher'
+      path: '/gafcore/publisher'
+      fullPath: '/gafcore/publisher'
+      preLoaderRoute: typeof GafcorePublisherRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gafcore_/projects': {
@@ -970,6 +990,7 @@ const rootRouteChildren: RootRouteChildren = {
   GafcoreLoginRoute: GafcoreLoginRoute,
   GafcoreMarketplaceRoute: GafcoreMarketplaceRoute,
   GafcoreProjectsRoute: GafcoreProjectsRoute,
+  GafcorePublisherRoute: GafcorePublisherRoute,
   GafcoreRegisterRoute: GafcoreRegisterRoute,
   ApiGafcoreCheckoutConfirmRoute: ApiGafcoreCheckoutConfirmRoute,
   ApiGafcoreCheckoutSessionRoute: ApiGafcoreCheckoutSessionRoute,
