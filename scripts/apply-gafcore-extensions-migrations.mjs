@@ -15,6 +15,7 @@ const migrations = [
   "20260531130000_gafcore_extensions_catalog_seed.sql",
   "20260531140000_gafcore_extensions_agents.sql",
   "20260531150000_gafcore_extensions_e2.sql",
+  "20260531160000_gafcore_extension_purchases.sql",
 ];
 
 function run(cmd, args, opts = {}) {

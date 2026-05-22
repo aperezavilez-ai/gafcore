@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/routes/api/elevenlabs/-_auth";
 import { createStripeClient, type StripeEnv } from "@/lib/stripe.server";
 import { applyGafcorePlanSubscription } from "@/lib/stripe-subscription-sync.server";
+import { fulfillExtensionCheckoutSession } from "@/extensions/marketplace-payments.server";
 
 const BodySchema = z.object({
   session_id: z.string().min(3).max(256),
@@ -44,6 +45,23 @@ export const Route = createFileRoute("/api/gafcore/checkout-confirm")({
           }
 
           if (session.mode === "payment") {
+            if (session.metadata?.gafcorePurchaseType === "extension") {
+              const ext = await fulfillExtensionCheckoutSession({
+                sessionId: parsed.data.session_id,
+                userId,
+                environment: parsed.data.environment as StripeEnv,
+              });
+              if (!ext.ok) return json({ error: ext.error }, 400);
+              return json(
+                {
+                  ok: true,
+                  mode: "extension",
+                  listing_id: ext.listingId,
+                  install_slug: ext.installSlug ?? null,
+                },
+                200,
+              );
+            }
             return json({ ok: true, mode: "payment" }, 200);
           }
 

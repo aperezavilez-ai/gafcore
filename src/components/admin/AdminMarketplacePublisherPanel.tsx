@@ -66,6 +66,8 @@ export function AdminMarketplacePublisherPanel() {
   const [versionLabel, setVersionLabel] = useState("1.0.0");
   const [manifestJson, setManifestJson] = useState(EXAMPLE_TEMPLATE_MANIFEST);
   const [publishNow, setPublishNow] = useState(true);
+  const [priceCents, setPriceCents] = useState(0);
+  const [currency, setCurrency] = useState("eur");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -100,6 +102,8 @@ export function AdminMarketplacePublisherPanel() {
           versionLabel: versionLabel.trim() || "1.0.0",
           manifestJson,
           publish: publishNow,
+          priceCents: Math.max(0, Math.floor(priceCents)),
+          currency: currency.trim().toLowerCase() || "eur",
         },
       });
       if (!res.ok) {
@@ -177,7 +181,10 @@ export function AdminMarketplacePublisherPanel() {
                 <Badge variant={row.state === "published" ? "default" : "secondary"}>
                   {STATE_LABEL[row.state] ?? row.state}
                 </Badge>
-                <span className="text-xs text-muted-foreground">v{row.versionLabel}</span>
+                <span className="text-xs text-muted-foreground">
+                  v{row.versionLabel}
+                  {row.priceCents > 0 ? ` · ${(row.priceCents / 100).toFixed(2)} ${currency}` : " · Gratis"}
+                </span>
                 {row.state !== "published" ? (
                   <Button
                     size="sm"
@@ -286,6 +293,25 @@ export function AdminMarketplacePublisherPanel() {
               id="list-ver"
               value={versionLabel}
               onChange={(e) => setVersionLabel(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="list-price">Precio (céntimos, 0 = gratis)</Label>
+            <Input
+              id="list-price"
+              type="number"
+              min={0}
+              value={priceCents}
+              onChange={(e) => setPriceCents(Number(e.target.value) || 0)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="list-currency">Moneda</Label>
+            <Input
+              id="list-currency"
+              value={currency}
+              maxLength={3}
+              onChange={(e) => setCurrency(e.target.value)}
             />
           </div>
         </div>

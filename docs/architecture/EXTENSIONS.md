@@ -78,11 +78,15 @@ GAFCORE_MAX_EXTENSIONS_PER_USER=20
 | `/gafcore/publisher` | Cualquier usuario logueado — envía listings a estado `review` |
 | `/gafcore/admin/marketplace` | Solo `admin` — publica/revoca directamente |
 
-Migración E2: `price_cents` / `currency` en listings; instalación bloqueada si `price_cents > 0` hasta Stripe.
+Migración E2: `price_cents` / `currency` en listings; tabla `gafcore_extension_purchases`.
+
+**Pagos:** `POST /api/extensions/v1/checkout-session` (embedded Stripe) → `checkout-confirm` o webhook → compra + auto-instalación.
+
+Demo publicado: `premium-landing-demo` (1,99 €). En revisión: `community-tone-review`.
 
 ## Fases siguientes
 
-- **E2 (pagos):** Checkout Stripe para listings con precio &gt; 0
+- **E2+:** Precios fijos Stripe Price ID por listing (opcional)
 - **E5:** API keys publisher + moderación automática
 
 Ver también `WORKFLOW_DEPLOY_CHECKLIST.md` (workflow independiente).

@@ -53,6 +53,7 @@ import { Route as ApiGafcoreAdminSeedTemplatesRouteImport } from './routes/api/g
 import { Route as ApiGafcoreAdminDiagnosticsIngestRouteImport } from './routes/api/gafcore/admin/diagnostics-ingest'
 import { Route as ApiExtensionsV1ManifestRouteImport } from './routes/api/extensions/v1/manifest'
 import { Route as ApiExtensionsV1InstallRouteImport } from './routes/api/extensions/v1/install'
+import { Route as ApiExtensionsV1CheckoutSessionRouteImport } from './routes/api/extensions/v1/checkout-session'
 import { Route as ApiExtensionsV1CatalogRouteImport } from './routes/api/extensions/v1/catalog'
 import { Route as ApiExtensionsV1AgentEchoRouteImport } from './routes/api/extensions/v1/agent-echo'
 
@@ -283,6 +284,12 @@ const ApiExtensionsV1InstallRoute = ApiExtensionsV1InstallRouteImport.update({
   path: '/api/extensions/v1/install',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExtensionsV1CheckoutSessionRoute =
+  ApiExtensionsV1CheckoutSessionRouteImport.update({
+    id: '/api/extensions/v1/checkout-session',
+    path: '/api/extensions/v1/checkout-session',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiExtensionsV1CatalogRoute = ApiExtensionsV1CatalogRouteImport.update({
   id: '/api/extensions/v1/catalog',
   path: '/api/extensions/v1/catalog',
@@ -328,6 +335,7 @@ export interface FileRoutesByFullPath {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
+  '/api/extensions/v1/checkout-session': typeof ApiExtensionsV1CheckoutSessionRoute
   '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
@@ -376,6 +384,7 @@ export interface FileRoutesByTo {
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
+  '/api/extensions/v1/checkout-session': typeof ApiExtensionsV1CheckoutSessionRoute
   '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
@@ -425,6 +434,7 @@ export interface FileRoutesById {
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
+  '/api/extensions/v1/checkout-session': typeof ApiExtensionsV1CheckoutSessionRoute
   '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
@@ -475,6 +485,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
+    | '/api/extensions/v1/checkout-session'
     | '/api/extensions/v1/install'
     | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
@@ -523,6 +534,7 @@ export interface FileRouteTypes {
     | '/gafcore/settings/project'
     | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
+    | '/api/extensions/v1/checkout-session'
     | '/api/extensions/v1/install'
     | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
@@ -571,6 +583,7 @@ export interface FileRouteTypes {
     | '/gafcore_/settings/project'
     | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
+    | '/api/extensions/v1/checkout-session'
     | '/api/extensions/v1/install'
     | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
@@ -620,6 +633,7 @@ export interface RootRouteChildren {
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
   ApiExtensionsV1AgentEchoRoute: typeof ApiExtensionsV1AgentEchoRoute
   ApiExtensionsV1CatalogRoute: typeof ApiExtensionsV1CatalogRoute
+  ApiExtensionsV1CheckoutSessionRoute: typeof ApiExtensionsV1CheckoutSessionRoute
   ApiExtensionsV1InstallRoute: typeof ApiExtensionsV1InstallRoute
   ApiExtensionsV1ManifestRoute: typeof ApiExtensionsV1ManifestRoute
   ApiGafcoreAdminDiagnosticsIngestRoute: typeof ApiGafcoreAdminDiagnosticsIngestRoute
@@ -945,6 +959,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExtensionsV1InstallRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/extensions/v1/checkout-session': {
+      id: '/api/extensions/v1/checkout-session'
+      path: '/api/extensions/v1/checkout-session'
+      fullPath: '/api/extensions/v1/checkout-session'
+      preLoaderRoute: typeof ApiExtensionsV1CheckoutSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/extensions/v1/catalog': {
       id: '/api/extensions/v1/catalog'
       path: '/api/extensions/v1/catalog'
@@ -1007,6 +1028,7 @@ const rootRouteChildren: RootRouteChildren = {
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
   ApiExtensionsV1AgentEchoRoute: ApiExtensionsV1AgentEchoRoute,
   ApiExtensionsV1CatalogRoute: ApiExtensionsV1CatalogRoute,
+  ApiExtensionsV1CheckoutSessionRoute: ApiExtensionsV1CheckoutSessionRoute,
   ApiExtensionsV1InstallRoute: ApiExtensionsV1InstallRoute,
   ApiExtensionsV1ManifestRoute: ApiExtensionsV1ManifestRoute,
   ApiGafcoreAdminDiagnosticsIngestRoute: ApiGafcoreAdminDiagnosticsIngestRoute,

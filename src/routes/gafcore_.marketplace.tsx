@@ -1,11 +1,20 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Bot, Download, Package, Sparkles, Trash2, Zap } from "lucide-react";
+import { ArrowLeft, Bot, CreditCard, Download, Package, Sparkles, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { getStripeEnvironment } from "@/lib/stripe";
+import { MarketplaceExtensionCheckout } from "@/components/gafcore/MarketplaceExtensionCheckout";
 import {
   installGafcoreExtension,
   listGafcoreExtensionsCatalog,
@@ -21,7 +30,8 @@ const INSTALL_ERRORS: Record<string, string> = {
   kind_not_supported_yet: "Este tipo de extensión aún no está soportado.",
   agent_webhook_required: "El agente debe definir webhookUrl en el manifest.",
   install_failed: "Error al guardar la instalación.",
-  paid_listing_not_available: "Extensiones de pago próximamente (Stripe E2).",
+  payment_required: "Compra esta extensión antes de instalarla.",
+  already_purchased: "Ya compraste esta extensión; prueba a instalar de nuevo.",
 };
 
 const UNINSTALL_ERRORS: Record<string, string> = {
@@ -55,6 +65,7 @@ function MarketplacePage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [checkoutItem, setCheckoutItem] = useState<CatalogListing | null>(null);
 
   const load = useCallback(async () => {
     if (!user) {
@@ -81,6 +92,53 @@ function MarketplacePage() {
   useEffect(() => {
     if (!authLoading) void load();
   }, [load, authLoading]);
+
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("checkout") !== "success") return;
+    const sessionId = url.searchParams.get("session_id");
+    if (!sessionId) return;
+
+    void (async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) return;
+
+        const res = await fetch("/api/gafcore/checkout-confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            environment: getStripeEnvironment(),
+          }),
+        });
+        const body = (await res.json()) as { ok?: boolean; error?: string; mode?: string };
+        if (!res.ok || !body.ok) {
+          toast.error("No se confirmó el pago", { description: body.error });
+          return;
+        }
+        if (body.mode === "extension") {
+          toast.success("Compra confirmada", {
+            description: "La extensión se ha instalado en tu cuenta.",
+          });
+          await load();
+          window.dispatchEvent(new Event("gafcore:extensions-changed"));
+        }
+      } catch {
+        toast.error("Error al confirmar el pago");
+      } finally {
+        url.searchParams.delete("checkout");
+        url.searchParams.delete("session_id");
+        url.searchParams.delete("listing_id");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      }
+    })();
+  }, [user, load]);
 
   const onInstall = async (item: CatalogListing) => {
     setBusyId(item.id);
@@ -289,9 +347,14 @@ function MarketplacePage() {
                       {busyId === item.id ? "Quitando…" : "Quitar de mi cuenta"}
                     </Button>
                   </div>
-                ) : item.priceCents > 0 ? (
-                  <Button className="mt-4 w-full" size="sm" variant="secondary" disabled>
-                    Próximamente (de pago)
+                ) : item.priceCents > 0 && !item.purchased ? (
+                  <Button
+                    className="mt-4 w-full"
+                    size="sm"
+                    onClick={() => setCheckoutItem(item)}
+                  >
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Comprar {item.priceLabel}
                   </Button>
                 ) : (
                   <Button
@@ -309,6 +372,21 @@ function MarketplacePage() {
           </ul>
         )}
       </main>
+
+      <Dialog open={checkoutItem !== null} onOpenChange={(open) => !open && setCheckoutItem(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Checkout Stripe</DialogTitle>
+          </DialogHeader>
+          {checkoutItem ? (
+            <MarketplaceExtensionCheckout
+              listingId={checkoutItem.id}
+              listingName={checkoutItem.name}
+              customerEmail={user?.email ?? undefined}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

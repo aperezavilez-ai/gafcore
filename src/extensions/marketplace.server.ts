@@ -25,6 +25,7 @@ export type CatalogListing = {
   installed: boolean;
   priceCents: number;
   priceLabel: string;
+  purchased: boolean;
 };
 
 export async function listPublishedCatalog(
@@ -68,12 +69,20 @@ export async function listPublishedCatalog(
   }
 
   let installedIds = new Set<string>();
+  let purchasedIds = new Set<string>();
   if (userId) {
     const { data: installs } = await supabaseAdmin
       .from("gafcore_extension_installs")
       .select("listing_id")
       .eq("user_id", userId);
     installedIds = new Set((installs ?? []).map((i) => i.listing_id));
+
+    const { data: purchases } = await supabaseAdmin
+      .from("gafcore_extension_purchases")
+      .select("listing_id")
+      .eq("user_id", userId)
+      .eq("status", "completed");
+    purchasedIds = new Set((purchases ?? []).map((p) => p.listing_id));
   }
 
   return (listings ?? []).map((row) => ({
@@ -87,6 +96,7 @@ export async function listPublishedCatalog(
     installed: installedIds.has(row.id),
     priceCents: row.price_cents ?? 0,
     priceLabel: formatExtensionPrice(row.price_cents ?? 0, row.currency ?? "eur"),
+    purchased: purchasedIds.has(row.id),
   }));
 }
 
@@ -183,7 +193,14 @@ export async function installListingForUser(
   if (!listingRow?.current_version_id) return { ok: false, error: "listing_not_found" };
 
   if ((listingRow.price_cents ?? 0) > 0) {
-    return { ok: false, error: "paid_listing_not_available" };
+    const { data: purchase } = await supabaseAdmin
+      .from("gafcore_extension_purchases")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("listing_id", listingId)
+      .eq("status", "completed")
+      .maybeSingle();
+    if (!purchase?.id) return { ok: false, error: "payment_required" };
   }
 
   const installSlug =

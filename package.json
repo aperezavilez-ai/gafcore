@@ -21,6 +21,7 @@
     "gafcore:migrate-workflow": "node scripts/apply-gafcore-workflow-migrations.mjs",
     "gafcore:migrate-extensions": "node scripts/apply-gafcore-extensions-migrations.mjs",
     "gafcore:smoke-extensions": "node scripts/smoke-gafcore-extensions.mjs",
+    "gafcore:github-actions-setup": "node scripts/print-github-actions-setup.mjs",
     "gafcore:push": "node scripts/gafcore-push-github.mjs",
     "gafcore:stripe-bootstrap": "node scripts/bootstrap-stripe-gafcore.mjs",
     "gafcore:stripe-verify": "node scripts/verify-stripe-key.mjs",

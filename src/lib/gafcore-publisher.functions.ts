@@ -30,13 +30,19 @@ const publishSchema = z.object({
   versionLabel: z.string().min(1).max(32).default("1.0.0"),
   manifestJson: z.string().min(2).max(500_000),
   publish: z.boolean().default(true),
+  priceCents: z.number().int().min(0).max(999_999).default(0),
+  currency: z.string().min(3).max(3).default("eur"),
 });
 
 export const publishAdminMarketplaceListingFn = createServerFn({ method: "POST" })
   .middleware([requireGafcoreAdmin])
   .inputValidator((input) => publishSchema.parse(input))
   .handler(async ({ data }) => {
-    const result = await upsertListingFromManifest(data);
+    const result = await upsertListingFromManifest({
+      ...data,
+      priceCents: data.priceCents,
+      currency: data.currency,
+    });
     if (!result.ok) return { ok: false as const, error: result.error };
     return { ok: true as const, listingId: result.listingId };
   });

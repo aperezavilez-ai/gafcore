@@ -5,6 +5,7 @@ import {
   PLAN_CREDITS,
   applyGafcorePlanSubscription,
 } from "@/lib/stripe-subscription-sync.server";
+import { fulfillExtensionCheckoutFromWebhook } from "@/extensions/marketplace-payments.server";
 
 type QueryChain = PromiseLike<unknown> & {
   eq: (column: string, value: unknown) => QueryChain;
@@ -185,7 +186,12 @@ type StripeCheckoutSession = {
   payment_status?: string;
   subscription?: string;
   customer?: string;
-  metadata?: { userId?: string; gafcorePriceId?: string };
+  metadata?: {
+    userId?: string;
+    gafcorePriceId?: string;
+    gafcorePurchaseType?: string;
+    listingId?: string;
+  };
 };
 
 async function handleCheckoutCompleted(session: StripeCheckoutSession, env: StripeEnv) {
@@ -208,6 +214,12 @@ async function handleCheckoutCompleted(session: StripeCheckoutSession, env: Stri
   }
 
   if (session.mode !== "payment") return;
+
+  if (session.metadata?.gafcorePurchaseType === "extension") {
+    await fulfillExtensionCheckoutFromWebhook(session);
+    return;
+  }
+
   const userId = session.metadata?.userId;
   const priceId = session.metadata?.gafcorePriceId;
   if (!userId || !priceId) return;
