@@ -2,6 +2,11 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "framework": null,
+  "github": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
   "crons": [
     {
       "path": "/api/gafcore/workflow/drain",
