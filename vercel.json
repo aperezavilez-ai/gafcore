@@ -22,7 +22,7 @@
   "crons": [
     {
       "path": "/api/gafcore/workflow/drain",
-      "schedule": "*/2 * * * *"
+      "schedule": "0 0 * * *"
     }
   ],
   "headers": [
