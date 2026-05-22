@@ -43,6 +43,9 @@ import {
   type ProjectRow,
 } from "@/lib/userSupabase";
 import { deleteGafcoreProject } from "@/lib/gafcore-project.functions";
+import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
+import { activateProjectRow } from "@/core/project";
+import type { FileItem } from "@/components/ide/CodeEditor";
 
 export const Route = createFileRoute("/gafcore_/projects")({
   component: GafcoreProjectsPage,
@@ -69,6 +72,7 @@ function GafcoreProjectsPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ProjectRow | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -116,6 +120,32 @@ function GafcoreProjectsPage() {
     if (!user?.id && !hasSession) return;
     void refresh();
   }, [authLoading, graceChecking, user?.id, hasSession, refresh]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("newProject") !== "1") return;
+    setNewProjectOpen(true);
+    url.searchParams.delete("newProject");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }, []);
+
+  const openNewProjectDialog = () => setNewProjectOpen(true);
+
+  const onProjectCreated = (
+    project: { id: string; name: string; created_at: string },
+    _files: FileItem[],
+  ) => {
+    activateProjectRow({
+      id: project.id,
+      name: project.name,
+      created_at: project.created_at,
+    });
+    setNewProjectOpen(false);
+    void refresh();
+    void navigate({ to: "/gafcore/app" });
+    toast.success(`Proyecto «${project.name}» listo en el editor`);
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -233,11 +263,9 @@ function GafcoreProjectsPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild>
-              <Link to="/gafcore/app" search={{ newProject: "1" }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Crear en el editor
-              </Link>
+            <Button type="button" onClick={openNewProjectDialog}>
+              <Plus className="mr-2 h-4 w-4" />
+              Crear en el editor
             </Button>
           </div>
         </div>
@@ -272,14 +300,15 @@ function GafcoreProjectsPage() {
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {projects.length === 0
-                ? "Abre el editor y usa «+ Nuevo» o importa una carpeta."
+                ? "Pulsa el botón de arriba para nombrar tu proyecto y abrir el editor."
                 : "Prueba otra búsqueda."}
             </p>
-            <Button asChild className="mt-4">
-              <Link to="/gafcore/app" search={{ newProject: "1" }}>
-                Ir al editor
-              </Link>
-            </Button>
+            {projects.length === 0 ? (
+              <Button type="button" className="mt-4" onClick={openNewProjectDialog}>
+                <Plus className="mr-2 h-4 w-4" />
+                Crear proyecto
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -361,6 +390,12 @@ function GafcoreProjectsPage() {
           </div>
         )}
       </main>
+
+      <NewProjectDialog
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+        onCreated={onProjectCreated}
+      />
 
       <Dialog
         open={renameOpen}
