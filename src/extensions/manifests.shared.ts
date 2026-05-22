@@ -40,12 +40,22 @@ export const externalAgentManifestSchema = z.object({
   version: z.literal(EXTENSION_MANIFEST_VERSION),
   slug: z.string().min(1).max(80),
   name: z.string().min(1).max(200),
+  description: z.string().max(2000).default(""),
+  hooks: z
+    .array(z.enum(["workflow_complete", "workflow_failed"]))
+    .min(1)
+    .max(5)
+    .default(["workflow_complete"]),
   runner: z.enum(["webhook", "edge_function"]).default("webhook"),
   webhookUrl: z.string().url().optional(),
   canWriteFiles: z.boolean().default(false),
   allow: z.array(z.string()).max(40).optional(),
   deny: z.array(z.string()).max(40).optional(),
 });
+
+export function extensionAgentSlug(listingSlug: string): string {
+  return `agent:${listingSlug.replace(/^agent:/, "")}`;
+}
 
 export const extensionManifestSchema = z.discriminatedUnion("kind", [
   templateManifestSchema,

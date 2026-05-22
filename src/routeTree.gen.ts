@@ -52,6 +52,7 @@ import { Route as ApiGafcoreAdminDiagnosticsIngestRouteImport } from './routes/a
 import { Route as ApiExtensionsV1ManifestRouteImport } from './routes/api/extensions/v1/manifest'
 import { Route as ApiExtensionsV1InstallRouteImport } from './routes/api/extensions/v1/install'
 import { Route as ApiExtensionsV1CatalogRouteImport } from './routes/api/extensions/v1/catalog'
+import { Route as ApiExtensionsV1AgentEchoRouteImport } from './routes/api/extensions/v1/agent-echo'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -275,6 +276,12 @@ const ApiExtensionsV1CatalogRoute = ApiExtensionsV1CatalogRouteImport.update({
   path: '/api/extensions/v1/catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExtensionsV1AgentEchoRoute =
+  ApiExtensionsV1AgentEchoRouteImport.update({
+    id: '/api/extensions/v1/agent-echo',
+    path: '/api/extensions/v1/agent-echo',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -305,6 +312,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
   '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
@@ -350,6 +358,7 @@ export interface FileRoutesByTo {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
   '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
@@ -396,6 +405,7 @@ export interface FileRoutesById {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore_/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
+  '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
   '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
@@ -443,6 +453,7 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore/admin/ops'
     | '/gafcore/settings/project'
+    | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
     | '/api/extensions/v1/install'
     | '/api/extensions/v1/manifest'
@@ -488,6 +499,7 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore/admin/ops'
     | '/gafcore/settings/project'
+    | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
     | '/api/extensions/v1/install'
     | '/api/extensions/v1/manifest'
@@ -533,6 +545,7 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore_/admin/ops'
     | '/gafcore_/settings/project'
+    | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
     | '/api/extensions/v1/install'
     | '/api/extensions/v1/manifest'
@@ -579,6 +592,7 @@ export interface RootRouteChildren {
   ApiV1MeRoute: typeof ApiV1MeRoute
   GafcoreAdminOpsRoute: typeof GafcoreAdminOpsRoute
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
+  ApiExtensionsV1AgentEchoRoute: typeof ApiExtensionsV1AgentEchoRoute
   ApiExtensionsV1CatalogRoute: typeof ApiExtensionsV1CatalogRoute
   ApiExtensionsV1InstallRoute: typeof ApiExtensionsV1InstallRoute
   ApiExtensionsV1ManifestRoute: typeof ApiExtensionsV1ManifestRoute
@@ -898,6 +912,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExtensionsV1CatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/extensions/v1/agent-echo': {
+      id: '/api/extensions/v1/agent-echo'
+      path: '/api/extensions/v1/agent-echo'
+      fullPath: '/api/extensions/v1/agent-echo'
+      preLoaderRoute: typeof ApiExtensionsV1AgentEchoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -942,6 +963,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MeRoute: ApiV1MeRoute,
   GafcoreAdminOpsRoute: GafcoreAdminOpsRoute,
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
+  ApiExtensionsV1AgentEchoRoute: ApiExtensionsV1AgentEchoRoute,
   ApiExtensionsV1CatalogRoute: ApiExtensionsV1CatalogRoute,
   ApiExtensionsV1InstallRoute: ApiExtensionsV1InstallRoute,
   ApiExtensionsV1ManifestRoute: ApiExtensionsV1ManifestRoute,

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Download, Package, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, Download, Package, Sparkles, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import {
   installGafcoreExtension,
   listGafcoreExtensionsCatalog,
   uninstallGafcoreExtension,
+  testGafcoreExtensionAgent,
 } from "@/lib/gafcore-extensions.functions";
 import type { CatalogListing } from "@/extensions/marketplace.server";
 
@@ -17,6 +18,7 @@ const INSTALL_ERRORS: Record<string, string> = {
   install_limit_reached: "Has alcanzado el límite de extensiones instaladas.",
   listing_not_found: "Esta extensión ya no está disponible.",
   kind_not_supported_yet: "Este tipo de extensión aún no está soportado.",
+  agent_webhook_required: "El agente debe definir webhookUrl en el manifest.",
   install_failed: "Error al guardar la instalación.",
 };
 
@@ -32,7 +34,7 @@ const KIND_LABEL: Record<string, string> = {
   workflow_pack: "Workflow",
 };
 
-type CatalogFilter = "all" | "template" | "ai_plugin";
+type CatalogFilter = "all" | "template" | "ai_plugin" | "agent";
 
 export const Route = createFileRoute("/gafcore_/marketplace")({
   component: MarketplacePage,
@@ -44,6 +46,7 @@ function MarketplacePage() {
   const callList = useServerFn(listGafcoreExtensionsCatalog);
   const callInstall = useServerFn(installGafcoreExtension);
   const callUninstall = useServerFn(uninstallGafcoreExtension);
+  const callTestAgent = useServerFn(testGafcoreExtensionAgent);
   const [filter, setFilter] = useState<CatalogFilter>("all");
   const [listings, setListings] = useState<CatalogListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,6 +90,12 @@ function MarketplacePage() {
         });
         return;
       }
+      if (item.kind === "agent") {
+        toast.success("Agente instalado", {
+          description: "Recibirá eventos al completar o fallar workflows multiagente.",
+        });
+        return;
+      }
       toast.success("Plantilla instalada", {
         description: "Abriendo «Nuevo proyecto» en el IDE para usarla.",
       });
@@ -124,10 +133,30 @@ function MarketplacePage() {
     }
   };
 
+  const onTestAgent = async (listingId: string) => {
+    setBusyId(listingId);
+    try {
+      const res = await callTestAgent({ data: { listingId } });
+      if (!res.ok) {
+        toast.error("Prueba fallida", { description: res.error });
+        return;
+      }
+      toast.success("Webhook respondió", {
+        description: `HTTP ${res.status} — revisa la consola del servidor si usas echo local.`,
+      });
+      console.info("[agent-test]", res.body);
+    } catch {
+      toast.error("Error al probar webhook");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const filters: { id: CatalogFilter; label: string }[] = [
     { id: "all", label: "Todas" },
     { id: "template", label: "Plantillas" },
     { id: "ai_plugin", label: "Plugins IA" },
+    { id: "agent", label: "Agentes" },
   ];
 
   return (
@@ -143,7 +172,7 @@ function MarketplacePage() {
           <div>
             <h1 className="text-xl font-semibold">Marketplace GafCore</h1>
             <p className="text-sm text-muted-foreground">
-              Plantillas para nuevos proyectos y plugins que mejoran el chat con IA.
+              Plantillas, plugins de chat y agentes webhook para workflows.
             </p>
           </div>
         </div>
@@ -182,6 +211,8 @@ function MarketplacePage() {
                 <div className="flex items-start gap-3">
                   {item.kind === "ai_plugin" ? (
                     <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  ) : item.kind === "agent" ? (
+                    <Bot className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                   ) : (
                     <Package className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                   )}
@@ -200,16 +231,30 @@ function MarketplacePage() {
                   </div>
                 </div>
                 {item.installed ? (
-                  <Button
-                    className="mt-4 w-full"
-                    size="sm"
-                    variant="outline"
-                    disabled={busyId === item.id}
-                    onClick={() => void onUninstall(item.id)}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {busyId === item.id ? "Quitando…" : "Quitar de mi cuenta"}
-                  </Button>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {item.kind === "agent" ? (
+                      <Button
+                        className="w-full"
+                        size="sm"
+                        variant="secondary"
+                        disabled={busyId === item.id}
+                        onClick={() => void onTestAgent(item.id)}
+                      >
+                        <Zap className="mr-2 h-4 w-4" />
+                        {busyId === item.id ? "Probando…" : "Probar webhook"}
+                      </Button>
+                    ) : null}
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      variant="outline"
+                      disabled={busyId === item.id}
+                      onClick={() => void onUninstall(item.id)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {busyId === item.id ? "Quitando…" : "Quitar de mi cuenta"}
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     className="mt-4 w-full"

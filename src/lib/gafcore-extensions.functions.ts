@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { listActiveAiPluginNames } from "@/extensions/ai-plugins.server";
+import { testUserAgentWebhook } from "@/extensions/external-agent.server";
 import {
   getListingManifest,
   installListingForUser,
@@ -68,4 +69,13 @@ export const listGafcoreActiveAiPlugins = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const names = await listActiveAiPluginNames(context.userId!);
     return { ok: true as const, names };
+  });
+
+export const testGafcoreExtensionAgent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => installSchema.pick({ listingId: true }).parse(input))
+  .handler(async ({ data, context }) => {
+    const result = await testUserAgentWebhook(context.userId!, data.listingId);
+    if (!result.ok) return { ok: false as const, error: result.error };
+    return { ok: true as const, status: result.status, body: result.body };
   });

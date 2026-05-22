@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2, Package, Sparkles, Trash2 } from "lucide-react";
+import { Bot, Loader2, Package, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -93,6 +93,8 @@ export function MarketplaceInstallsPanel() {
           <li key={item.listingId} className="flex items-start gap-3 px-4 py-3">
             {item.kind === "ai_plugin" ? (
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            ) : item.kind === "agent" ? (
+              <Bot className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             ) : (
               <Package className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             )}

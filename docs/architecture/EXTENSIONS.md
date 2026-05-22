@@ -16,7 +16,7 @@
 |------|----|-----|
 | `template` | ✅ | |
 | `ai_plugin` | ✅ `before_chat` + `systemPromptAppend` | webhooks |
-| `agent` | | webhook runner |
+| `agent` | ✅ webhook `workflow_complete` / `workflow_failed` | edge_function runner |
 | `workflow_pack` | | DAG precargado |
 
 ## Tablas (migración `20260531120000`)
@@ -74,7 +74,7 @@ GAFCORE_MAX_EXTENSIONS_PER_USER=20
 
 - **E2:** Pagos / publisher portal
 - **E3:** Plugin IA `before_chat`
-- **E4:** Agentes `webhook` en executor
+- **E4:** Agentes `webhook` — en progreso (notify al terminar workflow; prueba en marketplace)
 - **E5:** API keys publisher + revisión listings
 
 Ver también `WORKFLOW_DEPLOY_CHECKLIST.md` (workflow independiente).

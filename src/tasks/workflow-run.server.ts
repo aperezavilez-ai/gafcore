@@ -19,6 +19,7 @@ import {
   setTaskFileLocks,
 } from "@/tasks/file-locks.server";
 import { executeAgentTask, persistTaskArtifact } from "@/tasks/executor.server";
+import { notifyUserAgentsWorkflowEvent } from "@/extensions/external-agent.server";
 import type { AgentTaskRow } from "@/tasks/types";
 import type { FilePatch } from "@/tasks/artifacts.shared";
 
@@ -75,10 +76,32 @@ export async function syncWorkflowRunState(workflowRunId: string): Promise<strin
     next = "completed";
   }
 
+  const { data: prev } = await supabaseAdmin
+    .from("gafcore_workflow_runs")
+    .select("state, user_id, project_id, instruction")
+    .eq("id", workflowRunId)
+    .maybeSingle();
+
   await supabaseAdmin
     .from("gafcore_workflow_runs")
     .update({ state: next, updated_at: new Date().toISOString() })
     .eq("id", workflowRunId);
+
+  if (prev?.user_id && prev.state !== next) {
+    if (next === "completed") {
+      void notifyUserAgentsWorkflowEvent(prev.user_id, "workflow_complete", {
+        workflowRunId,
+        projectId: prev.project_id,
+        instruction: prev.instruction,
+      });
+    } else if (next === "failed") {
+      void notifyUserAgentsWorkflowEvent(prev.user_id, "workflow_failed", {
+        workflowRunId,
+        projectId: prev.project_id,
+        instruction: prev.instruction,
+      });
+    }
+  }
 
   return next;
 }

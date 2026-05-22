@@ -13,6 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migrations = [
   "20260531120000_gafcore_extensions.sql",
   "20260531130000_gafcore_extensions_catalog_seed.sql",
+  "20260531140000_gafcore_extensions_agents.sql",
 ];
 
 function run(cmd, args, opts = {}) {

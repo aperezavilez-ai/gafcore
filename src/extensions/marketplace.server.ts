@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
+  extensionAgentSlug,
   extensionAiPluginSlug,
   extensionTemplateSlug,
   type TemplateExtensionManifest,
@@ -115,8 +116,18 @@ export async function installListingForUser(
   if (!pack) return { ok: false, error: "listing_not_found" };
 
   const manifest = parseExtensionManifest(pack.manifest);
-  if (manifest.kind !== "template" && manifest.kind !== "ai_plugin") {
+  if (
+    manifest.kind !== "template" &&
+    manifest.kind !== "ai_plugin" &&
+    manifest.kind !== "agent"
+  ) {
     return { ok: false, error: "kind_not_supported_yet" };
+  }
+
+  if (manifest.kind === "agent") {
+    if (manifest.runner !== "webhook" || !manifest.webhookUrl) {
+      return { ok: false, error: "agent_webhook_required" };
+    }
   }
 
   const { data: listingRow } = await supabaseAdmin
@@ -130,7 +141,9 @@ export async function installListingForUser(
   const installSlug =
     manifest.kind === "template"
       ? extensionTemplateSlug(listingRow.slug)
-      : extensionAiPluginSlug(listingRow.slug);
+      : manifest.kind === "ai_plugin"
+        ? extensionAiPluginSlug(listingRow.slug)
+        : extensionAgentSlug(listingRow.slug);
 
   const { error } = await supabaseAdmin.from("gafcore_extension_installs").upsert(
     {
