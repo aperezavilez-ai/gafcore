@@ -39,6 +39,7 @@ import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared"
 import { Badge } from "@/components/ui/badge";
 import { ProjectMemoryConventionsPanel } from "@/components/gafcore/ProjectMemoryConventionsPanel";
 import { WorkflowHistoryPanel } from "@/components/gafcore/WorkflowHistoryPanel";
+import { MarketplaceInstallsPanel } from "@/components/gafcore/MarketplaceInstallsPanel";
 
 const SETTINGS_SECTION_IDS = [
   "project",
@@ -301,12 +302,10 @@ function SectionPanel(p: PanelProps) {
         <>
           <PanelHeader
             title="Marketplace"
-            subtitle="Plantillas y extensiones del ecosistema GafCore."
+            subtitle="Extensiones instaladas en tu cuenta y catálogo público."
           />
           <div className="mt-6">
-            <Button asChild>
-              <Link to="/gafcore/marketplace">Abrir marketplace</Link>
-            </Button>
+            <MarketplaceInstallsPanel />
           </div>
         </>
       );

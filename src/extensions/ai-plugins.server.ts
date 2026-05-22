@@ -34,3 +34,35 @@ export async function buildAiPluginPromptAppend(userId: string): Promise<string>
 
   return parts.join("\n\n");
 }
+
+/** Nombres de plugins IA activos (UI del chat). */
+export async function listActiveAiPluginNames(userId: string): Promise<string[]> {
+  if (!extensionsEnabled()) return [];
+
+  const { data: installs, error } = await supabaseAdmin
+    .from("gafcore_extension_installs")
+    .select("version_id")
+    .eq("user_id", userId)
+    .eq("kind", "ai_plugin");
+
+  if (error || !installs?.length) return [];
+
+  const names: string[] = [];
+  for (const row of installs) {
+    const { data: ver } = await supabaseAdmin
+      .from("gafcore_extension_versions")
+      .select("manifest_json")
+      .eq("id", row.version_id)
+      .maybeSingle();
+    if (!ver?.manifest_json) continue;
+    try {
+      const manifest = parseExtensionManifest(ver.manifest_json);
+      if (manifest.kind === "ai_plugin" && manifest.hooks.includes("before_chat")) {
+        names.push(manifest.name);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return names;
+}

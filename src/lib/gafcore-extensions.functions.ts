@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { listActiveAiPluginNames } from "@/extensions/ai-plugins.server";
 import {
   getListingManifest,
   installListingForUser,
   listPublishedCatalog,
+  listUserExtensionInstalls,
   uninstallListingForUser,
 } from "@/extensions/marketplace.server";
 
@@ -52,4 +54,18 @@ export const uninstallGafcoreExtension = createServerFn({ method: "POST" })
     const result = await uninstallListingForUser(context.userId!, data.listingId);
     if (!result.ok) return { ok: false as const, error: result.error };
     return { ok: true as const };
+  });
+
+export const listGafcoreUserInstalls = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const installs = await listUserExtensionInstalls(context.userId!);
+    return { ok: true as const, installs };
+  });
+
+export const listGafcoreActiveAiPlugins = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const names = await listActiveAiPluginNames(context.userId!);
+    return { ok: true as const, names };
   });

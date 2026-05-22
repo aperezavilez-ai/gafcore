@@ -78,6 +78,7 @@ import {
   type ProjectValidationIssue,
 } from "@/lib/gafcore-ai-validation.shared";
 import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
+import { listGafcoreActiveAiPlugins } from "@/lib/gafcore-extensions.functions";
 import {
   advanceGafcorePipelineStep,
   finalizeGafcorePipelineRun,
@@ -347,6 +348,8 @@ export function ChatPanel({
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
   const freeCreditsRescueDone = useRef(false);
   const freeCreditsRescueUserId = useRef<string | null>(null);
+  const callAiPlugins = useServerFn(listGafcoreActiveAiPlugins);
+  const [aiPluginNames, setAiPluginNames] = useState<string[]>([]);
 
   useEffect(() => {
     try {
@@ -361,6 +364,21 @@ export function ChatPanel({
       if (data.user) setUser({ id: data.user.id, email: data.user.email ?? undefined });
     });
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setAiPluginNames([]);
+      return;
+    }
+    const loadPlugins = () => {
+      void callAiPlugins()
+        .then((r) => setAiPluginNames(r.names ?? []))
+        .catch(() => setAiPluginNames([]));
+    };
+    loadPlugins();
+    window.addEventListener("gafcore:extensions-changed", loadPlugins);
+    return () => window.removeEventListener("gafcore:extensions-changed", loadPlugins);
+  }, [user?.id, callAiPlugins]);
 
   // Load chat history for current project
   useEffect(() => {
@@ -2516,6 +2534,22 @@ export function ChatPanel({
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {aiPluginNames.length > 0 ? (
+                <Link
+                  to="/gafcore/settings/project"
+                  search={{ section: "marketplace" }}
+                  className="inline-flex h-7 max-w-[11rem] items-center gap-1 truncate rounded-full border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10"
+                  title={`Plugins IA activos: ${aiPluginNames.join(", ")}`}
+                >
+                  <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+                  <span className="truncate">{aiPluginNames[0]}</span>
+                  {aiPluginNames.length > 1 ? (
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      +{aiPluginNames.length - 1}
+                    </span>
+                  ) : null}
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {

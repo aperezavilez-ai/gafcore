@@ -1,4 +1,5 @@
-# Despliegue a Vercel Production en cada push a main (requiere secrets en el repo).
+# Despliegue a Vercel Production (requiere secrets en el repo).
+# Ver docs/DEPLOY_GITHUB_ACTIONS.md
 name: Deploy Vercel Production
 
 on:
@@ -23,16 +24,16 @@ jobs:
 
       - run: npm ci
 
-      - name: Build (Vercel preset)
+      - name: Build (Vercel preset → .vercel/output)
         run: npm run build
         env:
           VERCEL: "1"
 
-      - name: Deploy to Vercel Production
+      - name: Deploy prebuilt to Vercel Production
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           working-directory: ./
-          vercel-args: "--prod"
+          vercel-args: "--prebuilt --prod"

@@ -78,6 +78,9 @@ function MarketplacePage() {
         return;
       }
       await load();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("gafcore:extensions-changed"));
+      }
       if (item.kind === "ai_plugin") {
         toast.success("Plugin IA activado", {
           description: "Afecta al chat del IDE en tus próximos mensajes.",
@@ -111,6 +114,9 @@ function MarketplacePage() {
       }
       toast.success("Extensión quitada de tu cuenta");
       await load();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("gafcore:extensions-changed"));
+      }
     } catch {
       toast.error("Error al quitar la extensión");
     } finally {

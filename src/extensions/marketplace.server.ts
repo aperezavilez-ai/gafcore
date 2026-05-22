@@ -203,6 +203,47 @@ export async function loadExtensionTemplateFiles(
   return templateFilesFromManifest(manifest as TemplateExtensionManifest);
 }
 
+export type UserExtensionInstall = {
+  listingId: string;
+  name: string;
+  description: string;
+  kind: string;
+  version: string;
+  installSlug: string;
+  installedAt: string;
+};
+
+export async function listUserExtensionInstalls(userId: string): Promise<UserExtensionInstall[]> {
+  if (!extensionsEnabled()) return [];
+
+  const { data, error } = await supabaseAdmin
+    .from("gafcore_extension_installs")
+    .select("listing_id, kind, install_slug, created_at, version_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error || !data?.length) return [];
+
+  const rows: UserExtensionInstall[] = [];
+  for (const row of data) {
+    const { data: listing } = await supabaseAdmin
+      .from("gafcore_marketplace_listings")
+      .select("name, description, version_label")
+      .eq("id", row.listing_id)
+      .maybeSingle();
+    rows.push({
+      listingId: row.listing_id,
+      name: listing?.name ?? row.install_slug,
+      description: listing?.description ?? "",
+      kind: row.kind,
+      version: listing?.version_label ?? "1.0.0",
+      installSlug: row.install_slug,
+      installedAt: row.created_at,
+    });
+  }
+  return rows;
+}
+
 export async function listUserTemplateSlugs(userId: string): Promise<
   Array<{ slug: string; name: string; description: string }>
 > {
