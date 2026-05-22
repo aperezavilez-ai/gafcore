@@ -8,10 +8,20 @@ import {
 } from "./site-icons.shared";
 
 const PATH_TO_FILE: Record<string, string> = {
+  "/favicon.svg": "favicon.svg",
   [GAFCORE_FAVICON_PATH]: "favicon.png",
+  "/favicon-32.png": "favicon-32.png",
   [GAFCORE_APPLE_TOUCH_ICON_PATH]: "apple-touch-icon.png",
   "/og-image.png": "og-image.png",
   "/favicon.ico": "favicon.png",
+};
+
+const MIME_BY_FILE: Record<string, string> = {
+  "favicon.svg": "image/svg+xml",
+  "favicon.png": "image/png",
+  "favicon-32.png": "image/png",
+  "apple-touch-icon.png": "image/png",
+  "og-image.png": "image/png",
 };
 
 const cache = new Map<string, Uint8Array>();
@@ -49,7 +59,7 @@ export function servePublicStatic(pathname: string): Response | null {
   return new Response(bytes, {
     status: 200,
     headers: {
-      "content-type": "image/png",
+      "content-type": MIME_BY_FILE[filename] ?? "application/octet-stream",
       "cache-control": "public, max-age=86400",
     },
   });

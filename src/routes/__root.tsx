@@ -4,6 +4,7 @@ import { getPublicSiteOrigin } from "@/lib/public-site-url";
 import {
   GAFCORE_APPLE_TOUCH_ICON_PATH,
   GAFCORE_FAVICON_PATH,
+  GAFCORE_FAVICON_SVG_PATH,
   gafcoreHeadIconLinks,
 } from "@/lib/site-icons.shared";
 import { I18nProvider } from "@/i18n/I18nProvider";
@@ -75,7 +76,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        <link rel="icon" type="image/png" href={GAFCORE_FAVICON_PATH} />
+        <link rel="icon" type="image/svg+xml" href={GAFCORE_FAVICON_SVG_PATH} />
+        <link rel="icon" type="image/png" sizes="32x32" href={GAFCORE_FAVICON_PATH} />
         <link rel="apple-touch-icon" href={GAFCORE_APPLE_TOUCH_ICON_PATH} />
         <HeadContent />
       </head>

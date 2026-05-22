@@ -159,7 +159,13 @@ if (mainCss && mainIndexJs) {
 
 const publicDir = join(root, "public");
 const staticRoot = join(outDir, "static");
-const publicIcons = ["favicon.png", "apple-touch-icon.png", "og-image.png"];
+const publicIcons = [
+  "favicon.svg",
+  "favicon.png",
+  "favicon-32.png",
+  "apple-touch-icon.png",
+  "og-image.png",
+];
 let publicCopied = 0;
 for (const name of publicIcons) {
   const src = join(publicDir, name);
