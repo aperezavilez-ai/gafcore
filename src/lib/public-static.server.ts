@@ -67,9 +67,16 @@ function embeddedBytes(pathname: string): Uint8Array | null {
   return null;
 }
 
+/** Normaliza /favicon.png?v=2 → /favicon.png */
+function normalizePublicPath(pathname: string): string {
+  const q = pathname.indexOf("?");
+  return q === -1 ? pathname : pathname.slice(0, q);
+}
+
 /** Sirve favicon/og-image (bytes embebidos primero; archivos en disco como respaldo). */
 export function servePublicStatic(pathname: string): Response | null {
-  const embedded = embeddedBytes(pathname);
+  const path = normalizePublicPath(pathname);
+  const embedded = embeddedBytes(path);
   if (embedded) {
     const mime =
       pathname === GAFCORE_FAVICON_SVG_PATH ? "image/svg+xml" : "image/png";
@@ -82,7 +89,7 @@ export function servePublicStatic(pathname: string): Response | null {
     });
   }
 
-  const filename = PATH_TO_FILE[pathname];
+  const filename = PATH_TO_FILE[path];
   if (!filename) return null;
 
   const bytes = readBundledPublic(filename);

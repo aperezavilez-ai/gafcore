@@ -2,23 +2,6 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "framework": null,
-  "redirects": [
-    {
-      "source": "/favicon.ico",
-      "destination": "https://raw.githubusercontent.com/aperezavilez-ai/Gafcore/main/public/favicon.png",
-      "permanent": false
-    },
-    {
-      "source": "/favicon.png",
-      "destination": "https://raw.githubusercontent.com/aperezavilez-ai/Gafcore/main/public/favicon.png",
-      "permanent": false
-    },
-    {
-      "source": "/favicon.svg",
-      "destination": "https://raw.githubusercontent.com/aperezavilez-ai/Gafcore/main/public/favicon.svg",
-      "permanent": false
-    }
-  ],
   "crons": [
     {
       "path": "/api/gafcore/workflow/drain",

@@ -159,7 +159,7 @@ export function GafCoreIDE() {
   const [projectName, setProjectName] = useState(readCachedProjectName);
   /** ID del proyecto activo (sincronizado con `setCurrentProjectId` en userSupabase). */
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(null);
-  const [recentProjects, setRecentProjects] = useState<ProjectRow[]>([]);
+  const [userProjects, setUserProjects] = useState<ProjectRow[]>([]);
   const [switchingProject, setSwitchingProject] = useState(false);
   const [deploySiteHost, setDeploySiteHost] = useState<string | null>(null);
   const [deployGithubRepo, setDeployGithubRepo] = useState<string | null>(null);
@@ -258,7 +258,7 @@ export function GafCoreIDE() {
 
   const refreshProjects = async () => {
     const list = await listProjects();
-    setRecentProjects(list.slice(0, 8));
+    setUserProjects(list);
     const active = await syncActiveFromList(list);
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
@@ -472,7 +472,7 @@ export function GafCoreIDE() {
       }
       setCurrentProjectIdState(ws.active.id);
       setProjectName(ws.active.name);
-      setRecentProjects(ws.projects.slice(0, 8));
+      setUserProjects(ws.projects);
       const activeId = ws.active.id!;
       const remote = await loadProjectFiles(activeId);
       await hydrateEditorFromRemote(remote, activeId);
@@ -689,7 +689,7 @@ export function GafCoreIDE() {
         className="flex h-12 shrink-0 items-center justify-between border-b px-3"
         style={{ background: "#ffffff", borderColor: "#e5e7eb" }}
       >
-        {/* Left: logo + project */}
+        {/* Left: logo + selector de proyecto */}
         <div className="flex min-w-0 items-center gap-1">
           <div
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white"
@@ -705,273 +705,6 @@ export function GafCoreIDE() {
           >
             G
           </div>
-          <DropdownMenu
-            modal={false}
-            onOpenChange={(open) => {
-              if (open) void refreshProjects();
-            }}
-          >
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex min-w-0 max-w-[min(100vw-200px,440px)] items-center gap-1.5 rounded-md border border-border/80 bg-muted/30 px-2.5 py-1 text-left hover:bg-muted"
-                title={
-                  currentProjectId
-                    ? `Proyecto: ${projectName} · Cuenta: ${ideUserToolbarName(user)}`
-                    : "Crea o elige un proyecto"
-                }
-              >
-                <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Proyecto
-                  </span>
-                  <span className="truncate text-[13px] font-semibold text-foreground">
-                    {projectName}
-                  </span>
-                  <span className="truncate text-[10px] text-muted-foreground">
-                    {ideUserToolbarName(user)}
-                  </span>
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-64"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <DropdownMenuItem onClick={() => navigate({ to: "/gafcore" })}>
-                <Home className="mr-2 h-4 w-4" />
-                Ir a inicio
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                Proyecto activo
-              </DropdownMenuLabel>
-              <div className="px-2 pb-1">
-                <p className="truncate text-sm font-semibold text-foreground">{projectName}</p>
-                {currentProjectId ? (
-                  <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
-                    {currentProjectId.slice(0, 8)}…
-                  </p>
-                ) : (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Usa «+ Nuevo» para crear uno
-                  </p>
-                )}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="flex items-start gap-2 text-[12px] font-normal">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold">
-                  {ideUserToolbarName(user).charAt(0).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1 leading-snug">
-                  <span className="block truncate font-medium text-foreground">
-                    {ideUserToolbarName(user)}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                    {user?.email ?? "Sesión"}
-                  </span>
-                  {isAdmin ? (
-                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                      Administrador
-                    </span>
-                  ) : null}
-                </span>
-              </DropdownMenuLabel>
-              <div className="px-2 py-1.5">
-                <div className="flex items-center justify-between text-[11.5px]">
-                  <span className="text-muted-foreground">Créditos GafCore</span>
-                  <span className="text-foreground">{creditsLabel}</span>
-                </div>
-                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-foreground"
-                    style={{ width: `${creditsPercent}%` }}
-                  />
-                </div>
-              </div>
-              <DropdownMenuItem className="text-primary" onClick={() => setCreditsModalOpen(true)}>
-                <Gift className="mr-2 h-4 w-4" />
-                Comprar créditos (paquetes)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigate({ to: "/gafcore/settings/project", search: { section: "plans" } })
-                }
-              >
-                <CreditCard className="mr-2 h-4 w-4" />
-                <span className="flex-1">Pagos</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <FolderOpen className="h-3.5 w-3.5" /> Cambiar proyecto
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    newProject();
-                  }}
-                  className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10"
-                  title="Crear proyecto nuevo"
-                >
-                  <Plus className="h-3 w-3" /> Nuevo
-                </button>
-              </DropdownMenuLabel>
-              {recentProjects.length === 0 ? (
-                <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                  Sin proyectos. Usa «+ Nuevo» para crear uno.
-                </div>
-              ) : (
-                recentProjects.map((p) => (
-                  <DropdownMenuItem
-                    key={p.id}
-                    disabled={switchingProject}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      void switchToProject(p);
-                    }}
-                  >
-                    {p.id === currentProjectId ? (
-                      <Check className="mr-2 h-4 w-4 text-primary" />
-                    ) : (
-                      <Folder className="mr-2 h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span className="flex-1 truncate">{p.name}</span>
-                  </DropdownMenuItem>
-                ))
-              )}
-              <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/projects" })}>
-                <LayoutGrid className="mr-2 h-4 w-4" />
-                Todos los proyectos
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault();
-                  setImportProjectDialogOpen(true);
-                }}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Importar proyecto (carpeta o archivos)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate({ to: "/gafcore/settings/project" })}>
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                <span className="flex-1">Ajustes</span>
-                <span className="text-[11px] text-muted-foreground">Ctrl ,</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigate({ to: "/gafcore/settings/project", search: { section: "memory" } })
-                }
-              >
-                <Brain className="mr-2 h-4 w-4" />
-                Memoria IA del proyecto
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setConnectorsOpen(true)}>
-                <Plug className="mr-2 h-4 w-4" />
-                <span className="flex-1">Conectores</span>
-                <span className="text-[11px] text-muted-foreground">Catálogo</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  window.setTimeout(() => void renameCurrent(), 0);
-                }}
-              >
-                <Pencil className="mr-2 h-4 w-4" />
-                Cambiar el nombre del proyecto
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  window.setTimeout(() => {
-                    const folder = window.prompt("Nombre de la carpeta destino", projectFolder);
-                    if (folder && folder.trim()) {
-                      const clean = folder.trim();
-                      setProjectFolder(clean);
-                      localStorage.setItem("gafcore_project_folder", clean);
-                      toast.success(`Proyecto movido a «${clean}»`);
-                    }
-                  }, 0);
-                }}
-              >
-                <Folder className="mr-2 h-4 w-4" />
-                <span className="flex-1">Mover a carpeta</span>
-                <span className="max-w-[80px] truncate text-[11px] text-muted-foreground">
-                  {projectFolder}
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDetailsOpen(true)}>
-                <Info className="mr-2 h-4 w-4" />
-                Detalles
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Palette className="mr-2 h-4 w-4" />
-                  <span className="flex-1">Apariencia</span>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      document.documentElement.classList.remove("dark");
-                      localStorage.setItem("gafcore_theme", "light");
-                      toast.success("Modo claro");
-                    }}
-                  >
-                    Claro
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      document.documentElement.classList.add("dark");
-                      localStorage.setItem("gafcore_theme", "dark");
-                      toast.success("Modo oscuro");
-                    }}
-                  >
-                    Oscuro
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                      document.documentElement.classList.toggle("dark", dark);
-                      localStorage.setItem("gafcore_theme", "system");
-                      toast.success(`Sistema (${dark ? "oscuro" : "claro"})`);
-                    }}
-                  >
-                    Sistema
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <HelpCircle className="mr-2 h-4 w-4" />
-                  <span className="flex-1">Ayuda</span>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem
-                    onClick={() => openExternal("https://tanstack.com/start/latest")}
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Documentación
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setHelpOpen(true)}>
-                    <Info className="mr-2 h-4 w-4" />
-                    Atajos de teclado
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openExternal("mailto:soporte@gafcore.com")}>
-                    <HelpCircle className="mr-2 h-4 w-4" />
-                    Contactar soporte
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openExternal("https://gafcore.com")}>
-                    <History className="mr-2 h-4 w-4" />
-                    Novedades
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <div className="ml-1 flex items-center md:hidden">
             <button
               type="button"
@@ -1035,6 +768,143 @@ export function GafCoreIDE() {
               <span>Usuarios</span>
             </button>
           )}
+          <DropdownMenu
+            modal={false}
+            onOpenChange={(open) => {
+              if (open) void refreshProjects();
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-7 min-w-0 max-w-[200px] items-center gap-1 rounded-md border border-border/80 bg-muted/30 px-2 text-left hover:bg-muted"
+                title={
+                  currentProjectId
+                    ? `Proyecto abierto: ${projectName}`
+                    : "Crea o elige un proyecto"
+                }
+                aria-label={`Proyecto: ${projectName}. Abrir lista de proyectos`}
+              >
+                <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
+                  {projectName}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-64"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              <DropdownMenuLabel className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <FolderOpen className="h-3.5 w-3.5" /> Mis proyectos
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    newProject();
+                  }}
+                  className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10"
+                  title="Crear proyecto nuevo"
+                >
+                  <Plus className="h-3 w-3" /> Nuevo
+                </button>
+              </DropdownMenuLabel>
+              {userProjects.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                  Sin proyectos. Usa «+ Nuevo» para crear uno.
+                </div>
+              ) : (
+                userProjects.map((p) => (
+                  <DropdownMenuItem
+                    key={p.id}
+                    disabled={switchingProject}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void switchToProject(p);
+                    }}
+                  >
+                    {p.id === currentProjectId ? (
+                      <Check className="mr-2 h-4 w-4 text-primary" />
+                    ) : (
+                      <Folder className="mr-2 h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="flex-1 truncate">{p.name}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
+              <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/projects" })}>
+                <LayoutGrid className="mr-2 h-4 w-4" />
+                Todos los proyectos
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  setImportProjectDialogOpen(true);
+                }}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Importar proyecto (carpeta o archivos)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate({ to: "/gafcore" })}>
+                <Home className="mr-2 h-4 w-4" />
+                Ir a inicio
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({ to: "/gafcore/settings/project" })}>
+                <SettingsIcon className="mr-2 h-4 w-4" />
+                <span className="flex-1">Ajustes del proyecto</span>
+                <span className="text-[11px] text-muted-foreground">Ctrl ,</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  navigate({ to: "/gafcore/settings/project", search: { section: "memory" } })
+                }
+              >
+                <Brain className="mr-2 h-4 w-4" />
+                Memoria IA del proyecto
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setConnectorsOpen(true)}>
+                <Plug className="mr-2 h-4 w-4" />
+                <span className="flex-1">Conectores</span>
+                <span className="text-[11px] text-muted-foreground">Catálogo</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.setTimeout(() => void renameCurrent(), 0);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Cambiar el nombre del proyecto
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.setTimeout(() => {
+                    const folder = window.prompt("Nombre de la carpeta destino", projectFolder);
+                    if (folder && folder.trim()) {
+                      const clean = folder.trim();
+                      setProjectFolder(clean);
+                      localStorage.setItem("gafcore_project_folder", clean);
+                      toast.success(`Proyecto movido a «${clean}»`);
+                    }
+                  }, 0);
+                }}
+              >
+                <Folder className="mr-2 h-4 w-4" />
+                <span className="flex-1">Mover a carpeta</span>
+                <span className="max-w-[80px] truncate text-[11px] text-muted-foreground">
+                  {projectFolder}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDetailsOpen(true)}>
+                <Info className="mr-2 h-4 w-4" />
+                Detalles
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Centro: vista y herramientas (plan y créditos solo en el panel de chat) */}
@@ -1157,26 +1027,144 @@ export function GafCoreIDE() {
           </div>
         </div>
 
-        {/* Right: actions */}
+        {/* Right: cuenta + acciones */}
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={async () => {
-              const { supabase } = await import("@/integrations/supabase/client");
-              await supabase.auth.signOut();
-              toast.success("Sesión cerrada");
-              navigate({
-                to: "/gafcore/login",
-                search: { redirect: "/gafcore/app", signedOut: true },
-              });
-            }}
-            className="h-8 gap-1.5 px-2.5 text-[13px] text-foreground hover:bg-muted"
-            title="Cerrar sesión"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Cerrar sesión
-          </Button>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex max-w-[min(40vw,200px)] items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-foreground hover:bg-muted"
+                title={user?.email ?? ideUserToolbarName(user)}
+                aria-label={`Cuenta: ${ideUserToolbarName(user)}`}
+              >
+                <span className="truncate">{ideUserToolbarName(user)}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="flex items-start gap-2 text-[12px] font-normal">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold">
+                  {ideUserToolbarName(user).charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1 leading-snug">
+                  <span className="block truncate font-medium text-foreground">
+                    {ideUserToolbarName(user)}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                    {user?.email ?? "Sesión"}
+                  </span>
+                  {isAdmin ? (
+                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                      Administrador
+                    </span>
+                  ) : null}
+                </span>
+              </DropdownMenuLabel>
+              <div className="px-2 py-1.5">
+                <div className="flex items-center justify-between text-[11.5px]">
+                  <span className="text-muted-foreground">Créditos GafCore</span>
+                  <span className="text-foreground">{creditsLabel}</span>
+                </div>
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-foreground"
+                    style={{ width: `${creditsPercent}%` }}
+                  />
+                </div>
+              </div>
+              <DropdownMenuItem className="text-primary" onClick={() => setCreditsModalOpen(true)}>
+                <Gift className="mr-2 h-4 w-4" />
+                Comprar créditos (paquetes)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  navigate({ to: "/gafcore/settings/project", search: { section: "plans" } })
+                }
+              >
+                <CreditCard className="mr-2 h-4 w-4" />
+                <span className="flex-1">Pagos</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Palette className="mr-2 h-4 w-4" />
+                  <span className="flex-1">Apariencia</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      document.documentElement.classList.remove("dark");
+                      localStorage.setItem("gafcore_theme", "light");
+                      toast.success("Modo claro");
+                    }}
+                  >
+                    Claro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      document.documentElement.classList.add("dark");
+                      localStorage.setItem("gafcore_theme", "dark");
+                      toast.success("Modo oscuro");
+                    }}
+                  >
+                    Oscuro
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                      document.documentElement.classList.toggle("dark", dark);
+                      localStorage.setItem("gafcore_theme", "system");
+                      toast.success(`Sistema (${dark ? "oscuro" : "claro"})`);
+                    }}
+                  >
+                    Sistema
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  <span className="flex-1">Ayuda</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem
+                    onClick={() => openExternal("https://tanstack.com/start/latest")}
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    Documentación
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setHelpOpen(true)}>
+                    <Info className="mr-2 h-4 w-4" />
+                    Atajos de teclado
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openExternal("mailto:soporte@gafcore.com")}>
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    Contactar soporte
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openExternal("https://gafcore.com")}>
+                    <History className="mr-2 h-4 w-4" />
+                    Novedades
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={async () => {
+                  const { supabase } = await import("@/integrations/supabase/client");
+                  await supabase.auth.signOut();
+                  toast.success("Sesión cerrada");
+                  navigate({
+                    to: "/gafcore/login",
+                    search: { redirect: "/gafcore/app", signedOut: true },
+                  });
+                }}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Cerrar sesión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             size="sm"
             variant="ghost"
