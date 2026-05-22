@@ -24,9 +24,16 @@ export const aiPluginManifestSchema = z.object({
   version: z.literal(EXTENSION_MANIFEST_VERSION),
   id: z.string().min(1).max(80),
   name: z.string().min(1).max(200),
-  hooks: z.array(z.enum(["before_chat", "after_chat", "before_workflow_task"])).max(5),
+  description: z.string().max(2000).default(""),
+  hooks: z.array(z.enum(["before_chat", "after_chat", "before_workflow_task"])).min(1).max(5),
+  /** Texto añadido al system prompt del chat IDE (hook before_chat). */
+  systemPromptAppend: z.string().max(8000).optional(),
   webhookUrl: z.string().url().optional(),
 });
+
+export function extensionAiPluginSlug(listingSlug: string): string {
+  return `plugin:${listingSlug.replace(/^plugin:/, "")}`;
+}
 
 export const externalAgentManifestSchema = z.object({
   kind: z.literal("agent"),

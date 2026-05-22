@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
+  extensionAiPluginSlug,
   extensionTemplateSlug,
   type TemplateExtensionManifest,
 } from "@/extensions/manifests.shared";
@@ -114,7 +115,7 @@ export async function installListingForUser(
   if (!pack) return { ok: false, error: "listing_not_found" };
 
   const manifest = parseExtensionManifest(pack.manifest);
-  if (manifest.kind !== "template") {
+  if (manifest.kind !== "template" && manifest.kind !== "ai_plugin") {
     return { ok: false, error: "kind_not_supported_yet" };
   }
 
@@ -126,7 +127,10 @@ export async function installListingForUser(
 
   if (!listingRow?.current_version_id) return { ok: false, error: "listing_not_found" };
 
-  const installSlug = extensionTemplateSlug(listingRow.slug);
+  const installSlug =
+    manifest.kind === "template"
+      ? extensionTemplateSlug(listingRow.slug)
+      : extensionAiPluginSlug(listingRow.slug);
 
   const { error } = await supabaseAdmin.from("gafcore_extension_installs").upsert(
     {
@@ -135,7 +139,7 @@ export async function installListingForUser(
       listing_id: listingId,
       version_id: listingRow.current_version_id,
       install_slug: installSlug,
-      kind: "template",
+      kind: manifest.kind,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,listing_id" },

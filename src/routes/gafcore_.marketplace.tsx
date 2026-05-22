@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Download, Package, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Package, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   listGafcoreExtensionsCatalog,
   uninstallGafcoreExtension,
 } from "@/lib/gafcore-extensions.functions";
+import type { CatalogListing } from "@/extensions/marketplace.server";
 
 const INSTALL_ERRORS: Record<string, string> = {
   extensions_disabled: "El marketplace no está activado en el servidor.",
@@ -23,7 +24,15 @@ const UNINSTALL_ERRORS: Record<string, string> = {
   extensions_disabled: "El marketplace no está activado en el servidor.",
   uninstall_failed: "No se pudo quitar la extensión.",
 };
-import type { CatalogListing } from "@/extensions/marketplace.server";
+
+const KIND_LABEL: Record<string, string> = {
+  template: "Plantilla",
+  ai_plugin: "Plugin IA",
+  agent: "Agente",
+  workflow_pack: "Workflow",
+};
+
+type CatalogFilter = "all" | "template" | "ai_plugin";
 
 export const Route = createFileRoute("/gafcore_/marketplace")({
   component: MarketplacePage,
@@ -35,6 +44,7 @@ function MarketplacePage() {
   const callList = useServerFn(listGafcoreExtensionsCatalog);
   const callInstall = useServerFn(installGafcoreExtension);
   const callUninstall = useServerFn(uninstallGafcoreExtension);
+  const [filter, setFilter] = useState<CatalogFilter>("all");
   const [listings, setListings] = useState<CatalogListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -42,33 +52,41 @@ function MarketplacePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await callList({ data: { kind: "template" } });
+      const res = await callList({
+        data: filter === "all" ? {} : { kind: filter },
+      });
       setListings(res.listings ?? []);
     } catch {
       setListings([]);
     } finally {
       setLoading(false);
     }
-  }, [callList]);
+  }, [callList, filter]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const onInstall = async (id: string) => {
-    setBusyId(id);
+  const onInstall = async (item: CatalogListing) => {
+    setBusyId(item.id);
     try {
-      const res = await callInstall({ data: { listingId: id } });
+      const res = await callInstall({ data: { listingId: item.id } });
       if (!res.ok) {
         toast.error("No se pudo instalar", {
           description: INSTALL_ERRORS[res.error] ?? res.error,
         });
         return;
       }
+      await load();
+      if (item.kind === "ai_plugin") {
+        toast.success("Plugin IA activado", {
+          description: "Afecta al chat del IDE en tus próximos mensajes.",
+        });
+        return;
+      }
       toast.success("Plantilla instalada", {
         description: "Abriendo «Nuevo proyecto» en el IDE para usarla.",
       });
-      await load();
       if (typeof window !== "undefined") {
         sessionStorage.setItem("gafcore_open_new_project", "1");
         window.dispatchEvent(new Event("gafcore:open-new-project"));
@@ -100,6 +118,12 @@ function MarketplacePage() {
     }
   };
 
+  const filters: { id: CatalogFilter; label: string }[] = [
+    { id: "all", label: "Todas" },
+    { id: "template", label: "Plantillas" },
+    { id: "ai_plugin", label: "Plugins IA" },
+  ];
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border px-6 py-4">
@@ -113,19 +137,34 @@ function MarketplacePage() {
           <div>
             <h1 className="text-xl font-semibold">Marketplace GafCore</h1>
             <p className="text-sm text-muted-foreground">
-              Extensiones de plantillas (E1). Plugins IA y agentes — próximamente.
+              Plantillas para nuevos proyectos y plugins que mejoran el chat con IA.
             </p>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-8">
+        <div className="mb-6 flex flex-wrap gap-2">
+          {filters.map((f) => (
+            <Button
+              key={f.id}
+              type="button"
+              size="sm"
+              variant={filter === f.id ? "default" : "outline"}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+
         {loading ? (
           <p className="text-sm text-muted-foreground">Cargando catálogo…</p>
         ) : listings.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No hay extensiones publicadas. Aplica la migración{" "}
-            <code className="text-xs">20260531120000_gafcore_extensions.sql</code> en Supabase.
+            No hay extensiones en esta categoría. Ejecuta{" "}
+            <code className="text-xs">npm run gafcore:migrate-extensions</code> en Supabase
+            enlazado.
           </p>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2">
@@ -135,13 +174,17 @@ function MarketplacePage() {
                 className="flex flex-col rounded-xl border border-border bg-card p-4 shadow-sm"
               >
                 <div className="flex items-start gap-3">
-                  <Package className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  {item.kind === "ai_plugin" ? (
+                    <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  ) : (
+                    <Package className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="font-medium">{item.name}</h2>
-                      <Badge variant="outline">{item.kind}</Badge>
+                      <Badge variant="outline">{KIND_LABEL[item.kind] ?? item.kind}</Badge>
                       {item.installed ? (
-                        <Badge variant="secondary">Instalada</Badge>
+                        <Badge variant="secondary">Activa</Badge>
                       ) : null}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
@@ -166,7 +209,7 @@ function MarketplacePage() {
                     className="mt-4 w-full"
                     size="sm"
                     disabled={busyId === item.id}
-                    onClick={() => void onInstall(item.id)}
+                    onClick={() => void onInstall(item)}
                   >
                     <Download className="mr-2 h-4 w-4" />
                     {busyId === item.id ? "Instalando…" : "Instalar"}

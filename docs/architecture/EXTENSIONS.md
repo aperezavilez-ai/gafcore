@@ -15,7 +15,7 @@
 | Tipo | E1 | E3+ |
 |------|----|-----|
 | `template` | ✅ | |
-| `ai_plugin` | | hooks en gateway |
+| `ai_plugin` | ✅ `before_chat` + `systemPromptAppend` | webhooks |
 | `agent` | | webhook runner |
 | `workflow_pack` | | DAG precargado |
 
@@ -53,7 +53,8 @@ El IDE y `createProjectFromTemplate` **no cambian** su API; solo el servidor res
 
 - `listGafcoreExtensionsCatalog` — catálogo con flag `installed`
 - `getGafcoreExtensionManifest` — manifest de versión publicada
-- `installGafcoreExtension` — upsert en `gafcore_extension_installs`
+- `installGafcoreExtension` / `uninstallGafcoreExtension` — installs por usuario
+- Chat IDE: `buildAiPluginPromptAppend` en `ai-plugins.server.ts`
 
 ## Migración
 

@@ -31,6 +31,7 @@ import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
 import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
+import { buildAiPluginPromptAppend } from "@/extensions/ai-plugins.server";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -69,6 +70,8 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     instruction: data.instruction,
     files: data.files as ProjFile[],
   });
+  const pluginAppend = await buildAiPluginPromptAppend(userId);
+  const promptAppendix = [memory.promptAppendix, pluginAppend].filter(Boolean).join("\n\n");
   const model = resolveGatewayModel(gateway, {
     instruction: data.instruction,
     hasVision: data.files.some((f) => f.content.trim().startsWith("data:image/")),
@@ -76,7 +79,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   const { messages, subset, ctxFiles } = buildGafcoreMessages(
     data,
     model,
-    memory.promptAppendix,
+    promptAppendix,
     memory.priorityPaths,
   );
   const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
@@ -215,6 +218,8 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     instruction: data.instruction,
     files: data.files as ProjFile[],
   });
+  const pluginAppend = await buildAiPluginPromptAppend(userId);
+  const promptAppendix = [memory.promptAppendix, pluginAppend].filter(Boolean).join("\n\n");
   const model = resolveGatewayModel(gateway, {
     instruction: data.instruction,
     hasVision: extractVisionImageParts(data.files as ProjFile[]).length > 0,
@@ -222,7 +227,7 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   const { messages, subset, ctxFiles } = buildGafcoreMessages(
     data,
     model,
-    memory.promptAppendix,
+    promptAppendix,
     memory.priorityPaths,
   );
 
