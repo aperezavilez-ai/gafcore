@@ -168,6 +168,31 @@ export default {
     if (path === "/api/__runtime-diag") {
       return runtimeEnvDiag();
     }
+    if (path === "/api/__extensions-diag") {
+      const { extensionsCatalogDiag } = await import("./extensions/marketplace.server");
+      const diag = await extensionsCatalogDiag();
+      return new Response(
+        JSON.stringify({ ok: true, commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null, ...diag }),
+        { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } },
+      );
+    }
+    if (request.method === "GET" && path === "/api/extensions/v1/catalog") {
+      const { listPublishedCatalog } = await import("./extensions/marketplace.server");
+      const { extensionsEnabled } = await import("./extensions/extension-host.server");
+      if (!extensionsEnabled()) {
+        return new Response(JSON.stringify({ ok: false, error: "extensions_disabled" }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const url = new URL(request.url);
+      const kind = url.searchParams.get("kind") ?? undefined;
+      const listings = await listPublishedCatalog(kind || undefined);
+      return new Response(JSON.stringify({ ok: true, listings }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
     if (path === "/api/__ssr-probe") {
       return ssrProbe(request);
     }

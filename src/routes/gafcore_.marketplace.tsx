@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Bot, Download, Package, Sparkles, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/gafcore_/marketplace")({
 });
 
 function MarketplacePage() {
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const callList = useServerFn(listGafcoreExtensionsCatalog);
   const callInstall = useServerFn(installGafcoreExtension);
@@ -51,24 +53,33 @@ function MarketplacePage() {
   const [listings, setListings] = useState<CatalogListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!user) {
+      setListings([]);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await callList({
         data: filter === "all" ? {} : { kind: filter },
       });
       setListings(res.listings ?? []);
-    } catch {
+    } catch (e) {
       setListings([]);
+      setLoadError(e instanceof Error ? e.message : "No se pudo cargar el catálogo");
     } finally {
       setLoading(false);
     }
-  }, [callList, filter]);
+  }, [callList, filter, user]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!authLoading) void load();
+  }, [load, authLoading]);
 
   const onInstall = async (item: CatalogListing) => {
     setBusyId(item.id);
@@ -193,14 +204,39 @@ function MarketplacePage() {
           ))}
         </div>
 
-        {loading ? (
+        {authLoading ? (
+          <p className="text-sm text-muted-foreground">Comprobando sesión…</p>
+        ) : !user ? (
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>Inicia sesión para ver e instalar extensiones del marketplace.</p>
+            <Button asChild>
+              <Link to="/gafcore/login" search={{ redirect: "/gafcore/marketplace" }}>
+                Entrar
+              </Link>
+            </Button>
+          </div>
+        ) : loading ? (
           <p className="text-sm text-muted-foreground">Cargando catálogo…</p>
+        ) : loadError ? (
+          <p className="text-sm text-destructive">{loadError}</p>
         ) : listings.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay extensiones en esta categoría. Ejecuta{" "}
-            <code className="text-xs">npm run gafcore:migrate-extensions</code> en Supabase
-            enlazado.
-          </p>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>No hay extensiones publicadas en esta categoría.</p>
+            <p>
+              Si acabas de desplegar: aplica las migraciones en el proyecto Supabase de producción
+              (SQL Editor →{" "}
+              <code className="text-xs">supabase/migrations/20260531120000_gafcore_extensions.sql</code>{" "}
+              y seeds) o ejecuta{" "}
+              <code className="text-xs">npm run gafcore:migrate-extensions</code> con el repo enlazado.
+            </p>
+            <p>
+              Comprueba{" "}
+              <a href="/api/__extensions-diag" className="text-primary underline" target="_blank" rel="noreferrer">
+                /api/__extensions-diag
+              </a>{" "}
+              (debe mostrar <code className="text-xs">publishedCount</code> &gt; 0).
+            </p>
+          </div>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2">
             {listings.map((item) => (

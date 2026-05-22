@@ -32,9 +32,7 @@ export async function listPublishedCatalog(
 
   let query = supabaseAdmin
     .from("gafcore_marketplace_listings")
-    .select(
-      "id, slug, name, description, kind, version_label, gafcore_publishers(display_name), current_version_id",
-    )
+    .select("id, slug, name, description, kind, version_label, publisher_id")
     .eq("state", "published")
     .order("sort_order", { ascending: true });
 
@@ -42,8 +40,26 @@ export async function listPublishedCatalog(
 
   const { data: listings, error } = await query;
   if (error) {
-    console.error("[extensions] catalog:", error);
+    console.error("[extensions] catalog:", error.message, error.code, error.details);
     return [];
+  }
+
+  const publisherIds = [
+    ...new Set((listings ?? []).map((r) => r.publisher_id).filter(Boolean)),
+  ] as string[];
+  const publisherNames = new Map<string, string>();
+  if (publisherIds.length > 0) {
+    const { data: pubs, error: pubErr } = await supabaseAdmin
+      .from("gafcore_publishers")
+      .select("id, display_name")
+      .in("id", publisherIds);
+    if (pubErr) {
+      console.error("[extensions] publishers:", pubErr.message);
+    } else {
+      for (const p of pubs ?? []) {
+        publisherNames.set(p.id, p.display_name);
+      }
+    }
   }
 
   let installedIds = new Set<string>();
@@ -55,19 +71,40 @@ export async function listPublishedCatalog(
     installedIds = new Set((installs ?? []).map((i) => i.listing_id));
   }
 
-  return (listings ?? []).map((row) => {
-    const pub = row.gafcore_publishers as { display_name?: string } | null;
-    return {
-      id: row.id,
-      slug: row.slug,
-      name: row.name,
-      description: row.description ?? "",
-      kind: row.kind,
-      publisherName: pub?.display_name ?? "Publisher",
-      version: row.version_label ?? "1.0.0",
-      installed: installedIds.has(row.id),
-    };
-  });
+  return (listings ?? []).map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description ?? "",
+    kind: row.kind,
+    publisherName: publisherNames.get(row.publisher_id) ?? "Publisher",
+    version: row.version_label ?? "1.0.0",
+    installed: installedIds.has(row.id),
+  }));
+}
+
+/** Diagnóstico servidor (sin secretos). */
+export async function extensionsCatalogDiag(): Promise<{
+  enabled: boolean;
+  publishedCount: number | null;
+  catalogError: string | null;
+}> {
+  if (!extensionsEnabled()) {
+    return { enabled: false, publishedCount: null, catalogError: "extensions_disabled" };
+  }
+  const { count, error } = await supabaseAdmin
+    .from("gafcore_marketplace_listings")
+    .select("id", { count: "exact", head: true })
+    .eq("state", "published");
+  if (error) {
+    return { enabled: true, publishedCount: null, catalogError: error.message };
+  }
+  const sample = await listPublishedCatalog();
+  return {
+    enabled: true,
+    publishedCount: count ?? sample.length,
+    catalogError: sample.length === 0 && (count ?? 0) > 0 ? "catalog_map_empty" : null,
+  };
 }
 
 export async function getListingManifest(
