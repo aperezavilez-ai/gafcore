@@ -1,7 +1,11 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { getPublicSiteOrigin } from "@/lib/public-site-url";
-import { gafcoreHeadIconLinks } from "@/lib/site-icons.shared";
+import {
+  GAFCORE_APPLE_TOUCH_ICON_PATH,
+  GAFCORE_FAVICON_PATH,
+  gafcoreHeadIconLinks,
+} from "@/lib/site-icons.shared";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
@@ -71,6 +75,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        <link rel="icon" type="image/png" href={GAFCORE_FAVICON_PATH} />
+        <link rel="apple-touch-icon" href={GAFCORE_APPLE_TOUCH_ICON_PATH} />
         <HeadContent />
       </head>
       <body>

@@ -4,7 +4,7 @@ import { ensureSupabaseSsrEnv } from "./lib/supabase-ssr-env.server";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { GAFCORE_FAVICON_PATH } from "./lib/site-icons.shared";
+import { servePublicStatic } from "./lib/public-static.server";
 import { spaFallbackResponse, wantsHtmlDocument } from "./lib/spa-fallback.server";
 
 type ServerEntry = {
@@ -163,9 +163,8 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     ensureSupabaseSsrEnv();
     const path = new URL(request.url).pathname;
-    if (path === "/favicon.ico") {
-      return Response.redirect(new URL(GAFCORE_FAVICON_PATH, request.url), 302);
-    }
+    const publicAsset = servePublicStatic(path);
+    if (publicAsset) return publicAsset;
     if (path === "/api/__runtime-diag") {
       return runtimeEnvDiag();
     }

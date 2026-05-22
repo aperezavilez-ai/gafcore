@@ -2,7 +2,7 @@
  * Vercel/Linux: el manifest SSR puede referenciar /assets/* con hash distinto al de static/.
  * Reescribe TODAS las rutas a archivos que existen en .vercel/output/static/assets.
  */
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -157,11 +157,25 @@ if (mainCss && mainIndexJs) {
   writeFileSync(shellPath, JSON.stringify(payload), "utf8");
 }
 
+const publicDir = join(root, "public");
+const staticRoot = join(outDir, "static");
+const publicIcons = ["favicon.png", "apple-touch-icon.png", "og-image.png"];
+let publicCopied = 0;
+for (const name of publicIcons) {
+  const src = join(publicDir, name);
+  if (!existsSync(src)) continue;
+  copyFileSync(src, join(serverFunc, name));
+  publicCopied++;
+  if (existsSync(staticRoot)) {
+    copyFileSync(src, join(staticRoot, name));
+  }
+}
+
 const missingAfter = collectMissingAssets();
 ssrProbe = await probeSsrHome();
 
 console.log(
-  `[vercel-sync-ssr-assets] css=${gafcoreCss ?? mainCss ?? "none"} js=${mainIndexJs ?? "none"} body=${bodyCaptured ? "captured" : "default"} ssrProbe=${ssrProbe.ok ? "ok" : JSON.stringify(ssrProbe)} missing=${missingAfter.length} → ${filesPatched} files, ${replacements} fixes`,
+  `[vercel-sync-ssr-assets] css=${gafcoreCss ?? mainCss ?? "none"} js=${mainIndexJs ?? "none"} body=${bodyCaptured ? "captured" : "default"} public=${publicCopied} ssrProbe=${ssrProbe.ok ? "ok" : JSON.stringify(ssrProbe)} missing=${missingAfter.length} → ${filesPatched} files, ${replacements} fixes`,
 );
 if (missingAfter.length > 0) {
   console.warn("[vercel-sync-ssr-assets] orphan assets:", missingAfter.slice(0, 8).join(", "));
