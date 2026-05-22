@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Dialog,
@@ -10,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
+import { Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import {
   createProjectFromTemplate,
@@ -124,6 +125,17 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
                 ))}
               </ul>
             )}
+            <p className="text-xs text-muted-foreground">
+              ¿Más plantillas?{" "}
+              <Link
+                to="/gafcore/marketplace"
+                className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+                onClick={() => onOpenChange(false)}
+              >
+                <Package className="h-3 w-3" />
+                Abrir Marketplace
+              </Link>
+            </p>
           </div>
         </div>
         <DialogFooter>

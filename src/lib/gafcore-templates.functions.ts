@@ -9,8 +9,8 @@ import type { GafcoreTemplateFile } from "@/lib/gafcore-templates.shared";
 
 export const listGafcoreProjectTemplates = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    const templates = await listActiveTemplates();
+  .handler(async ({ context }) => {
+    const templates = await listActiveTemplates(context.userId!);
     return { templates };
   });
 
@@ -26,7 +26,7 @@ export const createProjectFromTemplate = createServerFn({ method: "POST" })
     const userId = context.userId!;
     const sb = context.supabase!;
 
-    const files = await loadTemplateFilesBySlug(data.templateSlug ?? "blank-vite");
+    const files = await loadTemplateFilesBySlug(data.templateSlug ?? "blank-vite", userId);
 
     const { data: project, error: pErr } = await sb
       .from("projects")

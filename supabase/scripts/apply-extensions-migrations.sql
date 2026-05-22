@@ -1,0 +1,6 @@
+-- =============================================================================
+-- GafCore — Marketplace / extensiones (E1)
+-- Ejecutar en Supabase → SQL Editor (copiar el archivo de migración completo):
+--   supabase/migrations/20260531120000_gafcore_extensions.sql
+-- O en terminal: npm run gafcore:migrate-extensions
+-- =============================================================================

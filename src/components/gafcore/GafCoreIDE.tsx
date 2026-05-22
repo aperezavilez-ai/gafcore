@@ -67,6 +67,7 @@ import {
   Check,
   Brain,
   Search,
+  Package,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -270,6 +271,25 @@ export function GafCoreIDE() {
       );
     })();
   }, [refreshCredits]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tryOpenNewProject = () => {
+      const url = new URL(window.location.href);
+      const fromQuery = url.searchParams.get("newProject") === "1";
+      const fromStorage = sessionStorage.getItem("gafcore_open_new_project") === "1";
+      if (!fromQuery && !fromStorage) return;
+      if (fromQuery) {
+        url.searchParams.delete("newProject");
+        window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+      sessionStorage.removeItem("gafcore_open_new_project");
+      setNewProjectDialogOpen(true);
+    };
+    tryOpenNewProject();
+    window.addEventListener("gafcore:open-new-project", tryOpenNewProject);
+    return () => window.removeEventListener("gafcore:open-new-project", tryOpenNewProject);
+  }, []);
 
   const displayMonthly = displayMonthlyAllowanceForUi({ isAdmin, subActive, monthlyAllowance });
   const creditsLabel = isAdmin
@@ -939,6 +959,10 @@ export function GafCoreIDE() {
               <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/projects" })}>
                 <LayoutGrid className="mr-2 h-4 w-4" />
                 Todos los proyectos
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/marketplace" })}>
+                <Package className="mr-2 h-4 w-4" />
+                Marketplace
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {

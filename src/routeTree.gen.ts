@@ -21,6 +21,7 @@ import { Route as CreditsRouteImport } from './routes/credits'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GafcoreRegisterRouteImport } from './routes/gafcore_.register'
 import { Route as GafcoreProjectsRouteImport } from './routes/gafcore_.projects'
+import { Route as GafcoreMarketplaceRouteImport } from './routes/gafcore_.marketplace'
 import { Route as GafcoreLoginRouteImport } from './routes/gafcore_.login'
 import { Route as GafcoreAppRouteImport } from './routes/gafcore_.app'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -48,6 +49,9 @@ import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/c
 import { Route as ApiGafcoreChatCompleteRouteImport } from './routes/api/gafcore/chat.complete'
 import { Route as ApiGafcoreAdminSeedTemplatesRouteImport } from './routes/api/gafcore/admin/seed-templates'
 import { Route as ApiGafcoreAdminDiagnosticsIngestRouteImport } from './routes/api/gafcore/admin/diagnostics-ingest'
+import { Route as ApiExtensionsV1ManifestRouteImport } from './routes/api/extensions/v1/manifest'
+import { Route as ApiExtensionsV1InstallRouteImport } from './routes/api/extensions/v1/install'
+import { Route as ApiExtensionsV1CatalogRouteImport } from './routes/api/extensions/v1/catalog'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -107,6 +111,11 @@ const GafcoreRegisterRoute = GafcoreRegisterRouteImport.update({
 const GafcoreProjectsRoute = GafcoreProjectsRouteImport.update({
   id: '/gafcore_/projects',
   path: '/gafcore/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GafcoreMarketplaceRoute = GafcoreMarketplaceRouteImport.update({
+  id: '/gafcore_/marketplace',
+  path: '/gafcore/marketplace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GafcoreLoginRoute = GafcoreLoginRouteImport.update({
@@ -251,6 +260,21 @@ const ApiGafcoreAdminDiagnosticsIngestRoute =
     path: '/api/gafcore/admin/diagnostics-ingest',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiExtensionsV1ManifestRoute = ApiExtensionsV1ManifestRouteImport.update({
+  id: '/api/extensions/v1/manifest',
+  path: '/api/extensions/v1/manifest',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExtensionsV1InstallRoute = ApiExtensionsV1InstallRouteImport.update({
+  id: '/api/extensions/v1/install',
+  path: '/api/extensions/v1/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExtensionsV1CatalogRoute = ApiExtensionsV1CatalogRouteImport.update({
+  id: '/api/extensions/v1/catalog',
+  path: '/api/extensions/v1/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -266,6 +290,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/gafcore/app': typeof GafcoreAppRoute
   '/gafcore/login': typeof GafcoreLoginRoute
+  '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
   '/gafcore/register': typeof GafcoreRegisterRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
@@ -280,6 +305,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
+  '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
+  '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
@@ -307,6 +335,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/gafcore/app': typeof GafcoreAppRoute
   '/gafcore/login': typeof GafcoreLoginRoute
+  '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
   '/gafcore/register': typeof GafcoreRegisterRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
@@ -321,6 +350,9 @@ export interface FileRoutesByTo {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
+  '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
+  '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
@@ -349,6 +381,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/gafcore_/app': typeof GafcoreAppRoute
   '/gafcore_/login': typeof GafcoreLoginRoute
+  '/gafcore_/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore_/projects': typeof GafcoreProjectsRoute
   '/gafcore_/register': typeof GafcoreRegisterRoute
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
@@ -363,6 +396,9 @@ export interface FileRoutesById {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore_/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
+  '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
+  '/api/extensions/v1/install': typeof ApiExtensionsV1InstallRoute
+  '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
@@ -392,6 +428,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/gafcore/app'
     | '/gafcore/login'
+    | '/gafcore/marketplace'
     | '/gafcore/projects'
     | '/gafcore/register'
     | '/api/gafcore/checkout-confirm'
@@ -406,6 +443,9 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore/admin/ops'
     | '/gafcore/settings/project'
+    | '/api/extensions/v1/catalog'
+    | '/api/extensions/v1/install'
+    | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
     | '/api/gafcore/chat/complete'
@@ -433,6 +473,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/gafcore/app'
     | '/gafcore/login'
+    | '/gafcore/marketplace'
     | '/gafcore/projects'
     | '/gafcore/register'
     | '/api/gafcore/checkout-confirm'
@@ -447,6 +488,9 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore/admin/ops'
     | '/gafcore/settings/project'
+    | '/api/extensions/v1/catalog'
+    | '/api/extensions/v1/install'
+    | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
     | '/api/gafcore/chat/complete'
@@ -474,6 +518,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/gafcore_/app'
     | '/gafcore_/login'
+    | '/gafcore_/marketplace'
     | '/gafcore_/projects'
     | '/gafcore_/register'
     | '/api/gafcore/checkout-confirm'
@@ -488,6 +533,9 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore_/admin/ops'
     | '/gafcore_/settings/project'
+    | '/api/extensions/v1/catalog'
+    | '/api/extensions/v1/install'
+    | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
     | '/api/gafcore/chat/complete'
@@ -516,6 +564,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   GafcoreAppRoute: typeof GafcoreAppRoute
   GafcoreLoginRoute: typeof GafcoreLoginRoute
+  GafcoreMarketplaceRoute: typeof GafcoreMarketplaceRoute
   GafcoreProjectsRoute: typeof GafcoreProjectsRoute
   GafcoreRegisterRoute: typeof GafcoreRegisterRoute
   ApiGafcoreCheckoutConfirmRoute: typeof ApiGafcoreCheckoutConfirmRoute
@@ -530,6 +579,9 @@ export interface RootRouteChildren {
   ApiV1MeRoute: typeof ApiV1MeRoute
   GafcoreAdminOpsRoute: typeof GafcoreAdminOpsRoute
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
+  ApiExtensionsV1CatalogRoute: typeof ApiExtensionsV1CatalogRoute
+  ApiExtensionsV1InstallRoute: typeof ApiExtensionsV1InstallRoute
+  ApiExtensionsV1ManifestRoute: typeof ApiExtensionsV1ManifestRoute
   ApiGafcoreAdminDiagnosticsIngestRoute: typeof ApiGafcoreAdminDiagnosticsIngestRoute
   ApiGafcoreAdminSeedTemplatesRoute: typeof ApiGafcoreAdminSeedTemplatesRoute
   ApiGafcoreChatCompleteRoute: typeof ApiGafcoreChatCompleteRoute
@@ -627,6 +679,13 @@ declare module '@tanstack/react-router' {
       path: '/gafcore/projects'
       fullPath: '/gafcore/projects'
       preLoaderRoute: typeof GafcoreProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gafcore_/marketplace': {
+      id: '/gafcore_/marketplace'
+      path: '/gafcore/marketplace'
+      fullPath: '/gafcore/marketplace'
+      preLoaderRoute: typeof GafcoreMarketplaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gafcore_/login': {
@@ -818,6 +877,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreAdminDiagnosticsIngestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/extensions/v1/manifest': {
+      id: '/api/extensions/v1/manifest'
+      path: '/api/extensions/v1/manifest'
+      fullPath: '/api/extensions/v1/manifest'
+      preLoaderRoute: typeof ApiExtensionsV1ManifestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/extensions/v1/install': {
+      id: '/api/extensions/v1/install'
+      path: '/api/extensions/v1/install'
+      fullPath: '/api/extensions/v1/install'
+      preLoaderRoute: typeof ApiExtensionsV1InstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/extensions/v1/catalog': {
+      id: '/api/extensions/v1/catalog'
+      path: '/api/extensions/v1/catalog'
+      fullPath: '/api/extensions/v1/catalog'
+      preLoaderRoute: typeof ApiExtensionsV1CatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -847,6 +927,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   GafcoreAppRoute: GafcoreAppRoute,
   GafcoreLoginRoute: GafcoreLoginRoute,
+  GafcoreMarketplaceRoute: GafcoreMarketplaceRoute,
   GafcoreProjectsRoute: GafcoreProjectsRoute,
   GafcoreRegisterRoute: GafcoreRegisterRoute,
   ApiGafcoreCheckoutConfirmRoute: ApiGafcoreCheckoutConfirmRoute,
@@ -861,6 +942,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MeRoute: ApiV1MeRoute,
   GafcoreAdminOpsRoute: GafcoreAdminOpsRoute,
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
+  ApiExtensionsV1CatalogRoute: ApiExtensionsV1CatalogRoute,
+  ApiExtensionsV1InstallRoute: ApiExtensionsV1InstallRoute,
+  ApiExtensionsV1ManifestRoute: ApiExtensionsV1ManifestRoute,
   ApiGafcoreAdminDiagnosticsIngestRoute: ApiGafcoreAdminDiagnosticsIngestRoute,
   ApiGafcoreAdminSeedTemplatesRoute: ApiGafcoreAdminSeedTemplatesRoute,
   ApiGafcoreChatCompleteRoute: ApiGafcoreChatCompleteRoute,

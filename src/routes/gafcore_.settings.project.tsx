@@ -7,6 +7,7 @@ import {
   Globe,
   GitBranch,
   GitFork,
+  Package,
   Users,
   CreditCard,
   Cloud,
@@ -52,6 +53,7 @@ const SETTINGS_SECTION_IDS = [
   "devices",
   "memory",
   "workflows",
+  "marketplace",
 ] as const;
 type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
@@ -79,6 +81,7 @@ const SIDEBAR_GROUPS = [
       { id: "git", label: "Git", icon: GitBranch },
       { id: "memory", label: "Memoria IA", icon: Brain },
       { id: "workflows", label: "Multiagente", icon: GitFork },
+      { id: "marketplace", label: "Marketplace", icon: Package },
     ],
   },
   {
@@ -290,6 +293,20 @@ function SectionPanel(p: PanelProps) {
           />
           <div className="mt-6">
             <WorkflowHistoryPanel />
+          </div>
+        </>
+      );
+    case "marketplace":
+      return (
+        <>
+          <PanelHeader
+            title="Marketplace"
+            subtitle="Plantillas y extensiones del ecosistema GafCore."
+          />
+          <div className="mt-6">
+            <Button asChild>
+              <Link to="/gafcore/marketplace">Abrir marketplace</Link>
+            </Button>
           </div>
         </>
       );

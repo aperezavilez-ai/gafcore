@@ -52,7 +52,7 @@ export async function ensureBuiltinTemplatesSeeded(): Promise<void> {
   await seedPromise;
 }
 
-export async function listActiveTemplates(): Promise<TemplateListItem[]> {
+export async function listActiveTemplates(userId?: string): Promise<TemplateListItem[]> {
   await ensureBuiltinTemplatesSeeded();
   const { data, error } = await supabaseAdmin
     .from("gafcore_project_templates")
@@ -69,12 +69,33 @@ export async function listActiveTemplates(): Promise<TemplateListItem[]> {
       sort_order: t.sort_order,
     }));
   }
-  return (data ?? []) as TemplateListItem[];
+  const base = (data ?? []) as TemplateListItem[];
+  if (!userId) return base;
+
+  const { listUserTemplateSlugs } = await import("@/extensions/marketplace.server");
+  const ext = await listUserTemplateSlugs(userId);
+  const extItems: TemplateListItem[] = ext.map((e, i) => ({
+    slug: e.slug,
+    name: e.name,
+    description: e.description,
+    category: "starter",
+    sort_order: 1000 + i,
+  }));
+  return [...base, ...extItems];
 }
 
-export async function loadTemplateFilesBySlug(slug: string): Promise<GafcoreTemplateFile[]> {
+export async function loadTemplateFilesBySlug(
+  slug: string,
+  userId?: string,
+): Promise<GafcoreTemplateFile[]> {
   await ensureBuiltinTemplatesSeeded();
   const key = slug.trim() || GAFCORE_DEFAULT_TEMPLATE_SLUG;
+
+  if (userId && key.startsWith("ext:")) {
+    const { loadExtensionTemplateFiles } = await import("@/extensions/marketplace.server");
+    const extFiles = await loadExtensionTemplateFiles(userId, key);
+    if (extFiles?.length) return extFiles;
+  }
   const { data, error } = await supabaseAdmin
     .from("gafcore_project_templates")
     .select("files")
