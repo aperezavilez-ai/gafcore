@@ -12,6 +12,13 @@ const PROJECT_CHILD_TABLES = [
   "project_secrets",
   "mcp_connections",
   "project_publishes",
+  "project_ai_memory",
+  "project_decisions",
+  "project_graph_nodes",
+  "project_graph_edges",
+  "gafcore_validation_runs",
+  "gafcore_pipeline_runs",
+  "gafcore_workflow_runs",
 ] as const;
 
 /**
@@ -49,11 +56,22 @@ export const deleteGafcoreProject = createServerFn({ method: "POST" })
       .maybeSingle();
     const admin = !!adminRow;
 
-    if (proj.user_id !== userId && !admin) {
+    if (proj.user_id != null && proj.user_id !== userId && !admin) {
       return {
         ok: false as const,
         error: "No tienes permiso para eliminar este proyecto.",
       };
+    }
+
+    if (!proj.user_id) {
+      const { error: claimErr } = await sb
+        .from("projects")
+        .update({ user_id: userId })
+        .eq("id", projectId)
+        .is("user_id", null);
+      if (claimErr) {
+        console.warn("[deleteGafcoreProject] claim orphan:", claimErr);
+      }
     }
 
     const { error: chatErr } = await sb.from("chat_messages").delete().eq("project_id", projectId);

@@ -22,8 +22,11 @@ import {
   renameProject,
   syncActiveFromList,
   autoPublishProject,
+  clearCurrentProjectId,
+  getCurrentProjectId,
   type ProjectRow,
 } from "@/core/project";
+import { deleteGafcoreProject } from "@/lib/gafcore-project.functions";
 import {
   isGithubDeployConfigured,
   type GafcoreDeployResult,
@@ -68,6 +71,7 @@ import {
   Brain,
   Search,
   Package,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -174,6 +178,7 @@ export function GafCoreIDE() {
     (subscription?.price_id === "plan_creador_monthly" ||
       String(subscription?.plan_tier ?? "").toLowerCase() === "creador");
   const callDeployStatus = useServerFn(getProjectDeployStatus);
+  const callDeleteProject = useServerFn(deleteGafcoreProject);
 
   const [files, setFiles] = useState<FileItem[]>(initialFiles);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -312,10 +317,10 @@ export function GafCoreIDE() {
 
   const showProjectSearch = userProjects.length > 4 || projectSearch.length > 0;
 
-  const refreshProjects = async () => {
+  const refreshProjects = async (preferActiveId?: string | null) => {
     const list = await listProjects();
     setUserProjects(list);
-    const active = await syncActiveFromList(list);
+    const active = await syncActiveFromList(list, preferActiveId ?? currentProjectId);
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
   };
@@ -416,7 +421,7 @@ export function GafCoreIDE() {
     setActiveIndex(0);
     setLoaded(true);
     setPreviewKey((k) => k + 1);
-    await refreshProjects();
+    await refreshProjects(created.id);
     toast.success(`Proyecto «${created.name}» creado.`);
   };
 
@@ -446,7 +451,7 @@ export function GafCoreIDE() {
     setPreviewKey((k) => k + 1);
     const saved = await saveProjectFiles(items);
     if (!saved) toast.error("No se pudieron guardar los archivos importados");
-    await refreshProjects();
+    await refreshProjects(created.id);
     toast.success(`Importados ${items.length} archivos en «${created.name}».`);
   };
 
@@ -485,6 +490,44 @@ export function GafCoreIDE() {
     } catch (err) {
       console.error(err);
       toast.error("Error al importar archivos.");
+    }
+  };
+
+  const deleteCurrentProject = async () => {
+    const cur = currentProjectId ?? getCurrentProjectId();
+    if (!cur) {
+      toast.error("No hay proyecto activo para eliminar");
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Eliminar definitivamente «${projectName}»?\n\nSe borrarán archivos, historial y datos asociados.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const res = await callDeleteProject({ data: { projectId: cur } });
+      if (!res.ok) {
+        toast.error(res.error ?? "No se pudo eliminar el proyecto");
+        return;
+      }
+      clearCurrentProjectId();
+      toast.success(`Proyecto «${projectName}» eliminado`);
+      const list = await listProjects();
+      setUserProjects(list);
+      if (list.length === 0) {
+        setCurrentProjectIdState(null);
+        setProjectName("Sin proyecto");
+        setFiles(initialFiles);
+        setOpenTabs([initialFiles[0].name]);
+        setActiveIndex(0);
+        setLoaded(true);
+        return;
+      }
+      await switchToProject(list[0]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
     }
   };
 
@@ -1003,6 +1046,16 @@ export function GafCoreIDE() {
               >
                 <Pencil className="mr-2 h-4 w-4" />
                 Cambiar el nombre del proyecto
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                disabled={!currentProjectId || switchingProject}
+                onSelect={() => {
+                  window.setTimeout(() => void deleteCurrentProject(), 0);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar proyecto
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {

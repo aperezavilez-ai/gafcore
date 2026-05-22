@@ -234,7 +234,7 @@ function GafcoreProjectsPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild>
-              <Link to="/gafcore/app">
+              <Link to="/gafcore/app" search={{ newProject: "1" }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Crear en el editor
               </Link>
@@ -276,7 +276,9 @@ function GafcoreProjectsPage() {
                 : "Prueba otra búsqueda."}
             </p>
             <Button asChild className="mt-4">
-              <Link to="/gafcore/app">Ir al editor</Link>
+              <Link to="/gafcore/app" search={{ newProject: "1" }}>
+                Ir al editor
+              </Link>
             </Button>
           </div>
         ) : (

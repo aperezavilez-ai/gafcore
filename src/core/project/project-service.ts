@@ -94,6 +94,7 @@ export async function bootstrapWorkspace(): Promise<WorkspaceBootstrap> {
 /** Sincroniza menú «Cambiar proyecto» con la lista actual. */
 export async function syncActiveFromList(
   projects: ProjectRow[],
+  preferId?: string | null,
 ): Promise<ActiveProjectState> {
   if (projects.length === 0) {
     clearCurrentProjectId();
@@ -101,7 +102,7 @@ export async function syncActiveFromList(
     return activeFromRow(null);
   }
 
-  const cur = getCurrentProjectId();
+  const cur = preferId ?? getCurrentProjectId();
   const nextId = cur && projects.some((p) => p.id === cur) ? cur : projects[0].id;
   if (!nextId) {
     clearCurrentProjectId();

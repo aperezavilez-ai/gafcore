@@ -173,7 +173,7 @@ function MarketplacePage() {
         sessionStorage.setItem("gafcore_open_new_project", "1");
         window.dispatchEvent(new Event("gafcore:open-new-project"));
       }
-      void navigate({ to: "/gafcore/app" });
+      void navigate({ to: "/gafcore/app", search: { newProject: "1" } });
     } catch {
       toast.error("Error al instalar");
     } finally {
