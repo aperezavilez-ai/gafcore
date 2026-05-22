@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  GAFCORE_APPLE_TOUCH_ICON_PATH,
+  GAFCORE_FAVICON_PATH,
+} from "./site-icons.shared";
+
 type SpaShell = {
   css: string;
   js: string;
@@ -66,6 +71,8 @@ export function spaFallbackResponse(_request: Request): Response | null {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GafCore</title>
+    <link rel="icon" type="image/png" href="${GAFCORE_FAVICON_PATH}" />
+    <link rel="apple-touch-icon" href="${GAFCORE_APPLE_TOUCH_ICON_PATH}" />
     <link rel="stylesheet" href="${shell.css}" type="text/css" />
     <link rel="modulepreload" href="${shell.js}" />
   </head>

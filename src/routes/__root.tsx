@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { getPublicSiteOrigin } from "@/lib/public-site-url";
+import { gafcoreHeadIconLinks } from "@/lib/site-icons.shared";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
@@ -58,7 +59,7 @@ export const Route = createRootRoute({
       { name: "twitter:image", content: `${site}/og-image.png` },
       { name: "theme-color", content: "#6366f1" },
     ],
-    links: [{ rel: "canonical", href: site }],
+    links: [{ rel: "canonical", href: site }, ...gafcoreHeadIconLinks()],
     };
   },
   shellComponent: RootShell,
