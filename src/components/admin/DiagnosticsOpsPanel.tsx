@@ -26,7 +26,7 @@ import {
   type DiagnosticReportRow,
   type DiagnosticSeverity,
 } from "@/lib/gafcore-diagnostics.shared";
-import { ArrowLeft, CheckCircle2, Loader2, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Package, RefreshCw, ShieldAlert } from "lucide-react";
 
 function readLastScanFromStorage(): DiagnosticLastScan | null {
   if (typeof window === "undefined") return null;
@@ -219,6 +219,12 @@ export function DiagnosticsOpsPanel() {
           <Link to="/gafcore/app">
             <ArrowLeft className="mr-1 h-4 w-4" />
             Volver al IDE
+          </Link>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/gafcore/admin/marketplace">
+            <Package className="mr-2 h-4 w-4" />
+            Publisher marketplace
           </Link>
         </Button>
         <div className="flex items-center gap-2">

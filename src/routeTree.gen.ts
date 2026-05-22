@@ -27,6 +27,7 @@ import { Route as GafcoreAppRouteImport } from './routes/gafcore_.app'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as GafcoreSettingsProjectRouteImport } from './routes/gafcore_.settings.project'
 import { Route as GafcoreAdminOpsRouteImport } from './routes/gafcore_.admin.ops'
+import { Route as GafcoreAdminMarketplaceRouteImport } from './routes/gafcore_.admin.marketplace'
 import { Route as ApiV1MeRouteImport } from './routes/api/v1/me'
 import { Route as ApiV1KeysRouteImport } from './routes/api/v1/keys'
 import { Route as ApiV1HealthRouteImport } from './routes/api/v1/health'
@@ -142,6 +143,11 @@ const GafcoreSettingsProjectRoute = GafcoreSettingsProjectRouteImport.update({
 const GafcoreAdminOpsRoute = GafcoreAdminOpsRouteImport.update({
   id: '/gafcore_/admin/ops',
   path: '/gafcore/admin/ops',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GafcoreAdminMarketplaceRoute = GafcoreAdminMarketplaceRouteImport.update({
+  id: '/gafcore_/admin/marketplace',
+  path: '/gafcore/admin/marketplace',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1MeRoute = ApiV1MeRouteImport.update({
@@ -310,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/health': typeof ApiV1HealthRoute
   '/api/v1/keys': typeof ApiV1KeysRouteWithChildren
   '/api/v1/me': typeof ApiV1MeRoute
+  '/gafcore/admin/marketplace': typeof GafcoreAdminMarketplaceRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
@@ -356,6 +363,7 @@ export interface FileRoutesByTo {
   '/api/v1/health': typeof ApiV1HealthRoute
   '/api/v1/keys': typeof ApiV1KeysRouteWithChildren
   '/api/v1/me': typeof ApiV1MeRoute
+  '/gafcore/admin/marketplace': typeof GafcoreAdminMarketplaceRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/api/v1/health': typeof ApiV1HealthRoute
   '/api/v1/keys': typeof ApiV1KeysRouteWithChildren
   '/api/v1/me': typeof ApiV1MeRoute
+  '/gafcore_/admin/marketplace': typeof GafcoreAdminMarketplaceRoute
   '/gafcore_/admin/ops': typeof GafcoreAdminOpsRoute
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
@@ -451,6 +460,7 @@ export interface FileRouteTypes {
     | '/api/v1/health'
     | '/api/v1/keys'
     | '/api/v1/me'
+    | '/gafcore/admin/marketplace'
     | '/gafcore/admin/ops'
     | '/gafcore/settings/project'
     | '/api/extensions/v1/agent-echo'
@@ -497,6 +507,7 @@ export interface FileRouteTypes {
     | '/api/v1/health'
     | '/api/v1/keys'
     | '/api/v1/me'
+    | '/gafcore/admin/marketplace'
     | '/gafcore/admin/ops'
     | '/gafcore/settings/project'
     | '/api/extensions/v1/agent-echo'
@@ -543,6 +554,7 @@ export interface FileRouteTypes {
     | '/api/v1/health'
     | '/api/v1/keys'
     | '/api/v1/me'
+    | '/gafcore_/admin/marketplace'
     | '/gafcore_/admin/ops'
     | '/gafcore_/settings/project'
     | '/api/extensions/v1/agent-echo'
@@ -590,6 +602,7 @@ export interface RootRouteChildren {
   ApiV1HealthRoute: typeof ApiV1HealthRoute
   ApiV1KeysRoute: typeof ApiV1KeysRouteWithChildren
   ApiV1MeRoute: typeof ApiV1MeRoute
+  GafcoreAdminMarketplaceRoute: typeof GafcoreAdminMarketplaceRoute
   GafcoreAdminOpsRoute: typeof GafcoreAdminOpsRoute
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
   ApiExtensionsV1AgentEchoRoute: typeof ApiExtensionsV1AgentEchoRoute
@@ -735,6 +748,13 @@ declare module '@tanstack/react-router' {
       path: '/gafcore/admin/ops'
       fullPath: '/gafcore/admin/ops'
       preLoaderRoute: typeof GafcoreAdminOpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gafcore_/admin/marketplace': {
+      id: '/gafcore_/admin/marketplace'
+      path: '/gafcore/admin/marketplace'
+      fullPath: '/gafcore/admin/marketplace'
+      preLoaderRoute: typeof GafcoreAdminMarketplaceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/me': {
@@ -961,6 +981,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1HealthRoute: ApiV1HealthRoute,
   ApiV1KeysRoute: ApiV1KeysRouteWithChildren,
   ApiV1MeRoute: ApiV1MeRoute,
+  GafcoreAdminMarketplaceRoute: GafcoreAdminMarketplaceRoute,
   GafcoreAdminOpsRoute: GafcoreAdminOpsRoute,
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
   ApiExtensionsV1AgentEchoRoute: ApiExtensionsV1AgentEchoRoute,

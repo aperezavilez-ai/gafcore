@@ -1,6 +1,6 @@
 # GafCore — Ecosistema de extensiones (E0–E1)
 
-> **Estado:** E0 + E1 implementados (build OK). Falta aplicar migración en Supabase y probar instalación.  
+> **Estado:** E0–E4 en código; admin publisher en `/gafcore/admin/marketplace`. Aplica migraciones con `npm run gafcore:migrate-extensions`.  
 > El **core** (chat, workflow, deploy, auth) no importa código de terceros; solo valida manifests y delega al **Extension Host**.
 
 ## Principios
@@ -72,7 +72,7 @@ GAFCORE_MAX_EXTENSIONS_PER_USER=20
 
 ## Fases siguientes
 
-- **E2:** Pagos / publisher portal
+- **E2:** Pagos (publisher admin en `/gafcore/admin/marketplace` — sin pagos aún)
 - **E3:** Plugin IA `before_chat`
 - **E4:** Agentes `webhook` — en progreso (notify al terminar workflow; prueba en marketplace)
 - **E5:** API keys publisher + revisión listings
