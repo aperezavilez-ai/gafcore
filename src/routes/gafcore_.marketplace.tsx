@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Download, Package } from "lucide-react";
+import { ArrowLeft, Download, Package, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,21 @@ import { toast } from "sonner";
 import {
   installGafcoreExtension,
   listGafcoreExtensionsCatalog,
+  uninstallGafcoreExtension,
 } from "@/lib/gafcore-extensions.functions";
+
+const INSTALL_ERRORS: Record<string, string> = {
+  extensions_disabled: "El marketplace no está activado en el servidor.",
+  install_limit_reached: "Has alcanzado el límite de extensiones instaladas.",
+  listing_not_found: "Esta extensión ya no está disponible.",
+  kind_not_supported_yet: "Este tipo de extensión aún no está soportado.",
+  install_failed: "Error al guardar la instalación.",
+};
+
+const UNINSTALL_ERRORS: Record<string, string> = {
+  extensions_disabled: "El marketplace no está activado en el servidor.",
+  uninstall_failed: "No se pudo quitar la extensión.",
+};
 import type { CatalogListing } from "@/extensions/marketplace.server";
 
 export const Route = createFileRoute("/gafcore_/marketplace")({
@@ -20,9 +34,10 @@ function MarketplacePage() {
   const navigate = useNavigate();
   const callList = useServerFn(listGafcoreExtensionsCatalog);
   const callInstall = useServerFn(installGafcoreExtension);
+  const callUninstall = useServerFn(uninstallGafcoreExtension);
   const [listings, setListings] = useState<CatalogListing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [installingId, setInstallingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,11 +56,13 @@ function MarketplacePage() {
   }, [load]);
 
   const onInstall = async (id: string) => {
-    setInstallingId(id);
+    setBusyId(id);
     try {
       const res = await callInstall({ data: { listingId: id } });
       if (!res.ok) {
-        toast.error("No se pudo instalar", { description: res.error });
+        toast.error("No se pudo instalar", {
+          description: INSTALL_ERRORS[res.error] ?? res.error,
+        });
         return;
       }
       toast.success("Plantilla instalada", {
@@ -60,7 +77,26 @@ function MarketplacePage() {
     } catch {
       toast.error("Error al instalar");
     } finally {
-      setInstallingId(null);
+      setBusyId(null);
+    }
+  };
+
+  const onUninstall = async (id: string) => {
+    setBusyId(id);
+    try {
+      const res = await callUninstall({ data: { listingId: id } });
+      if (!res.ok) {
+        toast.error("No se pudo quitar", {
+          description: UNINSTALL_ERRORS[res.error] ?? res.error,
+        });
+        return;
+      }
+      toast.success("Extensión quitada de tu cuenta");
+      await load();
+    } catch {
+      toast.error("Error al quitar la extensión");
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -114,20 +150,28 @@ function MarketplacePage() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  className="mt-4 w-full"
-                  size="sm"
-                  variant={item.installed ? "outline" : "default"}
-                  disabled={item.installed || installingId === item.id}
-                  onClick={() => void onInstall(item.id)}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  {item.installed
-                    ? "Instalada"
-                    : installingId === item.id
-                      ? "Instalando…"
-                      : "Instalar"}
-                </Button>
+                {item.installed ? (
+                  <Button
+                    className="mt-4 w-full"
+                    size="sm"
+                    variant="outline"
+                    disabled={busyId === item.id}
+                    onClick={() => void onUninstall(item.id)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {busyId === item.id ? "Quitando…" : "Quitar de mi cuenta"}
+                  </Button>
+                ) : (
+                  <Button
+                    className="mt-4 w-full"
+                    size="sm"
+                    disabled={busyId === item.id}
+                    onClick={() => void onInstall(item.id)}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    {busyId === item.id ? "Instalando…" : "Instalar"}
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

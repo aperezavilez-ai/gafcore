@@ -149,6 +149,26 @@ export async function installListingForUser(
   return { ok: true, installSlug };
 }
 
+export async function uninstallListingForUser(
+  userId: string,
+  listingId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!extensionsEnabled()) return { ok: false, error: "extensions_disabled" };
+
+  const { error } = await supabaseAdmin
+    .from("gafcore_extension_installs")
+    .delete()
+    .eq("user_id", userId)
+    .eq("listing_id", listingId);
+
+  if (error) {
+    console.error("[extensions] uninstall:", error);
+    return { ok: false, error: "uninstall_failed" };
+  }
+
+  return { ok: true };
+}
+
 export async function loadExtensionTemplateFiles(
   userId: string,
   slug: string,

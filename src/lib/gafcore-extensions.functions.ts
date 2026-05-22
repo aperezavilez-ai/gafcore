@@ -5,6 +5,7 @@ import {
   getListingManifest,
   installListingForUser,
   listPublishedCatalog,
+  uninstallListingForUser,
 } from "@/extensions/marketplace.server";
 
 export const listGafcoreExtensionsCatalog = createServerFn({ method: "POST" })
@@ -42,4 +43,13 @@ export const installGafcoreExtension = createServerFn({ method: "POST" })
     const result = await installListingForUser(context.userId!, data.listingId, data.projectId);
     if (!result.ok) return { ok: false as const, error: result.error };
     return { ok: true as const, installSlug: result.installSlug };
+  });
+
+export const uninstallGafcoreExtension = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => installSchema.pick({ listingId: true }).parse(input))
+  .handler(async ({ data, context }) => {
+    const result = await uninstallListingForUser(context.userId!, data.listingId);
+    if (!result.ok) return { ok: false as const, error: result.error };
+    return { ok: true as const };
   });
