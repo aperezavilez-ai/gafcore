@@ -832,12 +832,142 @@ export function GafCoreIDE() {
             G
           </div>
           {userShortLabel ? (
-            <span
-              className="ml-1 min-w-0 max-w-[min(32vw,180px)] shrink truncate text-[13px] font-semibold text-foreground"
-              title={ideUserToolbarName(user)}
-            >
-              {userShortLabel}
-            </span>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="ml-1 flex max-w-[min(32vw,180px)] min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-semibold text-foreground hover:bg-muted"
+                  title={user?.email ?? ideUserToolbarName(user)}
+                  aria-label={`Cuenta: ${ideUserToolbarName(user)}`}
+                >
+                  <span className="truncate">{userShortLabel}</span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel className="flex items-start gap-2 text-[12px] font-normal">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold">
+                    {ideUserToolbarName(user).charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1 leading-snug">
+                    <span className="block truncate font-medium text-foreground">
+                      {ideUserToolbarName(user)}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                      {user?.email ?? "Sesión"}
+                    </span>
+                    {isAdmin ? (
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        Administrador
+                      </span>
+                    ) : null}
+                  </span>
+                </DropdownMenuLabel>
+                <div className="px-2 py-1.5">
+                  <div className="flex items-center justify-between text-[11.5px]">
+                    <span className="text-muted-foreground">Créditos GafCore</span>
+                    <span className="text-foreground">{creditsLabel}</span>
+                  </div>
+                  <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-foreground"
+                      style={{ width: `${creditsPercent}%` }}
+                    />
+                  </div>
+                </div>
+                <DropdownMenuItem className="text-primary" onClick={() => setCreditsModalOpen(true)}>
+                  <Gift className="mr-2 h-4 w-4" />
+                  Comprar créditos (paquetes)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    navigate({ to: "/gafcore/settings/project", search: { section: "plans" } })
+                  }
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  <span className="flex-1">Pagos</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Palette className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Apariencia</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        document.documentElement.classList.remove("dark");
+                        localStorage.setItem("gafcore_theme", "light");
+                        toast.success("Modo claro");
+                      }}
+                    >
+                      Claro
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        document.documentElement.classList.add("dark");
+                        localStorage.setItem("gafcore_theme", "dark");
+                        toast.success("Modo oscuro");
+                      }}
+                    >
+                      Oscuro
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                        document.documentElement.classList.toggle("dark", dark);
+                        localStorage.setItem("gafcore_theme", "system");
+                        toast.success(`Sistema (${dark ? "oscuro" : "claro"})`);
+                      }}
+                    >
+                      Sistema
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Ayuda</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem
+                      onClick={() => openExternal("https://tanstack.com/start/latest")}
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Documentación
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setHelpOpen(true)}>
+                      <Info className="mr-2 h-4 w-4" />
+                      Atajos de teclado
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openExternal("mailto:soporte@gafcore.com")}>
+                      <HelpCircle className="mr-2 h-4 w-4" />
+                      Contactar soporte
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => openExternal("https://gafcore.com")}>
+                      <History className="mr-2 h-4 w-4" />
+                      Novedades
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={async () => {
+                    const { supabase } = await import("@/integrations/supabase/client");
+                    await supabase.auth.signOut();
+                    toast.success("Sesión cerrada");
+                    navigate({
+                      to: "/gafcore/login",
+                      search: { redirect: "/gafcore/app", signedOut: true },
+                    });
+                  }}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <div className="ml-1 flex items-center md:hidden">
             <button
@@ -1204,144 +1334,8 @@ export function GafCoreIDE() {
           </div>
         </div>
 
-        {/* Right: cuenta + acciones */}
+        {/* Right: acciones */}
         <div className="flex items-center gap-1">
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex max-w-[min(40vw,200px)] items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-foreground hover:bg-muted"
-                title={user?.email ?? ideUserToolbarName(user)}
-                aria-label={`Cuenta: ${ideUserToolbarName(user)}`}
-              >
-                <span className="truncate">{ideUserToolbarName(user)}</span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel className="flex items-start gap-2 text-[12px] font-normal">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold">
-                  {ideUserToolbarName(user).charAt(0).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1 leading-snug">
-                  <span className="block truncate font-medium text-foreground">
-                    {ideUserToolbarName(user)}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                    {user?.email ?? "Sesión"}
-                  </span>
-                  {isAdmin ? (
-                    <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                      Administrador
-                    </span>
-                  ) : null}
-                </span>
-              </DropdownMenuLabel>
-              <div className="px-2 py-1.5">
-                <div className="flex items-center justify-between text-[11.5px]">
-                  <span className="text-muted-foreground">Créditos GafCore</span>
-                  <span className="text-foreground">{creditsLabel}</span>
-                </div>
-                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-foreground"
-                    style={{ width: `${creditsPercent}%` }}
-                  />
-                </div>
-              </div>
-              <DropdownMenuItem className="text-primary" onClick={() => setCreditsModalOpen(true)}>
-                <Gift className="mr-2 h-4 w-4" />
-                Comprar créditos (paquetes)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigate({ to: "/gafcore/settings/project", search: { section: "plans" } })
-                }
-              >
-                <CreditCard className="mr-2 h-4 w-4" />
-                <span className="flex-1">Pagos</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Palette className="mr-2 h-4 w-4" />
-                  <span className="flex-1">Apariencia</span>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      document.documentElement.classList.remove("dark");
-                      localStorage.setItem("gafcore_theme", "light");
-                      toast.success("Modo claro");
-                    }}
-                  >
-                    Claro
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      document.documentElement.classList.add("dark");
-                      localStorage.setItem("gafcore_theme", "dark");
-                      toast.success("Modo oscuro");
-                    }}
-                  >
-                    Oscuro
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                      document.documentElement.classList.toggle("dark", dark);
-                      localStorage.setItem("gafcore_theme", "system");
-                      toast.success(`Sistema (${dark ? "oscuro" : "claro"})`);
-                    }}
-                  >
-                    Sistema
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <HelpCircle className="mr-2 h-4 w-4" />
-                  <span className="flex-1">Ayuda</span>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuItem
-                    onClick={() => openExternal("https://tanstack.com/start/latest")}
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Documentación
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setHelpOpen(true)}>
-                    <Info className="mr-2 h-4 w-4" />
-                    Atajos de teclado
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openExternal("mailto:soporte@gafcore.com")}>
-                    <HelpCircle className="mr-2 h-4 w-4" />
-                    Contactar soporte
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openExternal("https://gafcore.com")}>
-                    <History className="mr-2 h-4 w-4" />
-                    Novedades
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={async () => {
-                  const { supabase } = await import("@/integrations/supabase/client");
-                  await supabase.auth.signOut();
-                  toast.success("Sesión cerrada");
-                  navigate({
-                    to: "/gafcore/login",
-                    search: { redirect: "/gafcore/app", signedOut: true },
-                  });
-                }}
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Cerrar sesión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button
             size="sm"
             variant="ghost"
