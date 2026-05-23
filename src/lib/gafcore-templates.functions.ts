@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   listActiveTemplates,
   loadTemplateFilesBySlug,
@@ -24,11 +25,13 @@ export const createProjectFromTemplate = createServerFn({ method: "POST" })
   .inputValidator((input) => createSchema.parse(input))
   .handler(async ({ data, context }) => {
     const userId = context.userId!;
-    const sb = context.supabase!;
 
     const files = await loadTemplateFilesBySlug(data.templateSlug ?? "blank-vite", userId);
+    if (!files.length) {
+      return { ok: false as const, message: "No se encontró la plantilla seleccionada." };
+    }
 
-    const { data: project, error: pErr } = await sb
+    const { data: project, error: pErr } = await supabaseAdmin
       .from("projects")
       .insert({ name: data.name.trim(), user_id: userId })
       .select("id, name, created_at")
@@ -36,7 +39,13 @@ export const createProjectFromTemplate = createServerFn({ method: "POST" })
 
     if (pErr || !project?.id) {
       console.error("[templates] create project:", pErr);
-      return { ok: false as const, message: "No se pudo crear el proyecto." };
+      const detail = pErr?.message?.trim();
+      return {
+        ok: false as const,
+        message: detail
+          ? `No se pudo crear el proyecto: ${detail}`
+          : "No se pudo crear el proyecto. Comprueba la sesión o inténtalo de nuevo.",
+      };
     }
 
     const rows = files.map((f) => ({
@@ -46,11 +55,17 @@ export const createProjectFromTemplate = createServerFn({ method: "POST" })
       content: f.content,
     }));
 
-    const { error: fErr } = await sb.from("project_files").insert(rows);
+    const { error: fErr } = await supabaseAdmin.from("project_files").insert(rows);
     if (fErr) {
       console.error("[templates] insert files:", fErr);
-      await sb.from("projects").delete().eq("id", project.id);
-      return { ok: false as const, message: "No se pudieron guardar los archivos de la plantilla." };
+      await supabaseAdmin.from("projects").delete().eq("id", project.id);
+      const detail = fErr.message?.trim();
+      return {
+        ok: false as const,
+        message: detail
+          ? `No se pudieron guardar los archivos: ${detail}`
+          : "No se pudieron guardar los archivos de la plantilla.",
+      };
     }
 
     return {

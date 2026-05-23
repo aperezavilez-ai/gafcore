@@ -69,7 +69,16 @@ export async function listActiveTemplates(userId?: string): Promise<TemplateList
       sort_order: t.sort_order,
     }));
   }
-  const base = (data ?? []) as TemplateListItem[];
+  let base = (data ?? []) as TemplateListItem[];
+  if (base.length === 0) {
+    base = BUILTIN_PROJECT_TEMPLATES.map((t) => ({
+      slug: t.slug,
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      sort_order: t.sort_order,
+    }));
+  }
   if (!userId) return base;
 
   const { listUserTemplateSlugs } = await import("@/extensions/marketplace.server");

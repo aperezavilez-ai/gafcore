@@ -86,6 +86,9 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
       onCreated(result.project, (result.files ?? []) as FileItem[]);
       onOpenChange(false);
       setName("Mi proyecto");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error de red o sesión";
+      toast.error("No se pudo crear el proyecto", { description: msg });
     } finally {
       setLoading(false);
     }
@@ -114,6 +117,10 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Cargando plantillas…
+              </p>
+            ) : templates.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay plantillas en el catálogo. Se usará la plantilla base al crear.
               </p>
             ) : (
               <ul className="max-h-48 space-y-2 overflow-y-auto">
