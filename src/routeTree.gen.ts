@@ -36,6 +36,9 @@ import { Route as ApiV1GenerationsRouteImport } from './routes/api/v1/generation
 import { Route as ApiV1CreditsRouteImport } from './routes/api/v1/credits'
 import { Route as ApiGafcoreVercelWebhookRouteImport } from './routes/api/gafcore/vercel-webhook'
 import { Route as ApiGafcorePublishRouteImport } from './routes/api/gafcore/publish'
+import { Route as ApiGafcoreProjectsDeleteRouteImport } from './routes/api/gafcore/projects-delete'
+import { Route as ApiGafcoreProjectsCreateRouteImport } from './routes/api/gafcore/projects-create'
+import { Route as ApiGafcoreProjectTemplatesRouteImport } from './routes/api/gafcore/project-templates'
 import { Route as ApiGafcoreGithubConnectRouteImport } from './routes/api/gafcore/github-connect'
 import { Route as ApiGafcoreCheckoutSessionRouteImport } from './routes/api/gafcore/checkout-session'
 import { Route as ApiGafcoreCheckoutConfirmRouteImport } from './routes/api/gafcore/checkout-confirm'
@@ -192,6 +195,24 @@ const ApiGafcorePublishRoute = ApiGafcorePublishRouteImport.update({
   path: '/api/gafcore/publish',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreProjectsDeleteRoute =
+  ApiGafcoreProjectsDeleteRouteImport.update({
+    id: '/api/gafcore/projects-delete',
+    path: '/api/gafcore/projects-delete',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreProjectsCreateRoute =
+  ApiGafcoreProjectsCreateRouteImport.update({
+    id: '/api/gafcore/projects-create',
+    path: '/api/gafcore/projects-create',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreProjectTemplatesRoute =
+  ApiGafcoreProjectTemplatesRouteImport.update({
+    id: '/api/gafcore/project-templates',
+    path: '/api/gafcore/project-templates',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGafcoreGithubConnectRoute = ApiGafcoreGithubConnectRouteImport.update({
   id: '/api/gafcore/github-connect',
   path: '/api/gafcore/github-connect',
@@ -323,6 +344,9 @@ export interface FileRoutesByFullPath {
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/github-connect': typeof ApiGafcoreGithubConnectRoute
+  '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
+  '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
+  '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
   '/api/gafcore/vercel-webhook': typeof ApiGafcoreVercelWebhookRoute
   '/api/v1/credits': typeof ApiV1CreditsRoute
@@ -372,6 +396,9 @@ export interface FileRoutesByTo {
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/github-connect': typeof ApiGafcoreGithubConnectRoute
+  '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
+  '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
+  '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
   '/api/gafcore/vercel-webhook': typeof ApiGafcoreVercelWebhookRoute
   '/api/v1/credits': typeof ApiV1CreditsRoute
@@ -422,6 +449,9 @@ export interface FileRoutesById {
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/github-connect': typeof ApiGafcoreGithubConnectRoute
+  '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
+  '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
+  '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
   '/api/gafcore/vercel-webhook': typeof ApiGafcoreVercelWebhookRoute
   '/api/v1/credits': typeof ApiV1CreditsRoute
@@ -473,6 +503,9 @@ export interface FileRouteTypes {
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/github-connect'
+    | '/api/gafcore/project-templates'
+    | '/api/gafcore/projects-create'
+    | '/api/gafcore/projects-delete'
     | '/api/gafcore/publish'
     | '/api/gafcore/vercel-webhook'
     | '/api/v1/credits'
@@ -522,6 +555,9 @@ export interface FileRouteTypes {
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/github-connect'
+    | '/api/gafcore/project-templates'
+    | '/api/gafcore/projects-create'
+    | '/api/gafcore/projects-delete'
     | '/api/gafcore/publish'
     | '/api/gafcore/vercel-webhook'
     | '/api/v1/credits'
@@ -571,6 +607,9 @@ export interface FileRouteTypes {
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/github-connect'
+    | '/api/gafcore/project-templates'
+    | '/api/gafcore/projects-create'
+    | '/api/gafcore/projects-delete'
     | '/api/gafcore/publish'
     | '/api/gafcore/vercel-webhook'
     | '/api/v1/credits'
@@ -621,6 +660,9 @@ export interface RootRouteChildren {
   ApiGafcoreCheckoutConfirmRoute: typeof ApiGafcoreCheckoutConfirmRoute
   ApiGafcoreCheckoutSessionRoute: typeof ApiGafcoreCheckoutSessionRoute
   ApiGafcoreGithubConnectRoute: typeof ApiGafcoreGithubConnectRoute
+  ApiGafcoreProjectTemplatesRoute: typeof ApiGafcoreProjectTemplatesRoute
+  ApiGafcoreProjectsCreateRoute: typeof ApiGafcoreProjectsCreateRoute
+  ApiGafcoreProjectsDeleteRoute: typeof ApiGafcoreProjectsDeleteRoute
   ApiGafcorePublishRoute: typeof ApiGafcorePublishRoute
   ApiGafcoreVercelWebhookRoute: typeof ApiGafcoreVercelWebhookRoute
   ApiV1CreditsRoute: typeof ApiV1CreditsRoute
@@ -840,6 +882,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcorePublishRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/projects-delete': {
+      id: '/api/gafcore/projects-delete'
+      path: '/api/gafcore/projects-delete'
+      fullPath: '/api/gafcore/projects-delete'
+      preLoaderRoute: typeof ApiGafcoreProjectsDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/projects-create': {
+      id: '/api/gafcore/projects-create'
+      path: '/api/gafcore/projects-create'
+      fullPath: '/api/gafcore/projects-create'
+      preLoaderRoute: typeof ApiGafcoreProjectsCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/project-templates': {
+      id: '/api/gafcore/project-templates'
+      path: '/api/gafcore/project-templates'
+      fullPath: '/api/gafcore/project-templates'
+      preLoaderRoute: typeof ApiGafcoreProjectTemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/github-connect': {
       id: '/api/gafcore/github-connect'
       path: '/api/gafcore/github-connect'
@@ -1016,6 +1079,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGafcoreCheckoutConfirmRoute: ApiGafcoreCheckoutConfirmRoute,
   ApiGafcoreCheckoutSessionRoute: ApiGafcoreCheckoutSessionRoute,
   ApiGafcoreGithubConnectRoute: ApiGafcoreGithubConnectRoute,
+  ApiGafcoreProjectTemplatesRoute: ApiGafcoreProjectTemplatesRoute,
+  ApiGafcoreProjectsCreateRoute: ApiGafcoreProjectsCreateRoute,
+  ApiGafcoreProjectsDeleteRoute: ApiGafcoreProjectsDeleteRoute,
   ApiGafcorePublishRoute: ApiGafcorePublishRoute,
   ApiGafcoreVercelWebhookRoute: ApiGafcoreVercelWebhookRoute,
   ApiV1CreditsRoute: ApiV1CreditsRoute,

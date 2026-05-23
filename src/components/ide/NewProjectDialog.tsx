@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import {
   Dialog,
   DialogContent,
@@ -13,10 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
-import {
-  createProjectFromTemplate,
-  listGafcoreProjectTemplates,
-} from "@/lib/gafcore-templates.functions";
+import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { GAFCORE_DEFAULT_TEMPLATE_SLUG } from "@/lib/gafcore-templates.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 
@@ -35,14 +31,14 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const [loading, setLoading] = useState(false);
   const [loadingList, setLoadingList] = useState(false);
 
-  const callList = useServerFn(listGafcoreProjectTemplates);
-  const callCreate = useServerFn(createProjectFromTemplate);
-
   const refreshTemplates = useCallback(() => {
     setLoadingList(true);
-    void callList()
+    void gafcoreAuthJsonFetch<{ ok: boolean; templates?: TemplateRow[] }>(
+      "/api/gafcore/project-templates",
+      {},
+    )
       .then((r) => {
-        const list = r?.templates ?? [];
+        const list = r.templates ?? [];
         setTemplates(list);
         if (list.length > 0 && !list.some((t) => t.slug === slug)) setSlug(list[0].slug);
       })
@@ -56,7 +52,7 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
         ]);
       })
       .finally(() => setLoadingList(false));
-  }, [callList, slug]);
+  }, [slug]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,11 +72,15 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
     if (!trimmed) return;
     setLoading(true);
     try {
-      const result = await callCreate({
-        data: { name: trimmed, templateSlug: slug },
-      });
-      if (!result?.ok || !result.project) {
-        toast.error(result?.message ?? "No se pudo crear el proyecto");
+      const result = await gafcoreAuthJsonFetch<{
+        ok: boolean;
+        project?: { id: string; name: string; created_at: string };
+        files?: FileItem[];
+        error?: string;
+      }>("/api/gafcore/projects-create", { name: trimmed, templateSlug: slug });
+
+      if (!result.ok || !result.project) {
+        toast.error(result.error ?? "No se pudo crear el proyecto");
         return;
       }
       onCreated(result.project, (result.files ?? []) as FileItem[]);

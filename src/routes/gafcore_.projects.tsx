@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
   FolderOpen,
@@ -42,7 +41,7 @@ import {
   setCurrentProjectId,
   type ProjectRow,
 } from "@/lib/userSupabase";
-import { deleteGafcoreProject } from "@/lib/gafcore-project.functions";
+import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
 import { activateProjectRow } from "@/core/project";
 import type { FileItem } from "@/components/ide/CodeEditor";
@@ -63,7 +62,6 @@ export const Route = createFileRoute("/gafcore_/projects")({
 function GafcoreProjectsPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const deleteProjectOnServer = useServerFn(deleteGafcoreProject);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -197,9 +195,12 @@ function GafcoreProjectsPage() {
       return;
     }
     try {
-      const res = await deleteProjectOnServer({ data: { projectId: p.id } });
-      if (!res?.ok) {
-        toast.error(res?.error ?? "No se pudo eliminar (sin respuesta del servidor)");
+      const res = await gafcoreAuthJsonFetch<{ ok: boolean; error?: string }>(
+        "/api/gafcore/projects-delete",
+        { projectId: p.id },
+      );
+      if (!res.ok) {
+        toast.error(res.error ?? "No se pudo eliminar");
         return;
       }
       if (getCurrentProjectId() === p.id) {

@@ -26,7 +26,7 @@ import {
   getCurrentProjectId,
   type ProjectRow,
 } from "@/core/project";
-import { deleteGafcoreProject } from "@/lib/gafcore-project.functions";
+import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import {
   isGithubDeployConfigured,
   type GafcoreDeployResult,
@@ -178,7 +178,6 @@ export function GafCoreIDE() {
     (subscription?.price_id === "plan_creador_monthly" ||
       String(subscription?.plan_tier ?? "").toLowerCase() === "creador");
   const callDeployStatus = useServerFn(getProjectDeployStatus);
-  const callDeleteProject = useServerFn(deleteGafcoreProject);
 
   const [files, setFiles] = useState<FileItem[]>(initialFiles);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -507,9 +506,12 @@ export function GafCoreIDE() {
       return;
     }
     try {
-      const res = await callDeleteProject({ data: { projectId: cur } });
-      if (!res?.ok) {
-        toast.error(res?.error ?? "No se pudo eliminar el proyecto");
+      const res = await gafcoreAuthJsonFetch<{ ok: boolean; error?: string }>(
+        "/api/gafcore/projects-delete",
+        { projectId: cur },
+      );
+      if (!res.ok) {
+        toast.error(res.error ?? "No se pudo eliminar el proyecto");
         return;
       }
       clearCurrentProjectId();

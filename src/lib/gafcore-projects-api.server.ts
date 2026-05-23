@@ -1,0 +1,162 @@
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
+import {
+  listActiveTemplates,
+  loadTemplateFilesBySlug,
+} from "@/lib/gafcore-templates.server";
+import type { GafcoreTemplateFile } from "@/lib/gafcore-templates.shared";
+
+const PROJECT_CHILD_TABLES = [
+  "project_files",
+  "project_snapshots",
+  "project_secrets",
+  "mcp_connections",
+  "project_publishes",
+  "project_ai_memory",
+  "project_decisions",
+  "project_graph_nodes",
+  "project_graph_edges",
+  "gafcore_validation_runs",
+  "gafcore_pipeline_runs",
+  "gafcore_workflow_runs",
+] as const;
+
+function adminUnavailable(): { ok: false; error: string } {
+  return {
+    ok: false,
+    error:
+      "El servidor no tiene SUPABASE_SERVICE_ROLE_KEY. Añádela en Vercel o .env.local del host.",
+  };
+}
+
+export async function listProjectTemplatesForUser(userId: string) {
+  try {
+    const templates = await listActiveTemplates(userId);
+    return { ok: true as const, templates };
+  } catch (e) {
+    console.error("[projects-api] list templates:", e);
+    return adminUnavailable();
+  }
+}
+
+export async function createProjectForUser(
+  userId: string,
+  name: string,
+  templateSlug?: string,
+): Promise<
+  | {
+      ok: true;
+      project: { id: string; name: string; created_at: string };
+      files: GafcoreTemplateFile[];
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const files = await loadTemplateFilesBySlug(templateSlug ?? "blank-vite", userId);
+    if (!files.length) {
+      return { ok: false, error: "No se encontró la plantilla seleccionada." };
+    }
+
+    const { data: project, error: pErr } = await supabaseAdmin
+      .from("projects")
+      .insert({ name: name.trim(), user_id: userId })
+      .select("id, name, created_at")
+      .single();
+
+    if (pErr || !project?.id) {
+      console.error("[projects-api] create:", pErr);
+      return {
+        ok: false,
+        error: pErr?.message?.trim() || "No se pudo crear el proyecto.",
+      };
+    }
+
+    const rows = files.map((f) => ({
+      project_id: project.id,
+      name: f.name,
+      language: f.language,
+      content: f.content,
+    }));
+
+    const { error: fErr } = await supabaseAdmin.from("project_files").insert(rows);
+    if (fErr) {
+      console.error("[projects-api] insert files:", fErr);
+      await supabaseAdmin.from("projects").delete().eq("id", project.id);
+      return {
+        ok: false,
+        error: fErr.message?.trim() || "No se pudieron guardar los archivos.",
+      };
+    }
+
+    return {
+      ok: true,
+      project: {
+        id: project.id as string,
+        name: project.name as string,
+        created_at: project.created_at as string,
+      },
+      files,
+    };
+  } catch (e) {
+    console.error("[projects-api] create exception:", e);
+    return adminUnavailable();
+  }
+}
+
+export async function deleteProjectForUser(
+  userId: string,
+  projectId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { data: proj, error: qErr } = await supabaseAdmin
+      .from("projects")
+      .select("id, user_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (qErr) {
+      return { ok: false, error: "No se pudo comprobar el proyecto." };
+    }
+    if (!proj?.id) {
+      return { ok: false, error: "Proyecto no encontrado." };
+    }
+
+    const admin = await isGafcoreAdminUser(userId);
+    if (proj.user_id != null && proj.user_id !== userId && !admin) {
+      return { ok: false, error: "No tienes permiso para eliminar este proyecto." };
+    }
+
+    if (!proj.user_id) {
+      await supabaseAdmin
+        .from("projects")
+        .update({ user_id: userId })
+        .eq("id", projectId)
+        .is("user_id", null);
+    }
+
+    await supabaseAdmin.from("chat_messages").delete().eq("project_id", projectId);
+
+    for (const table of PROJECT_CHILD_TABLES) {
+      const { error } = await supabaseAdmin.from(table).delete().eq("project_id", projectId);
+      if (error) console.warn(`[projects-api] ${table}:`, error);
+    }
+
+    const { data: deletedRows, error: delErr } = await supabaseAdmin
+      .from("projects")
+      .delete()
+      .eq("id", projectId)
+      .select("id");
+
+    if (delErr) {
+      return { ok: false, error: delErr.message?.trim() || "No se pudo eliminar." };
+    }
+    if (!deletedRows?.length) {
+      return { ok: false, error: "No se eliminó el proyecto." };
+    }
+
+    return { ok: true };
+  } catch (e) {
+    console.error("[projects-api] delete exception:", e);
+    return adminUnavailable();
+  }
+}
