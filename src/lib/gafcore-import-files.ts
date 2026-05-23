@@ -121,10 +121,27 @@ function shouldSkipPath(rel: string): boolean {
  * Lee una selección de carpeta (webkitdirectory) o varios archivos (multiple)
  * y devuelve FileItem listos para guardar en project_files.
  */
+/** Nombre sugerido a partir de la primera carpeta del path (p. ej. `mi-app/src/App.tsx` → `mi-app`). */
+export function suggestNameFromPaths(paths: string[]): string | null {
+  for (const p of paths) {
+    const norm = p.replace(/\\/g, "/");
+    const parts = norm.split("/").filter(Boolean);
+    if (parts.length >= 2) {
+      const folder = parts[0]!.trim();
+      if (folder && !SKIP_DIR_PARTS.has(folder)) return folder;
+    }
+  }
+  return null;
+}
+
 export async function fileItemsFromBrowserFileList(fileList: FileList): Promise<FileItem[]> {
   const out: FileItem[] = [];
-  for (let i = 0; i < fileList.length; i++) {
+  const total = fileList.length;
+  for (let i = 0; i < total; i++) {
     if (out.length >= MAX_FILES) break;
+    if (i > 0 && i % 25 === 0) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    }
     const file = fileList[i] as File & { webkitRelativePath?: string };
     const rel = (file.webkitRelativePath || file.name).replace(/\\/g, "/");
     if (shouldSkipPath(rel)) continue;

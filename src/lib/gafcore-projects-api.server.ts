@@ -4,7 +4,10 @@ import {
   listActiveTemplates,
   loadTemplateFilesBySlug,
 } from "@/lib/gafcore-templates.server";
-import type { GafcoreTemplateFile } from "@/lib/gafcore-templates.shared";
+import {
+  validateTemplateFiles,
+  type GafcoreTemplateFile,
+} from "@/lib/gafcore-templates.shared";
 
 const PROJECT_CHILD_TABLES = [
   "project_files",
@@ -42,7 +45,7 @@ export async function listProjectTemplatesForUser(userId: string) {
 export async function createProjectForUser(
   userId: string,
   name: string,
-  templateSlug?: string,
+  opts?: { templateSlug?: string; customFiles?: GafcoreTemplateFile[] },
 ): Promise<
   | {
       ok: true;
@@ -52,9 +55,20 @@ export async function createProjectForUser(
   | { ok: false; error: string }
 > {
   try {
-    const files = await loadTemplateFilesBySlug(templateSlug ?? "blank-vite", userId);
+    const imported = opts?.customFiles?.length
+      ? validateTemplateFiles(opts.customFiles)
+      : null;
+    const files =
+      imported && imported.length > 0
+        ? imported
+        : await loadTemplateFilesBySlug(opts?.templateSlug ?? "blank-vite", userId);
     if (!files.length) {
-      return { ok: false, error: "No se encontró la plantilla seleccionada." };
+      return {
+        ok: false,
+        error: imported
+          ? "No hay archivos válidos para importar."
+          : "No se encontró la plantilla seleccionada.",
+      };
     }
 
     const { data: project, error: pErr } = await supabaseAdmin

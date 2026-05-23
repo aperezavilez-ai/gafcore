@@ -27,11 +27,9 @@ export const Route = createFileRoute("/api/gafcore/projects-create")({
           return json({ ok: false, error: "invalid_body" }, 400);
         }
 
-        const result = await createProjectForUser(
-          userId,
-          parsed.data.name,
-          parsed.data.templateSlug,
-        );
+        const result = await createProjectForUser(userId, parsed.data.name, {
+          templateSlug: parsed.data.templateSlug,
+        });
         if (!result.ok) {
           return json({ ok: false, error: result.error }, 400);
         }

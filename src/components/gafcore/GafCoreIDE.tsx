@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { GafCoreAuthDialog } from "@/components/ide/GafCoreAuthDialog";
@@ -14,7 +14,6 @@ import {
   activateProjectRow,
   bootstrapWorkspace,
   cacheActiveProject,
-  createProject,
   listProjects,
   loadDeployHostForProject,
   loadDeploySummaryForProject,
@@ -31,7 +30,6 @@ import {
   isGithubDeployConfigured,
   type GafcoreDeployResult,
 } from "@/lib/gafcore-deploy.shared";
-import { fileItemsFromBrowserFileList } from "@/lib/gafcore-import-files";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
@@ -106,6 +104,7 @@ import { FileSidebar } from "@/components/ide/FileSidebar";
 import { getIdeConfig } from "@/lib/ideConfig";
 import { PublishDialog } from "@/components/ide/PublishDialog";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
+import { ImportProjectDialog } from "@/components/ide/ImportProjectDialog";
 import { getProjectDeployStatus } from "@/lib/gafcore-deploy.functions";
 import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { supabase } from "@/integrations/supabase/client";
@@ -224,9 +223,19 @@ export function GafCoreIDE() {
   });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveErrToastAt = useRef(0);
-  const importFolderInputRef = useRef<HTMLInputElement>(null);
-  const importFilesInputRef = useRef<HTMLInputElement>(null);
   const [creditsModalOpen, setCreditsModalOpen] = useState(false);
+
+  const openNewProjectDialog = useCallback(() => {
+    setProjectMenuOpen(false);
+    setImportProjectDialogOpen(false);
+    window.setTimeout(() => setNewProjectDialogOpen(true), 0);
+  }, []);
+
+  const openImportProjectDialog = useCallback(() => {
+    setProjectMenuOpen(false);
+    setNewProjectDialogOpen(false);
+    window.setTimeout(() => setImportProjectDialogOpen(true), 0);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -288,12 +297,12 @@ export function GafCoreIDE() {
         window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
       }
       sessionStorage.removeItem("gafcore_open_new_project");
-      setNewProjectDialogOpen(true);
+      openNewProjectDialog();
     };
     tryOpenNewProject();
     window.addEventListener("gafcore:open-new-project", tryOpenNewProject);
     return () => window.removeEventListener("gafcore:open-new-project", tryOpenNewProject);
-  }, []);
+  }, [openNewProjectDialog]);
 
   const displayMonthly = displayMonthlyAllowanceForUi({ isAdmin, subActive, monthlyAllowance });
   const creditsLabel = isAdmin
@@ -422,74 +431,6 @@ export function GafCoreIDE() {
     setPreviewKey((k) => k + 1);
     await refreshProjects(created.id);
     toast.success(`Proyecto «${created.name}» creado.`);
-  };
-
-  const newProject = () => setNewProjectDialogOpen(true);
-
-  const applyImportedFiles = async (items: FileItem[], suggestedName = "Mi proyecto") => {
-    if (!items.length) {
-      toast.error("No hay archivos importables.");
-      return;
-    }
-    const name = window.prompt("Nombre del proyecto en GafCore", suggestedName) ?? "";
-    if (!name.trim()) {
-      toast.message("Importación cancelada.");
-      return;
-    }
-    const created = await createProject(name.trim());
-    if (!created) {
-      toast.error("No se pudo crear el proyecto");
-      return;
-    }
-    const active = activateProjectRow(created);
-    setCurrentProjectIdState(active.id);
-    setProjectName(active.name);
-    setFiles(items);
-    setOpenTabs([items[0]?.name].filter(Boolean) as string[]);
-    setActiveIndex(0);
-    setPreviewKey((k) => k + 1);
-    const saved = await saveProjectFiles(items);
-    if (!saved) toast.error("No se pudieron guardar los archivos importados");
-    await refreshProjects(created.id);
-    toast.success(`Importados ${items.length} archivos en «${created.name}».`);
-  };
-
-  const onImportFolderChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const list = e.target.files;
-    e.target.value = "";
-    if (!list?.length) return;
-    try {
-      const items = await fileItemsFromBrowserFileList(list);
-      if (!items.length) {
-        toast.error(
-          "No se encontraron archivos de texto o código (omitimos node_modules, dist, binarios, etc.). Prueba con la carpeta que contiene tu src.",
-        );
-        return;
-      }
-      await applyImportedFiles(items, "Mi proyecto");
-    } catch (err) {
-      console.error(err);
-      toast.error("Error al leer la carpeta.");
-    }
-  };
-
-  const onImportFilesChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const list = e.target.files;
-    e.target.value = "";
-    if (!list?.length) return;
-    try {
-      const items = await fileItemsFromBrowserFileList(list);
-      if (!items.length) {
-        toast.error(
-          "No se pudieron importar esos archivos. Usa extensiones de código (.ts, .tsx, .html, .css, etc.).",
-        );
-        return;
-      }
-      await applyImportedFiles(items, "Mi proyecto");
-    } catch (err) {
-      console.error(err);
-      toast.error("Error al importar archivos.");
-    }
   };
 
   const deleteCurrentProject = async () => {
@@ -755,63 +696,6 @@ export function GafCoreIDE() {
         color: "#0f172a",
       }}
     >
-      <input
-        ref={importFolderInputRef}
-        type="file"
-        className="hidden"
-        multiple
-        {...({ webkitdirectory: "" } as Record<string, string>)}
-        onChange={onImportFolderChange}
-      />
-      <input
-        ref={importFilesInputRef}
-        type="file"
-        className="hidden"
-        multiple
-        onChange={onImportFilesChange}
-      />
-      <Dialog open={importProjectDialogOpen} onOpenChange={setImportProjectDialogOpen}>
-        <DialogContent className="max-w-md border-border bg-background text-foreground">
-          <DialogHeader>
-            <DialogTitle>Importar proyecto</DialogTitle>
-            <DialogDescription>
-              Elige una carpeta con tu código o varios archivos. Después podrás poner nombre al
-              proyecto (puedes ponerle el nombre que quieras) y renombrarlo después.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                setImportProjectDialogOpen(false);
-                importFolderInputRef.current?.click();
-              }}
-            >
-              <FolderOpen className="h-4 w-4" />
-              Elegir carpeta
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={() => {
-                setImportProjectDialogOpen(false);
-                importFilesInputRef.current?.click();
-              }}
-            >
-              <Upload className="h-4 w-4" />
-              Elegir archivos
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setImportProjectDialogOpen(false)}>
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {/* Top bar */}
       <header
         className="flex h-12 shrink-0 items-center justify-between border-b px-3"
@@ -1074,10 +958,10 @@ export function GafCoreIDE() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    newProject();
+                    openNewProjectDialog();
                   }}
                   className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10.5px] font-medium text-primary hover:bg-primary/10"
-                  title="Crear proyecto nuevo"
+                  title="Nuevo proyecto (nombre y plantilla)"
                 >
                   <Plus className="h-3 w-3" /> Nuevo
                 </button>
@@ -1131,6 +1015,25 @@ export function GafCoreIDE() {
                   ))}
                 </div>
               )}
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openNewProjectDialog();
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo proyecto…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openImportProjectDialog();
+                }}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Importar proyecto…
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/projects" })}>
                 <LayoutGrid className="mr-2 h-4 w-4" />
                 Todos los proyectos
@@ -1139,16 +1042,6 @@ export function GafCoreIDE() {
                 <Package className="mr-2 h-4 w-4" />
                 Marketplace
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.preventDefault();
-                  setImportProjectDialogOpen(true);
-                }}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Importar proyecto (carpeta o archivos)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate({ to: "/gafcore" })}>
                 <Home className="mr-2 h-4 w-4" />
                 Ir a inicio
@@ -1506,14 +1399,14 @@ export function GafCoreIDE() {
               para empezar.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button type="button" onClick={() => void newProject()}>
+              <Button type="button" onClick={openNewProjectDialog}>
                 <Plus className="mr-2 h-4 w-4" />
                 Crear proyecto
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setImportProjectDialogOpen(true)}
+                onClick={openImportProjectDialog}
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Importar proyecto
@@ -1550,6 +1443,11 @@ export function GafCoreIDE() {
         open={newProjectDialogOpen}
         onOpenChange={setNewProjectDialogOpen}
         onCreated={(project, projectFiles) => void onProjectCreatedFromTemplate(project, projectFiles)}
+      />
+      <ImportProjectDialog
+        open={importProjectDialogOpen}
+        onOpenChange={setImportProjectDialogOpen}
+        onImported={(project, projectFiles) => void onProjectCreatedFromTemplate(project, projectFiles)}
       />
 
       <GafCoreAuthDialog open={authOpen} onOpenChange={setAuthOpen} initialMode={authMode} />
