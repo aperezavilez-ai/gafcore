@@ -27,9 +27,13 @@ export async function gafcoreAuthJsonFetch<T = unknown>(
   }
 
   if (!res.ok) {
-    throw new Error(
-      payload.error ?? payload.message ?? `Error del servidor (HTTP ${res.status}).`,
-    );
+    const detail =
+      payload.error ??
+      payload.message ??
+      (typeof payload === "object" && payload !== null && "status" in payload
+        ? "El servidor no respondió correctamente. Recarga la página e inténtalo de nuevo."
+        : undefined);
+    throw new Error(detail ?? `Error del servidor (HTTP ${res.status}).`);
   }
 
   return payload;

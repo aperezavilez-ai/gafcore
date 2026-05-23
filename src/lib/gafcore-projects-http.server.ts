@@ -1,0 +1,97 @@
+/**
+ * CRUD de proyectos por HTTP — invocado desde `server.ts` sin pasar por el entry SSR
+ * (en Vercel POST vía TanStack devuelve HTTPError 500).
+ */
+import { z } from "zod";
+import { requireGafcoreApiUser } from "@/lib/gafcore-api-auth.server";
+import {
+  createProjectForUser,
+  deleteProjectForUser,
+  listProjectTemplatesForUser,
+} from "@/lib/gafcore-projects-api.server";
+
+const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
+}
+
+const CreateBodySchema = z.object({
+  name: z.string().min(1).max(200),
+  templateSlug: z.string().min(1).max(80).optional(),
+});
+
+const DeleteBodySchema = z.object({
+  projectId: z.string().uuid(),
+});
+
+/** POST /api/gafcore/projects-create */
+export async function handleGafcoreProjectsCreatePost(request: Request): Promise<Response> {
+  const userId = await requireGafcoreApiUser(request);
+  if (userId instanceof Response) return userId;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = CreateBodySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "invalid_body" }, 400);
+  }
+
+  const result = await createProjectForUser(
+    userId,
+    parsed.data.name,
+    parsed.data.templateSlug,
+  );
+  if (!result.ok) {
+    return json({ ok: false, error: result.error }, 400);
+  }
+
+  return json({
+    ok: true,
+    project: result.project,
+    files: result.files,
+  });
+}
+
+/** POST /api/gafcore/projects-delete */
+export async function handleGafcoreProjectsDeletePost(request: Request): Promise<Response> {
+  const userId = await requireGafcoreApiUser(request);
+  if (userId instanceof Response) return userId;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = DeleteBodySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "invalid_body" }, 400);
+  }
+
+  const result = await deleteProjectForUser(userId, parsed.data.projectId);
+  if (!result.ok) {
+    return json({ ok: false, error: result.error }, 400);
+  }
+
+  return json({ ok: true });
+}
+
+/** POST /api/gafcore/project-templates */
+export async function handleGafcoreProjectTemplatesPost(request: Request): Promise<Response> {
+  const userId = await requireGafcoreApiUser(request);
+  if (userId instanceof Response) return userId;
+
+  const result = await listProjectTemplatesForUser(userId);
+  if (!result.ok) {
+    return json({ ok: false, error: result.error }, 503);
+  }
+
+  return json({ ok: true, templates: result.templates });
+}

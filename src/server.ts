@@ -214,6 +214,18 @@ export default {
       const { handleGafcoreChatCompletePost } = await import("./lib/gafcore-chat-api.server");
       return handleGafcoreChatCompletePost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/projects-create") {
+      const { handleGafcoreProjectsCreatePost } = await import("./lib/gafcore-projects-http.server");
+      return handleGafcoreProjectsCreatePost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/projects-delete") {
+      const { handleGafcoreProjectsDeletePost } = await import("./lib/gafcore-projects-http.server");
+      return handleGafcoreProjectsDeletePost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/project-templates") {
+      const { handleGafcoreProjectTemplatesPost } = await import("./lib/gafcore-projects-http.server");
+      return handleGafcoreProjectTemplatesPost(request);
+    }
     if (
       (request.method === "POST" || request.method === "GET") &&
       path === "/api/gafcore/workflow/drain"
