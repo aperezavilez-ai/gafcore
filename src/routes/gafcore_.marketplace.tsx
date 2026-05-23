@@ -42,10 +42,7 @@ const KIND_LABEL: Record<string, string> = {
   template: "Plantilla",
   ai_plugin: "Plugin IA",
   agent: "Agente",
-  mobile: "Móvil",
-  dashboard: "Panel",
-  blog: "Blog",
-  portfolio: "Portfolio",
+  workflow_pack: "Workflow",
 };
 
 type CatalogFilter = "all" | "template" | "ai_plugin" | "agent";
