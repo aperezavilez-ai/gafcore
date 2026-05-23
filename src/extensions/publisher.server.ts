@@ -4,6 +4,7 @@ import {
   parseExtensionManifest,
 } from "@/extensions/extension-host.server";
 import { extensionManifestSchema } from "@/extensions/manifests.shared";
+import { notifyMarketplaceReviewSubmitted } from "@/extensions/marketplace-review-notify.server";
 
 export type AdminListingRow = {
   id: string;
@@ -321,6 +322,16 @@ export async function upsertListingFromManifest(input: {
       updated_at: new Date().toISOString(),
     })
     .eq("id", listing.id);
+
+  if (state === "review") {
+    void notifyMarketplaceReviewSubmitted({
+      listingId: listing.id,
+      slug: input.listingSlug,
+      name: input.name,
+      kind: input.kind,
+      creatorUserId: input.creatorUserId,
+    });
+  }
 
   return { ok: true, listingId: listing.id, state };
 }

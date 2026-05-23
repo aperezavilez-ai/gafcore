@@ -65,8 +65,8 @@ export async function syncAdminBuiltinMarketplaceTemplates() {
   return gafcoreAuthJsonFetch<{
     ok: boolean;
     synced?: number;
-    slugs?: string[];
-    errors?: string[];
+    templates?: { synced: number; slugs: string[]; errors: string[] };
+    plugins?: { synced: number; slugs: string[]; errors: string[] };
     error?: string;
   }>("/api/gafcore/marketplace/admin/sync-builtin-templates", {});
 }

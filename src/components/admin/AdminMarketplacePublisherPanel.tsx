@@ -130,17 +130,20 @@ export function AdminMarketplacePublisherPanel() {
     }
   };
 
+  const pendingReview = listings.filter((row) => row.state === "review");
+
   const onSyncBuiltinTemplates = async () => {
     setBusy(true);
     try {
       const res = await syncAdminBuiltinMarketplaceTemplates();
       if (!res.ok) {
-        toast.error("No se sincronizaron las plantillas", { description: res.error });
+        toast.error("No se sincronizó el catálogo", { description: res.error });
         return;
       }
-      toast.success(`Plantillas publicadas: ${res.synced ?? 0}`, {
-        description:
-          res.errors?.length ? `Avisos: ${res.errors.slice(0, 2).join("; ")}` : "Catálogo actualizado",
+      const total = res.synced ?? (res.templates?.synced ?? 0) + (res.plugins?.synced ?? 0);
+      const errs = [...(res.templates?.errors ?? []), ...(res.plugins?.errors ?? [])];
+      toast.success(`Catálogo publicado: ${total} items`, {
+        description: errs.length ? errs.slice(0, 2).join("; ") : "Plantillas + plugins IA",
       });
       await reload();
     } catch (e) {
@@ -175,9 +178,35 @@ export function AdminMarketplacePublisherPanel() {
           disabled={loading || busy}
           onClick={() => void onSyncBuiltinTemplates()}
         >
-          Publicar plantillas GafCore
+          Publicar catálogo GafCore
         </Button>
       </div>
+
+      {pendingReview.length > 0 ? (
+        <section className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <h2 className="text-sm font-semibold text-foreground">
+            En revisión ({pendingReview.length})
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Extensiones enviadas por creadores. Publica o revoca desde la lista inferior.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {pendingReview.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">{row.name}</span>
+                <Badge variant="outline">{row.kind}</Badge>
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void onSetState(row.id, "published")}
+                >
+                  Publicar
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <h1 className="text-2xl font-semibold text-foreground">Publisher — Marketplace</h1>
       <p className="mt-1 text-sm text-muted-foreground">

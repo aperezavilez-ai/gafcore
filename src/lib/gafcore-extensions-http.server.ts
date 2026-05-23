@@ -247,16 +247,16 @@ export async function handleMarketplaceAdminSyncBuiltinPost(request: Request): P
   const admin = await requireAdmin(request);
   if (admin instanceof Response) return admin;
 
-  const { syncBuiltinTemplatesToMarketplace } = await import(
+  const { syncBuiltinCatalogToMarketplace } = await import(
     "@/extensions/marketplace-builtin-sync.server"
   );
-  const result = await syncBuiltinTemplatesToMarketplace();
+  const result = await syncBuiltinCatalogToMarketplace();
   if (!result.ok) return json({ ok: false, error: result.error }, 400);
   return json({
     ok: true,
-    synced: result.synced,
-    slugs: result.slugs,
-    errors: result.errors,
+    templates: result.templates,
+    plugins: result.plugins,
+    synced: result.templates.synced + result.plugins.synced,
   });
 }
 

@@ -92,7 +92,7 @@ export function CreatorMarketplacePublisherPanel() {
       }
       toast.success(
         res.state === "review"
-          ? "Enviado a revisión — un admin lo publicará en el catálogo"
+          ? "Enviado a revisión — un admin lo publicará en el catálogo (revisa /gafcore/admin/marketplace)"
           : "Borrador guardado",
       );
       await reload();
