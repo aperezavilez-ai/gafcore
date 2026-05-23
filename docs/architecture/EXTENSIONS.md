@@ -1,6 +1,6 @@
 # GafCore — Ecosistema de extensiones (E0–E1)
 
-> **Estado:** E0–E4 en código; admin publisher en `/gafcore/admin/marketplace`. Aplica migraciones con `npm run gafcore:migrate-extensions`.  
+> **Estado:** E0–E2 en producción; POST marketplace vía `server.ts` (no TanStack SSR). Admin en `/gafcore/admin/marketplace`. Migraciones: `npm run gafcore:migrate-extensions`.  
 > El **core** (chat, workflow, deploy, auth) no importa código de terceros; solo valida manifests y delega al **Extension Host**.
 
 ## Principios
@@ -40,9 +40,13 @@ El IDE y `createProjectFromTemplate` **no cambian** su API; solo el servidor res
 
 | Método | Ruta | Auth |
 |--------|------|------|
-| GET | `/api/extensions/v1/catalog` | Opcional (público listings) |
+| POST | `/api/extensions/v1/catalog` | Bearer (installed/purchased flags) |
+| POST | `/api/extensions/v1/install` | Bearer sesión |
+| POST | `/api/extensions/v1/uninstall` | Bearer sesión |
+| POST | `/api/extensions/v1/checkout-session` | Bearer sesión |
+| POST | `/api/gafcore/checkout-confirm` | Bearer (planes + extensiones) |
+| GET | `/api/extensions/v1/catalog` | Opcional (público, sin flags usuario) |
 | GET | `/api/extensions/v1/manifest` | `?listingId=` |
-| POST | `/api/extensions/v1/install` | Bearer sesión / futuro API key |
 
 ## UI
 

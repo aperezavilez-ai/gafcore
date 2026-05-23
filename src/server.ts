@@ -226,6 +226,58 @@ export default {
       const { handleGafcoreProjectTemplatesPost } = await import("./lib/gafcore-projects-http.server");
       return handleGafcoreProjectTemplatesPost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/checkout-confirm") {
+      const { handleGafcoreCheckoutConfirmPost } = await import("./lib/gafcore-checkout-http.server");
+      return handleGafcoreCheckoutConfirmPost(request);
+    }
+    if (request.method === "POST" && path === "/api/extensions/v1/catalog") {
+      const { handleExtensionsCatalogPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleExtensionsCatalogPost(request);
+    }
+    if (request.method === "POST" && path === "/api/extensions/v1/install") {
+      const { handleExtensionsInstallPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleExtensionsInstallPost(request);
+    }
+    if (request.method === "POST" && path === "/api/extensions/v1/uninstall") {
+      const { handleExtensionsUninstallPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleExtensionsUninstallPost(request);
+    }
+    if (request.method === "POST" && path === "/api/extensions/v1/installs") {
+      const { handleExtensionsInstallsPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleExtensionsInstallsPost(request);
+    }
+    if (request.method === "POST" && path === "/api/extensions/v1/checkout-session") {
+      const { handleExtensionsCheckoutSessionPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleExtensionsCheckoutSessionPost(request);
+    }
+    if (request.method === "POST" && path === "/api/extensions/v1/agent-test") {
+      const { handleExtensionsAgentTestPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleExtensionsAgentTestPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/admin/listings") {
+      const { handleMarketplaceAdminListingsPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplaceAdminListingsPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/admin/publish") {
+      const { handleMarketplaceAdminPublishPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplaceAdminPublishPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/admin/state") {
+      const { handleMarketplaceAdminStatePost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplaceAdminStatePost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/publisher/me") {
+      const { handleMarketplacePublisherMePost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplacePublisherMePost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/publisher/listings") {
+      const { handleMarketplacePublisherListingsPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplacePublisherListingsPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/publisher/submit") {
+      const { handleMarketplacePublisherSubmitPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplacePublisherSubmitPost(request);
+    }
     if (
       (request.method === "POST" || request.method === "GET") &&
       path === "/api/gafcore/workflow/drain"

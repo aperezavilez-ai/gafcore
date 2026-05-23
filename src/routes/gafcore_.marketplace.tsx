@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Bot, CreditCard, Download, Package, Sparkles, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,11 +15,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { MarketplaceExtensionCheckout } from "@/components/gafcore/MarketplaceExtensionCheckout";
 import {
-  installGafcoreExtension,
-  listGafcoreExtensionsCatalog,
-  uninstallGafcoreExtension,
-  testGafcoreExtensionAgent,
-} from "@/lib/gafcore-extensions.functions";
+  fetchExtensionsCatalog,
+  installExtension,
+  testExtensionAgent,
+  uninstallExtension,
+} from "@/lib/gafcore-extensions-client";
 import type { CatalogListing } from "@/extensions/marketplace.server";
 
 const INSTALL_ERRORS: Record<string, string> = {
@@ -56,10 +55,6 @@ export const Route = createFileRoute("/gafcore_/marketplace")({
 function MarketplacePage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const callList = useServerFn(listGafcoreExtensionsCatalog);
-  const callInstall = useServerFn(installGafcoreExtension);
-  const callUninstall = useServerFn(uninstallGafcoreExtension);
-  const callTestAgent = useServerFn(testGafcoreExtensionAgent);
   const [filter, setFilter] = useState<CatalogFilter>("all");
   const [listings, setListings] = useState<CatalogListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,9 +72,7 @@ function MarketplacePage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await callList({
-        data: filter === "all" ? {} : { kind: filter },
-      });
+      const res = await fetchExtensionsCatalog(filter === "all" ? undefined : filter);
       setListings(res.listings ?? []);
     } catch (e) {
       setListings([]);
@@ -87,7 +80,7 @@ function MarketplacePage() {
     } finally {
       setLoading(false);
     }
-  }, [callList, filter, user]);
+  }, [filter, user]);
 
   useEffect(() => {
     if (!authLoading) void load();
@@ -143,7 +136,7 @@ function MarketplacePage() {
   const onInstall = async (item: CatalogListing) => {
     setBusyId(item.id);
     try {
-      const res = await callInstall({ data: { listingId: item.id } });
+      const res = await installExtension(item.id);
       if (!res.ok) {
         toast.error("No se pudo instalar", {
           description: INSTALL_ERRORS[res.error] ?? res.error,
@@ -184,7 +177,7 @@ function MarketplacePage() {
   const onUninstall = async (id: string) => {
     setBusyId(id);
     try {
-      const res = await callUninstall({ data: { listingId: id } });
+      const res = await uninstallExtension(id);
       if (!res.ok) {
         toast.error("No se pudo quitar", {
           description: UNINSTALL_ERRORS[res.error] ?? res.error,
@@ -206,7 +199,7 @@ function MarketplacePage() {
   const onTestAgent = async (listingId: string) => {
     setBusyId(listingId);
     try {
-      const res = await callTestAgent({ data: { listingId } });
+      const res = await testExtensionAgent(listingId);
       if (!res.ok) {
         toast.error("Prueba fallida", { description: res.error });
         return;

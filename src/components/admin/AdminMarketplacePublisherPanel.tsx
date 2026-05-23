@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  listAdminMarketplaceListingsFn,
-  publishAdminMarketplaceListingFn,
-  setAdminMarketplaceListingStateFn,
-} from "@/lib/gafcore-publisher.functions";
+  fetchAdminMarketplaceListings,
+  publishAdminMarketplaceListing,
+  setAdminMarketplaceListingState,
+} from "@/lib/gafcore-extensions-client";
 import type { AdminListingRow } from "@/extensions/publisher.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,10 +49,6 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 export function AdminMarketplacePublisherPanel() {
-  const callList = useServerFn(listAdminMarketplaceListingsFn);
-  const callPublish = useServerFn(publishAdminMarketplaceListingFn);
-  const callState = useServerFn(setAdminMarketplaceListingStateFn);
-
   const [listings, setListings] = useState<AdminListingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -72,14 +67,14 @@ export function AdminMarketplacePublisherPanel() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await callList();
+      const res = await fetchAdminMarketplaceListings();
       setListings(res.listings ?? []);
     } catch {
       setListings([]);
     } finally {
       setLoading(false);
     }
-  }, [callList]);
+  }, []);
 
   useEffect(() => {
     void reload();
@@ -92,19 +87,17 @@ export function AdminMarketplacePublisherPanel() {
     }
     setBusy(true);
     try {
-      const res = await callPublish({
-        data: {
-          publisherSlug: publisherSlug.trim(),
-          listingSlug: listingSlug.trim().toLowerCase(),
-          name: name.trim(),
-          description: description.trim(),
-          kind,
-          versionLabel: versionLabel.trim() || "1.0.0",
-          manifestJson,
-          publish: publishNow,
-          priceCents: Math.max(0, Math.floor(priceCents)),
-          currency: currency.trim().toLowerCase() || "eur",
-        },
+      const res = await publishAdminMarketplaceListing({
+        publisherSlug: publisherSlug.trim(),
+        listingSlug: listingSlug.trim().toLowerCase(),
+        name: name.trim(),
+        description: description.trim(),
+        kind,
+        versionLabel: versionLabel.trim() || "1.0.0",
+        manifestJson,
+        publish: publishNow,
+        priceCents: Math.max(0, Math.floor(priceCents)),
+        currency: currency.trim().toLowerCase() || "eur",
       });
       if (!res.ok) {
         toast.error("No se publicó", { description: res.error });
@@ -122,7 +115,7 @@ export function AdminMarketplacePublisherPanel() {
   const onSetState = async (listingId: string, state: "published" | "revoked" | "draft") => {
     setBusy(true);
     try {
-      const res = await callState({ data: { listingId, state } });
+      const res = await setAdminMarketplaceListingState(listingId, state);
       if (!res.ok) {
         toast.error("No se actualizó el estado");
         return;

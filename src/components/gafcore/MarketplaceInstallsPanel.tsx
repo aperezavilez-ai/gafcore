@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { Bot, Loader2, Package, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-  listGafcoreUserInstalls,
-  uninstallGafcoreExtension,
-} from "@/lib/gafcore-extensions.functions";
+  fetchUserExtensionInstalls,
+  uninstallExtension,
+} from "@/lib/gafcore-extensions-client";
 import type { UserExtensionInstall } from "@/extensions/marketplace.server";
 
 const KIND_LABEL: Record<string, string> = {
@@ -19,8 +18,6 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 export function MarketplaceInstallsPanel() {
-  const callList = useServerFn(listGafcoreUserInstalls);
-  const callUninstall = useServerFn(uninstallGafcoreExtension);
   const [installs, setInstalls] = useState<UserExtensionInstall[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -28,14 +25,14 @@ export function MarketplaceInstallsPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await callList();
+      const res = await fetchUserExtensionInstalls();
       setInstalls(res.installs ?? []);
     } catch {
       setInstalls([]);
     } finally {
       setLoading(false);
     }
-  }, [callList]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -50,7 +47,7 @@ export function MarketplaceInstallsPanel() {
   const onUninstall = async (listingId: string) => {
     setBusyId(listingId);
     try {
-      const res = await callUninstall({ data: { listingId } });
+      const res = await uninstallExtension(listingId);
       if (!res.ok) {
         toast.error("No se pudo quitar la extensión");
         return;

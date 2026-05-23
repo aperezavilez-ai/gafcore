@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  getMyGafcorePublisherFn,
-  listMyMarketplaceListingsFn,
-  submitCreatorMarketplaceListingFn,
-} from "@/lib/gafcore-publisher.functions";
+  fetchMyPublisherListings,
+  fetchMyPublisherProfile,
+  submitCreatorMarketplaceListing,
+} from "@/lib/gafcore-extensions-client";
 import type { AdminListingRow } from "@/extensions/publisher.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,10 +39,6 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 export function CreatorMarketplacePublisherPanel() {
-  const callPublisher = useServerFn(getMyGafcorePublisherFn);
-  const callList = useServerFn(listMyMarketplaceListingsFn);
-  const callSubmit = useServerFn(submitCreatorMarketplaceListingFn);
-
   const [publisherSlug, setPublisherSlug] = useState<string | null>(null);
   const [listings, setListings] = useState<AdminListingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,16 +55,16 @@ export function CreatorMarketplacePublisherPanel() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const pubRes = await callPublisher();
-      if (pubRes.ok) setPublisherSlug(pubRes.publisher.slug);
-      const res = await callList();
+      const pubRes = await fetchMyPublisherProfile();
+      if (pubRes.ok && pubRes.publisher) setPublisherSlug(pubRes.publisher.slug);
+      const res = await fetchMyPublisherListings();
       setListings(res.listings ?? []);
     } catch {
       setListings([]);
     } finally {
       setLoading(false);
     }
-  }, [callList, callPublisher]);
+  }, []);
 
   useEffect(() => {
     void reload();
@@ -82,16 +77,14 @@ export function CreatorMarketplacePublisherPanel() {
     }
     setBusy(true);
     try {
-      const res = await callSubmit({
-        data: {
-          listingSlug: listingSlug.trim().toLowerCase(),
-          name: name.trim(),
-          description: description.trim(),
-          kind,
-          versionLabel: versionLabel.trim() || "1.0.0",
-          manifestJson,
-          publish: submitForReview,
-        },
+      const res = await submitCreatorMarketplaceListing({
+        listingSlug: listingSlug.trim().toLowerCase(),
+        name: name.trim(),
+        description: description.trim(),
+        kind,
+        versionLabel: versionLabel.trim() || "1.0.0",
+        manifestJson,
+        publish: submitForReview,
       });
       if (!res.ok) {
         toast.error("No se envió", { description: res.error });
@@ -133,8 +126,7 @@ export function CreatorMarketplacePublisherPanel() {
 
       <h1 className="text-2xl font-semibold text-foreground">Publicar extensión</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Envía plantillas, plugins IA o agentes webhook. Las extensiones de pago llegarán en E2 con
-        Stripe; por ahora todo es gratuito.
+        Envía plantillas, plugins IA o agentes webhook. Un admin revisará y publicará en el catálogo.
         {publisherSlug ? (
           <>
             {" "}

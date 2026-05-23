@@ -34,4 +34,16 @@ if (!catalog.body?.ok || !Array.isArray(catalog.body.listings) || catalog.body.l
   failed = true;
 }
 
+const installProbe = await fetch(`${base}/api/extensions/v1/install`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ listingId: "00000000-0000-0000-0000-000000000001" }),
+});
+const installStatus = installProbe.status;
+console.log("[smoke] install sin auth HTTP:", installStatus);
+if (installStatus === 500) {
+  console.error("[smoke] FAIL: install devuelve 500 (HTTPError Vercel)");
+  failed = true;
+}
+
 process.exit(failed ? 1 : 0);
