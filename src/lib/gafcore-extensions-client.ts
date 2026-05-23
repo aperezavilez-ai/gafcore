@@ -61,6 +61,16 @@ export async function publishAdminMarketplaceListing(data: {
   );
 }
 
+export async function syncAdminBuiltinMarketplaceTemplates() {
+  return gafcoreAuthJsonFetch<{
+    ok: boolean;
+    synced?: number;
+    slugs?: string[];
+    errors?: string[];
+    error?: string;
+  }>("/api/gafcore/marketplace/admin/sync-builtin-templates", {});
+}
+
 export async function setAdminMarketplaceListingState(
   listingId: string,
   state: "draft" | "review" | "published" | "revoked",

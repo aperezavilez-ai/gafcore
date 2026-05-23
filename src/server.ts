@@ -266,6 +266,10 @@ export default {
       const { handleMarketplaceAdminStatePost } = await import("./lib/gafcore-extensions-http.server");
       return handleMarketplaceAdminStatePost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/marketplace/admin/sync-builtin-templates") {
+      const { handleMarketplaceAdminSyncBuiltinPost } = await import("./lib/gafcore-extensions-http.server");
+      return handleMarketplaceAdminSyncBuiltinPost(request);
+    }
     if (request.method === "POST" && path === "/api/gafcore/marketplace/publisher/me") {
       const { handleMarketplacePublisherMePost } = await import("./lib/gafcore-extensions-http.server");
       return handleMarketplacePublisherMePost(request);

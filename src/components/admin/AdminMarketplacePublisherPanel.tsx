@@ -5,6 +5,7 @@ import {
   fetchAdminMarketplaceListings,
   publishAdminMarketplaceListing,
   setAdminMarketplaceListingState,
+  syncAdminBuiltinMarketplaceTemplates,
 } from "@/lib/gafcore-extensions-client";
 import type { AdminListingRow } from "@/extensions/publisher.server";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,26 @@ export function AdminMarketplacePublisherPanel() {
     }
   };
 
+  const onSyncBuiltinTemplates = async () => {
+    setBusy(true);
+    try {
+      const res = await syncAdminBuiltinMarketplaceTemplates();
+      if (!res.ok) {
+        toast.error("No se sincronizaron las plantillas", { description: res.error });
+        return;
+      }
+      toast.success(`Plantillas publicadas: ${res.synced ?? 0}`, {
+        description:
+          res.errors?.length ? `Avisos: ${res.errors.slice(0, 2).join("; ")}` : "Catálogo actualizado",
+      });
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al sincronizar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -147,6 +168,14 @@ export function AdminMarketplacePublisherPanel() {
         <Button variant="outline" size="sm" disabled={loading || busy} onClick={() => void reload()}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Actualizar
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={loading || busy}
+          onClick={() => void onSyncBuiltinTemplates()}
+        >
+          Publicar plantillas GafCore
         </Button>
       </div>
 

@@ -14,7 +14,9 @@ export const templateManifestSchema = z.object({
   slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),
-  category: z.enum(["starter", "landing", "ecommerce"]).default("starter"),
+  category: z
+    .enum(["starter", "landing", "ecommerce", "mobile", "dashboard", "blog", "portfolio"])
+    .default("starter"),
   files: z.array(templateFileSchema).min(1).max(80),
   requiredPaths: z.array(z.string().max(512)).max(40).optional(),
 });

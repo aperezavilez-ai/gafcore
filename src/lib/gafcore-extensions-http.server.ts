@@ -242,6 +242,24 @@ export async function handleMarketplaceAdminPublishPost(request: Request): Promi
   return json({ ok: true, listingId: result.listingId });
 }
 
+/** POST /api/gafcore/marketplace/admin/sync-builtin-templates */
+export async function handleMarketplaceAdminSyncBuiltinPost(request: Request): Promise<Response> {
+  const admin = await requireAdmin(request);
+  if (admin instanceof Response) return admin;
+
+  const { syncBuiltinTemplatesToMarketplace } = await import(
+    "@/extensions/marketplace-builtin-sync.server"
+  );
+  const result = await syncBuiltinTemplatesToMarketplace();
+  if (!result.ok) return json({ ok: false, error: result.error }, 400);
+  return json({
+    ok: true,
+    synced: result.synced,
+    slugs: result.slugs,
+    errors: result.errors,
+  });
+}
+
 /** POST /api/gafcore/marketplace/admin/state */
 export async function handleMarketplaceAdminStatePost(request: Request): Promise<Response> {
   const admin = await requireAdmin(request);
