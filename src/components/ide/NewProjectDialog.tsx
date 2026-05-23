@@ -16,7 +16,22 @@ import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { GAFCORE_DEFAULT_TEMPLATE_SLUG } from "@/lib/gafcore-templates.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 
-type TemplateRow = { slug: string; name: string; description: string };
+type TemplateRow = {
+  slug: string;
+  name: string;
+  description: string;
+  category?: string;
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  starter: "Web",
+  landing: "Landing",
+  ecommerce: "Tienda",
+  mobile: "Móvil",
+  dashboard: "Panel",
+  blog: "Blog",
+  portfolio: "Portfolio",
+};
 
 type Props = {
   open: boolean;
@@ -96,7 +111,7 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Nuevo proyecto</DialogTitle>
         </DialogHeader>
@@ -123,19 +138,26 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
                 No hay plantillas en el catálogo. Se usará la plantilla base al crear.
               </p>
             ) : (
-              <ul className="max-h-48 space-y-2 overflow-y-auto">
+              <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
                 {templates.map((t) => (
                   <li key={t.slug}>
                     <button
                       type="button"
                       onClick={() => setSlug(t.slug)}
-                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                      className={`w-full rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
                         slug === t.slug
                           ? "border-primary bg-primary/5"
                           : "border-border hover:bg-muted/50"
                       }`}
                     >
-                      <span className="font-medium text-foreground">{t.name}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">{t.name}</span>
+                        {t.category ? (
+                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {CATEGORY_LABEL[t.category] ?? t.category}
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">
                         {t.description}
                       </span>

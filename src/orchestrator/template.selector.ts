@@ -5,7 +5,7 @@ const TYPE_TO_SLUG: Record<ProjectTypeHint, string> = {
   blank: "blank-vite",
   landing: "landing-premium",
   ecommerce: "tienda-basica",
-  app: "blank-vite",
+  app: "app-movil",
   unknown: GAFCORE_DEFAULT_TEMPLATE_SLUG,
 };
 

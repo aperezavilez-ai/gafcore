@@ -18,19 +18,10 @@ export type TemplateListItem = {
 
 let seedPromise: Promise<void> | null = null;
 
-/** Inserta plantillas built-in si la tabla está vacía (idempotente por slug). */
+/** Sincroniza plantillas built-in en BD (upsert por slug; añade nuevas sin borrar las existentes). */
 export async function ensureBuiltinTemplatesSeeded(): Promise<void> {
   if (!seedPromise) {
     seedPromise = (async () => {
-      const { count, error } = await supabaseAdmin
-        .from("gafcore_project_templates")
-        .select("id", { count: "exact", head: true });
-      if (error) {
-        console.error("[templates] count:", error);
-        return;
-      }
-      if ((count ?? 0) > 0) return;
-
       for (const t of BUILTIN_PROJECT_TEMPLATES) {
         const { error: insErr } = await supabaseAdmin.from("gafcore_project_templates").upsert(
           {

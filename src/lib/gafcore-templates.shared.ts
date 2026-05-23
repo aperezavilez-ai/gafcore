@@ -10,7 +10,7 @@ export type GafcoreProjectTemplateDef = {
   slug: string;
   name: string;
   description: string;
-  category: "starter" | "landing" | "ecommerce";
+  category: "starter" | "landing" | "ecommerce" | "mobile" | "dashboard" | "blog" | "portfolio";
   sort_order: number;
   files: GafcoreTemplateFile[];
 };
@@ -50,7 +50,13 @@ html, body, #root { height: 100%; margin: 0; }
 body { font-family: ui-sans-serif, system-ui, sans-serif; }
 `;
 
-function indexHtml(title: string): GafcoreTemplateFile {
+function indexHtml(title: string, opts?: { mobile?: boolean }): GafcoreTemplateFile {
+  const mobileMeta = opts?.mobile
+    ? `
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />`
+    : "";
   return {
     name: "index.html",
     language: "html",
@@ -58,7 +64,7 @@ function indexHtml(title: string): GafcoreTemplateFile {
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />${mobileMeta}
     <title>${title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
@@ -69,6 +75,15 @@ function indexHtml(title: string): GafcoreTemplateFile {
 </html>`,
   };
 }
+
+const MOBILE_STYLES = `:root { color-scheme: dark; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+}
+`;
 
 export const GAFCORE_DEFAULT_TEMPLATE_FILES: GafcoreTemplateFile[] = [
   indexHtml("GafCore App"),
@@ -167,6 +182,219 @@ export default function App() {
 }
 `.replace(/motion\./g, "");
 
+const MOBILE_APP = `import React, { useState } from "react";
+import { loadJson, saveJson } from "./lib/store";
+
+type Tab = "inicio" | "explorar" | "perfil";
+const FAV_KEY = "gafcore-mobile-favs";
+
+const FEED = [
+  { id: "1", title: "Descubre funciones", body: "Diseño mobile-first listo para PWA y pantallas táctiles." },
+  { id: "2", title: "Itera con IA", body: "Pide en el chat: login, notificaciones o mapa." },
+  { id: "3", title: "Publica", body: "Despliega tu app web instalable desde GafCore." },
+];
+
+export default function App() {
+  const [tab, setTab] = useState<Tab>("inicio");
+  const [favs, setFavs] = useState<string[]>(() => loadJson(FAV_KEY, [] as string[]));
+
+  const toggleFav = (id: string) => {
+    const next = favs.includes(id) ? favs.filter((x) => x !== id) : [...favs, id];
+    setFavs(next);
+    saveJson(FAV_KEY, next);
+  };
+
+  return (
+    <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col bg-slate-950 text-white">
+      <header className="safe-top border-b border-white/10 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <p className="text-xs uppercase tracking-widest text-sky-400">App móvil</p>
+        <h1 className="text-xl font-bold">Mi app</h1>
+      </header>
+      <main className="flex-1 overflow-y-auto px-4 py-4 pb-24">
+        {tab === "inicio" && (
+          <ul className="space-y-3">
+            {FEED.map((item) => (
+              <li key={item.id} className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                <h2 className="font-semibold">{item.title}</h2>
+                <p className="mt-1 text-sm text-slate-400">{item.body}</p>
+                <button type="button" onClick={() => toggleFav(item.id)} className="mt-3 text-sm text-sky-400">
+                  {favs.includes(item.id) ? "★ Guardado" : "☆ Guardar"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {tab === "explorar" && (
+          <div className="grid grid-cols-2 gap-3">
+            {["Chat", "Mapa", "Cámara", "Pagos"].map((label) => (
+              <button key={label} type="button" className="rounded-2xl bg-slate-800 py-8 text-sm font-medium active:scale-95">
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {tab === "perfil" && (
+          <section className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+            <p className="text-sm text-slate-400">Usuario demo</p>
+            <p className="mt-1 font-semibold">@tu_cuenta</p>
+            <p className="mt-4 text-sm text-slate-400">Favoritos: {favs.length}</p>
+          </section>
+        )}
+      </main>
+      <nav className="safe-bottom fixed bottom-0 left-0 right-0 mx-auto max-w-md border-t border-white/10 bg-slate-950/95 backdrop-blur">
+        <div className="grid grid-cols-3 gap-1 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+          {(["inicio", "explorar", "perfil"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={\`rounded-xl py-2.5 text-sm font-medium capitalize \${
+                tab === t ? "bg-sky-600 text-white" : "text-slate-400"
+              }\`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
+`;
+
+const DASHBOARD_APP = `import React, { useState } from "react";
+
+const METRICS = [
+  { label: "Usuarios", value: "1.2k", delta: "+8%" },
+  { label: "Ingresos", value: "4.8k €", delta: "+12%" },
+  { label: "Conversión", value: "3.4%", delta: "-0.2%" },
+];
+
+export default function App() {
+  const [range, setRange] = useState<"7d" | "30d">("7d");
+
+  return (
+    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-900 md:px-8">
+      <header className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Panel de control</h1>
+          <p className="text-sm text-slate-600">Métricas y acciones rápidas</p>
+        </div>
+        <div className="flex rounded-lg border bg-white p-1 text-sm">
+          {(["7d", "30d"] as const).map((r) => (
+            <button key={r} type="button" onClick={() => setRange(r)} className={\`rounded-md px-3 py-1.5 \${range === r ? "bg-slate-900 text-white" : ""}\`}>
+              {r}
+            </button>
+          ))}
+        </div>
+      </header>
+      <section className="mx-auto mt-8 grid max-w-5xl gap-4 sm:grid-cols-3">
+        {METRICS.map((m) => (
+          <article key={m.label} className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">{m.label}</p>
+            <p className="mt-2 text-2xl font-bold">{m.value}</p>
+            <p className="mt-1 text-sm text-emerald-600">{m.delta}</p>
+          </article>
+        ))}
+      </section>
+      <section className="mx-auto mt-8 max-w-5xl rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className="font-semibold">Actividad reciente</h2>
+        <ul className="mt-4 space-y-2 text-sm text-slate-600">
+          <li>Nuevo registro — hace 2 h</li>
+          <li>Pago completado — hace 5 h</li>
+          <li>Informe exportado — ayer</li>
+        </ul>
+      </section>
+    </main>
+  );
+}
+`;
+
+const BLOG_APP = `import React, { useState } from "react";
+
+const POSTS = [
+  { id: "1", title: "Primer artículo", excerpt: "Introduce tu blog y comparte actualizaciones.", date: "19 may 2026" },
+  { id: "2", title: "Guía rápida", excerpt: "Cómo publicar y optimizar SEO con GafCore.", date: "12 may 2026" },
+];
+
+export default function App() {
+  const [active, setActive] = useState<string | null>(null);
+  const post = POSTS.find((p) => p.id === active);
+
+  if (post) {
+    return (
+      <article className="min-h-screen bg-white px-6 py-12 text-stone-900">
+        <button type="button" onClick={() => setActive(null)} className="text-sm text-blue-600">← Volver</button>
+        <time className="mt-4 block text-sm text-stone-500">{post.date}</time>
+        <h1 className="mt-2 text-3xl font-bold">{post.title}</h1>
+        <p className="mt-6 leading-relaxed text-stone-700">{post.excerpt} Amplía este contenido con el editor IA.</p>
+      </article>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-stone-50 px-6 py-12">
+      <h1 className="text-3xl font-bold text-stone-900">Mi blog</h1>
+      <p className="mt-2 text-stone-600">Artículos y noticias</p>
+      <ul className="mx-auto mt-10 max-w-2xl space-y-4">
+        {POSTS.map((p) => (
+          <li key={p.id}>
+            <button type="button" onClick={() => setActive(p.id)} className="w-full rounded-xl border bg-white p-5 text-left shadow-sm hover:border-stone-300">
+              <time className="text-xs text-stone-500">{p.date}</time>
+              <h2 className="mt-1 text-lg font-semibold">{p.title}</h2>
+              <p className="mt-2 text-sm text-stone-600">{p.excerpt}</p>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+`;
+
+const PORTFOLIO_APP = `import React, { useState } from "react";
+
+const WORKS = [
+  { id: "1", title: "Proyecto Alpha", tag: "Web", img: "https://picsum.photos/seed/gafcore-portfolio-1/600/400" },
+  { id: "2", title: "Proyecto Beta", tag: "App", img: "https://picsum.photos/seed/gafcore-portfolio-2/600/400" },
+  { id: "3", title: "Proyecto Gamma", tag: "Branding", img: "https://picsum.photos/seed/gafcore-portfolio-3/600/400" },
+];
+
+export default function App() {
+  const [filter, setFilter] = useState<string>("Todos");
+  const tags = ["Todos", ...new Set(WORKS.map((w) => w.tag))];
+  const shown = filter === "Todos" ? WORKS : WORKS.filter((w) => w.tag === filter);
+
+  return (
+    <main className="min-h-screen bg-zinc-950 px-6 py-16 text-white">
+      <section className="mx-auto max-w-4xl text-center">
+        <p className="text-sm uppercase tracking-widest text-violet-400">Portfolio</p>
+        <h1 className="mt-2 text-4xl font-black">Tu nombre</h1>
+        <p className="mt-3 text-zinc-400">Diseño · Desarrollo · Producto</p>
+      </section>
+      <div className="mx-auto mt-10 flex max-w-4xl flex-wrap justify-center gap-2">
+        {tags.map((t) => (
+          <button key={t} type="button" onClick={() => setFilter(t)} className={\`rounded-full px-4 py-1.5 text-sm \${filter === t ? "bg-violet-600" : "border border-white/20"}\`}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <ul className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-2">
+        {shown.map((w) => (
+          <li key={w.id} className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900">
+            <img src={w.img} alt={w.title} width={600} height={400} className="aspect-[3/2] w-full object-cover" />
+            <div className="p-4">
+              <span className="text-xs text-violet-300">{w.tag}</span>
+              <h2 className="mt-1 font-semibold">{w.title}</h2>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+`;
+
 const SHOP_APP = `import React, { useEffect, useState } from "react";
 import { loadJson, saveJson } from "./lib/store";
 
@@ -252,6 +480,62 @@ export const BUILTIN_PROJECT_TEMPLATES: GafcoreProjectTemplateDef[] = [
       { name: "main.tsx", language: "typescript", content: MAIN_TSX },
       { name: "lib/store.ts", language: "typescript", content: STORE_LIB },
       { name: "App.tsx", language: "typescript", content: SHOP_APP },
+      { name: "styles.css", language: "css", content: STYLES },
+    ],
+  },
+  {
+    slug: "app-movil",
+    name: "App móvil (PWA)",
+    description: "Navegación inferior, pantallas táctiles y diseño mobile-first instalable.",
+    category: "mobile",
+    sort_order: 40,
+    files: [
+      indexHtml("Mi app móvil", { mobile: true }),
+      { name: "main.tsx", language: "typescript", content: MAIN_TSX },
+      { name: "lib/store.ts", language: "typescript", content: STORE_LIB },
+      { name: "App.tsx", language: "typescript", content: MOBILE_APP },
+      { name: "styles.css", language: "css", content: MOBILE_STYLES },
+    ],
+  },
+  {
+    slug: "panel-dashboard",
+    name: "Panel / dashboard",
+    description: "Métricas, tarjetas KPI y actividad reciente.",
+    category: "dashboard",
+    sort_order: 50,
+    files: [
+      indexHtml("Dashboard"),
+      { name: "main.tsx", language: "typescript", content: MAIN_TSX },
+      { name: "lib/store.ts", language: "typescript", content: STORE_LIB },
+      { name: "App.tsx", language: "typescript", content: DASHBOARD_APP },
+      { name: "styles.css", language: "css", content: STYLES },
+    ],
+  },
+  {
+    slug: "blog",
+    name: "Blog",
+    description: "Listado de artículos y vista de detalle.",
+    category: "blog",
+    sort_order: 60,
+    files: [
+      indexHtml("Blog"),
+      { name: "main.tsx", language: "typescript", content: MAIN_TSX },
+      { name: "lib/store.ts", language: "typescript", content: STORE_LIB },
+      { name: "App.tsx", language: "typescript", content: BLOG_APP },
+      { name: "styles.css", language: "css", content: STYLES },
+    ],
+  },
+  {
+    slug: "portfolio",
+    name: "Portfolio",
+    description: "Galería de proyectos con filtros por categoría.",
+    category: "portfolio",
+    sort_order: 70,
+    files: [
+      indexHtml("Portfolio"),
+      { name: "main.tsx", language: "typescript", content: MAIN_TSX },
+      { name: "lib/store.ts", language: "typescript", content: STORE_LIB },
+      { name: "App.tsx", language: "typescript", content: PORTFOLIO_APP },
       { name: "styles.css", language: "css", content: STYLES },
     ],
   },
