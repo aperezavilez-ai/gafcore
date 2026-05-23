@@ -47,11 +47,13 @@ export async function notifyMarketplaceReviewSubmitted(
   const webhook = process.env.GAFCORE_MARKETPLACE_REVIEW_WEBHOOK_URL?.trim();
   if (!webhook) return;
 
+  const body = buildReviewWebhookBody(webhook, payload);
+
   try {
     const res = await fetch(webhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body,
     });
     if (!res.ok) {
       console.warn("[marketplace-review] webhook HTTP", res.status);
@@ -59,4 +61,69 @@ export async function notifyMarketplaceReviewSubmitted(
   } catch (e) {
     console.warn("[marketplace-review] webhook failed:", e);
   }
+}
+
+type ReviewWebhookPayload = {
+  type: string;
+  listingId: string;
+  slug: string;
+  name: string;
+  kind: string;
+  creatorUserId: string | null;
+  creatorLabel: string;
+  adminUrl: string;
+  at: string;
+  test?: boolean;
+};
+
+/** Cuerpo JSON según Slack, Discord o genérico. */
+export function buildReviewWebhookBody(webhookUrl: string, payload: ReviewWebhookPayload): string {
+  const label = payload.test ? "[TEST] " : "";
+  const url = webhookUrl.toLowerCase();
+
+  if (url.includes("discord.com/api/webhooks")) {
+    return JSON.stringify({
+      content: `${label}📋 Nuevo listing en revisión`,
+      embeds: [
+        {
+          title: payload.name,
+          description: [
+            `**Slug:** \`${payload.slug}\``,
+            `**Tipo:** ${payload.kind}`,
+            `**Creador:** ${payload.creatorLabel}`,
+          ].join("\n"),
+          url: payload.adminUrl,
+          color: payload.test ? 0xfbbf24 : 0x6366f1,
+          timestamp: payload.at,
+        },
+      ],
+    });
+  }
+
+  if (url.includes("hooks.slack.com")) {
+    return JSON.stringify({
+      text: `${label}Marketplace: *${payload.name}* en revisión`,
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `${label}*${payload.name}*\n\`${payload.slug}\` · ${payload.kind}\nCreador: ${payload.creatorLabel}`,
+          },
+        },
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: { type: "plain_text", text: "Revisar en admin" },
+              url: payload.adminUrl,
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  return JSON.stringify(payload);
 }

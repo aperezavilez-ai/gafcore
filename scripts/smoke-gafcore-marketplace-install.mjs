@@ -1,0 +1,173 @@
+#!/usr/bin/env node
+/**
+ * Smoke: instala una plantilla gratis vía POST /api/extensions/v1/install (prod o local).
+ *
+ *   npm run gafcore:smoke-marketplace-install
+ *   GAFCORE_SMOKE_BASE=http://127.0.0.1:5174 npm run gafcore:smoke-marketplace-install
+ */
+import { createClient } from "@supabase/supabase-js";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const base = (process.env.GAFCORE_SMOKE_BASE ?? "https://www.gafcore.com").replace(/\/$/, "");
+const TEMPLATE_SLUG = process.env.GAFCORE_SMOKE_TEMPLATE_SLUG ?? "app-movil";
+
+function loadEnvFiles() {
+  for (const name of [".env", ".env.development", ".env.local"]) {
+    const p = resolve(root, name);
+    if (!existsSync(p)) continue;
+    for (const line of readFileSync(p, "utf8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const eq = t.indexOf("=");
+      if (eq < 1) continue;
+      const k = t.slice(0, eq).trim();
+      let v = t.slice(eq + 1).trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+        v = v.slice(1, -1);
+      }
+      if (!process.env[k]?.trim()) process.env[k] = v;
+    }
+  }
+  if (!process.env.SUPABASE_URL?.trim() && process.env.VITE_SUPABASE_URL?.trim()) {
+    process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL.trim();
+  }
+}
+
+async function getAdminAccessToken(admin) {
+  const { data: roleRow, error: roleErr } = await admin
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin")
+    .limit(1)
+    .maybeSingle();
+
+  if (roleErr || !roleRow?.user_id) {
+    throw new Error("No hay usuario admin en user_roles");
+  }
+
+  const { data: userData, error: userErr } = await admin.auth.admin.getUserById(roleRow.user_id);
+  const email = userData?.user?.email?.trim();
+  if (userErr || !email) {
+    throw new Error("No se pudo obtener email del admin");
+  }
+
+  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+
+  const tokenHash = linkData?.properties?.hashed_token;
+  if (linkErr || !tokenHash) {
+    throw new Error(`generateLink falló: ${linkErr?.message ?? "sin hashed_token"}`);
+  }
+
+  const anonKey =
+    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (!anonKey) throw new Error("Falta SUPABASE_PUBLISHABLE_KEY o VITE_SUPABASE_PUBLISHABLE_KEY");
+
+  const client = createClient(process.env.SUPABASE_URL.trim(), anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: sessionData, error: otpErr } = await client.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: "email",
+  });
+
+  const token = sessionData.session?.access_token;
+  if (otpErr || !token) {
+    throw new Error(`verifyOtp falló: ${otpErr?.message ?? "sin access_token"}`);
+  }
+
+  return token;
+}
+
+async function findListingId(admin, slug) {
+  const { data, error } = await admin
+    .from("gafcore_marketplace_listings")
+    .select("id, slug, name, state, price_cents")
+    .eq("slug", slug)
+    .eq("state", "published")
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    throw new Error(`Listing publicado "${slug}" no encontrado`);
+  }
+  if ((data.price_cents ?? 0) > 0) {
+    throw new Error(`Listing "${slug}" requiere pago; elige uno gratis`);
+  }
+  return data.id;
+}
+
+async function main() {
+  loadEnvFiles();
+
+  const url = process.env.SUPABASE_URL?.trim();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!url || !serviceKey) {
+    console.error("[smoke-install] Falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY");
+    process.exit(1);
+  }
+
+  const admin = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  console.log(`[smoke-install] base: ${base}`);
+  console.log(`[smoke-install] plantilla: ${TEMPLATE_SLUG}`);
+
+  const token = await getAdminAccessToken(admin);
+  const listingId = await findListingId(admin, TEMPLATE_SLUG);
+
+  const installRes = await fetch(`${base}/api/extensions/v1/install`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ listingId }),
+  });
+
+  const installBody = await installRes.json();
+
+  console.log("[smoke-install] install HTTP:", installRes.status, installBody);
+
+  if (installRes.status === 500) {
+    console.error("[smoke-install] FAIL: HTTP 500 (HTTPError Vercel)");
+    process.exit(1);
+  }
+  if (!installRes.ok || !installBody.ok) {
+    console.error("[smoke-install] FAIL:", installBody.error ?? "install_error");
+    process.exit(1);
+  }
+
+  const installsRes = await fetch(`${base}/api/extensions/v1/installs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: "{}",
+  });
+
+  const installsBody = await installsRes.json();
+
+  const found = (installsBody.installs ?? []).some((i) => i.listingId === listingId);
+  console.log("[smoke-install] installs HTTP:", installsRes.status, "found:", found);
+
+  if (!installsRes.ok || !found) {
+    console.error("[smoke-install] FAIL: instalación no aparece en /installs");
+    process.exit(1);
+  }
+
+  console.log("[smoke-install] OK — installSlug:", installBody.installSlug);
+}
+
+main().catch((e) => {
+  console.error("[smoke-install]", e instanceof Error ? e.message : e);
+  process.exit(1);
+});
