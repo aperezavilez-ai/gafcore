@@ -508,8 +508,8 @@ export function GafCoreIDE() {
     }
     try {
       const res = await callDeleteProject({ data: { projectId: cur } });
-      if (!res.ok) {
-        toast.error(res.error ?? "No se pudo eliminar el proyecto");
+      if (!res?.ok) {
+        toast.error(res?.error ?? "No se pudo eliminar el proyecto");
         return;
       }
       clearCurrentProjectId();

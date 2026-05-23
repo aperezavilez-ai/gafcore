@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 
 const deleteProjectInput = z.object({
   projectId: z.string().uuid(),
@@ -21,20 +23,15 @@ const PROJECT_CHILD_TABLES = [
   "gafcore_workflow_runs",
 ] as const;
 
-/**
- * Elimina un proyecto en servidor con el cliente Supabase del JWT (RLS).
- * No usa service role: funciona en local sin SUPABASE_SERVICE_ROLE_KEY si existen
- * SUPABASE_URL + SUPABASE_PUBLISHABLE_KEY (mismo criterio que requireSupabaseAuth).
- */
+/** Elimina un proyecto tras verificar sesión (service role en servidor). */
 export const deleteGafcoreProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => deleteProjectInput.parse(input))
   .handler(async ({ data, context }) => {
     const userId = context.userId as string;
-    const sb = context.supabase;
     const { projectId } = data;
 
-    const { data: proj, error: qErr } = await sb
+    const { data: proj, error: qErr } = await supabaseAdmin
       .from("projects")
       .select("id, user_id")
       .eq("id", projectId)
@@ -48,13 +45,7 @@ export const deleteGafcoreProject = createServerFn({ method: "POST" })
       return { ok: false as const, error: "Proyecto no encontrado." };
     }
 
-    const { data: adminRow } = await sb
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("role", "admin")
-      .maybeSingle();
-    const admin = !!adminRow;
+    const admin = await isGafcoreAdminUser(userId);
 
     if (proj.user_id != null && proj.user_id !== userId && !admin) {
       return {
@@ -64,29 +55,29 @@ export const deleteGafcoreProject = createServerFn({ method: "POST" })
     }
 
     if (!proj.user_id) {
-      const { error: claimErr } = await sb
+      await supabaseAdmin
         .from("projects")
         .update({ user_id: userId })
         .eq("id", projectId)
         .is("user_id", null);
-      if (claimErr) {
-        console.warn("[deleteGafcoreProject] claim orphan:", claimErr);
-      }
     }
 
-    const { error: chatErr } = await sb.from("chat_messages").delete().eq("project_id", projectId);
+    const { error: chatErr } = await supabaseAdmin
+      .from("chat_messages")
+      .delete()
+      .eq("project_id", projectId);
     if (chatErr) {
       console.warn("[deleteGafcoreProject] chat_messages:", chatErr);
     }
 
     for (const table of PROJECT_CHILD_TABLES) {
-      const { error } = await sb.from(table).delete().eq("project_id", projectId);
+      const { error } = await supabaseAdmin.from(table).delete().eq("project_id", projectId);
       if (error) {
         console.warn(`[deleteGafcoreProject] ${table}:`, error);
       }
     }
 
-    const { data: deletedRows, error: delErr } = await sb
+    const { data: deletedRows, error: delErr } = await supabaseAdmin
       .from("projects")
       .delete()
       .eq("id", projectId)

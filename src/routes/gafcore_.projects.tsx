@@ -198,8 +198,8 @@ function GafcoreProjectsPage() {
     }
     try {
       const res = await deleteProjectOnServer({ data: { projectId: p.id } });
-      if (!res.ok) {
-        toast.error(res.error ?? "No se pudo eliminar");
+      if (!res?.ok) {
+        toast.error(res?.error ?? "No se pudo eliminar (sin respuesta del servidor)");
         return;
       }
       if (getCurrentProjectId() === p.id) {
