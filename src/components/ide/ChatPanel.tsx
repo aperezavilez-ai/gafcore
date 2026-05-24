@@ -79,6 +79,7 @@ import {
 } from "@/lib/gafcore-ai-validation.shared";
 import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
 import { listGafcoreActiveAiPlugins } from "@/lib/gafcore-extensions.functions";
+import { fetchUserExtensionInstalls } from "@/lib/gafcore-extensions-client";
 import {
   advanceGafcorePipelineStep,
   finalizeGafcorePipelineRun,
@@ -350,6 +351,15 @@ export function ChatPanel({
   const freeCreditsRescueUserId = useRef<string | null>(null);
   const callAiPlugins = useServerFn(listGafcoreActiveAiPlugins);
   const [aiPluginNames, setAiPluginNames] = useState<string[]>([]);
+  const [workflowPacks, setWorkflowPacks] = useState<Array<{ slug: string; name: string }>>([]);
+  const [selectedWorkflowPackSlug, setSelectedWorkflowPackSlug] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.localStorage.getItem("gafcore_workflow_pack") || null;
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     try {
@@ -379,6 +389,41 @@ export function ChatPanel({
     window.addEventListener("gafcore:extensions-changed", loadPlugins);
     return () => window.removeEventListener("gafcore:extensions-changed", loadPlugins);
   }, [user?.id, callAiPlugins]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setWorkflowPacks([]);
+      return;
+    }
+    const loadPacks = () => {
+      void fetchUserExtensionInstalls()
+        .then((r) => {
+          const packs = (r.installs ?? [])
+            .filter((i) => i.kind === "workflow_pack")
+            .map((i) => ({
+              slug: i.installSlug.replace(/^workflow:/, ""),
+              name: i.name,
+            }));
+          setWorkflowPacks(packs);
+        })
+        .catch(() => setWorkflowPacks([]));
+    };
+    loadPacks();
+    window.addEventListener("gafcore:extensions-changed", loadPacks);
+    return () => window.removeEventListener("gafcore:extensions-changed", loadPacks);
+  }, [user?.id]);
+
+  useEffect(() => {
+    try {
+      if (selectedWorkflowPackSlug) {
+        window.localStorage.setItem("gafcore_workflow_pack", selectedWorkflowPackSlug);
+      } else {
+        window.localStorage.removeItem("gafcore_workflow_pack");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [selectedWorkflowPackSlug]);
 
   // Load chat history for current project
   useEffect(() => {
@@ -1635,6 +1680,9 @@ export function ChatPanel({
     visualEditOn: boolean,
   ): Promise<{ reply: string; files: Array<{ name: string; language?: string; content: string }> }> => {
     if (!projectId) throw new Error("project_required");
+    const workflowInstruction = selectedWorkflowPackSlug
+      ? `@workflow:${selectedWorkflowPackSlug} ${instruction}`.trim()
+      : instruction;
     const ctxFiles = files.map((f) => ({
       name: f.name,
       language: f.language,
@@ -1655,7 +1703,7 @@ export function ChatPanel({
     const started = await callPlanAndStartWorkflow({
       data: {
         projectId,
-        instruction,
+        instruction: workflowInstruction,
         files: ctxFiles,
         ...(pipelineRunIdRef.current ? { pipelineRunId: pipelineRunIdRef.current } : {}),
       },
@@ -2476,6 +2524,42 @@ export function ChatPanel({
                       <span className="text-[10px] text-muted-foreground">OFF</span>
                     )}
                   </DropdownMenuItem>
+                  {multiAgentMode && workflowPacks.length > 0 ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled
+                        className="text-xs text-muted-foreground focus:bg-transparent"
+                      >
+                        Pack workflow
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setSelectedWorkflowPackSlug(null);
+                          toast.message("Multiagente: plan generado por IA");
+                        }}
+                      >
+                        <span className="flex-1">Plan IA (sin pack)</span>
+                        {!selectedWorkflowPackSlug ? (
+                          <span className="text-[10px] font-medium text-primary">✓</span>
+                        ) : null}
+                      </DropdownMenuItem>
+                      {workflowPacks.map((pack) => (
+                        <DropdownMenuItem
+                          key={pack.slug}
+                          onSelect={() => {
+                            setSelectedWorkflowPackSlug(pack.slug);
+                            toast.message(`Pack: ${pack.name}`);
+                          }}
+                        >
+                          <span className="flex-1 truncate">{pack.name}</span>
+                          {selectedWorkflowPackSlug === pack.slug ? (
+                            <span className="text-[10px] font-medium text-primary">✓</span>
+                          ) : null}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  ) : null}
                   <DropdownMenuItem
                     disabled={!multiAgentMode}
                     onSelect={(e) => {

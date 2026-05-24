@@ -43,3 +43,4 @@ supabase/.temp/
 .env
 .env.development
 .env.production
+.env*
