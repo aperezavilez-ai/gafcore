@@ -3,6 +3,7 @@ import {
   extensionAgentSlug,
   extensionAiPluginSlug,
   extensionTemplateSlug,
+  extensionWorkflowPackSlug,
   type TemplateExtensionManifest,
 } from "@/extensions/manifests.shared";
 import {
@@ -173,9 +174,14 @@ export async function installListingForUser(
   if (
     manifest.kind !== "template" &&
     manifest.kind !== "ai_plugin" &&
-    manifest.kind !== "agent"
+    manifest.kind !== "agent" &&
+    manifest.kind !== "workflow_pack"
   ) {
     return { ok: false, error: "kind_not_supported_yet" };
+  }
+
+  if (manifest.kind === "workflow_pack" && !manifest.plan?.tasks?.length) {
+    return { ok: false, error: "workflow_pack_plan_required" };
   }
 
   if (manifest.kind === "agent") {
@@ -208,7 +214,9 @@ export async function installListingForUser(
       ? extensionTemplateSlug(listingRow.slug)
       : manifest.kind === "ai_plugin"
         ? extensionAiPluginSlug(listingRow.slug)
-        : extensionAgentSlug(listingRow.slug);
+        : manifest.kind === "workflow_pack"
+          ? extensionWorkflowPackSlug(listingRow.slug)
+          : extensionAgentSlug(listingRow.slug);
 
   const { error } = await supabaseAdmin.from("gafcore_extension_installs").upsert(
     {

@@ -44,6 +44,45 @@ const BUILTIN_MARKETPLACE_PLUGINS = [
   },
 ];
 
+const BUILTIN_WORKFLOW_PACKS = [
+  {
+    slug: "landing-build-pack",
+    name: "Pack: landing en 2 pasos",
+    description: "Workflow multiagente: frontend + validación para una landing.",
+    sort_order: 50,
+    manifest: {
+      kind: "workflow_pack" as const,
+      version: 1 as const,
+      slug: "landing-build-pack",
+      name: "Pack: landing en 2 pasos",
+      description: "Plan precargado frontend → validación.",
+      defaultInstruction: "Mejorar la landing del proyecto: hero, CTA y estilos coherentes.",
+      plan: {
+        version: 1 as const,
+        summary: "Landing: UI + validación",
+        tasks: [
+          {
+            id: "fe-1",
+            agentType: "frontend" as const,
+            title: "Hero y layout",
+            instruction: "Refina index/App: hero claro, CTA visible, responsive mobile-first.",
+            priority: "high" as const,
+            dependsOn: [] as string[],
+          },
+          {
+            id: "val-1",
+            agentType: "validation" as const,
+            title: "Validar build",
+            instruction: "Comprueba sintaxis TSX/CSS y que no queden handlers vacíos.",
+            priority: "normal" as const,
+            dependsOn: ["fe-1"],
+          },
+        ],
+      },
+    },
+  },
+];
+
 function toMarketplacePath(name: string): string | null {
   const norm = name.replace(/\\/g, "/");
   if (norm === "index.html") return "public/index.html";
@@ -189,17 +228,66 @@ export async function syncBuiltinPluginsToMarketplace(): Promise<{
   return { ok: true, synced: slugs.length, slugs, errors };
 }
 
-/** Plantillas + plugins oficiales en una sola pasada. */
+/** Publica workflow packs oficiales. */
+export async function syncBuiltinWorkflowPacksToMarketplace(): Promise<{
+  ok: true;
+  synced: number;
+  slugs: string[];
+  errors: string[];
+}> {
+  const slugs: string[] = [];
+  const errors: string[] = [];
+
+  for (const pack of BUILTIN_WORKFLOW_PACKS) {
+    try {
+      const result = await upsertListingFromManifest({
+        publisherSlug: PUBLISHER_SLUG,
+        listingSlug: pack.slug,
+        name: pack.name,
+        description: pack.description,
+        kind: "workflow_pack",
+        versionLabel: VERSION,
+        manifestJson: JSON.stringify(pack.manifest),
+        publish: true,
+        priceCents: 0,
+        currency: "eur",
+      });
+
+      if (!result.ok) {
+        errors.push(`${pack.slug}: ${result.error}`);
+        continue;
+      }
+
+      await supabaseAdmin
+        .from("gafcore_marketplace_listings")
+        .update({
+          sort_order: pack.sort_order,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", result.listingId);
+
+      slugs.push(pack.slug);
+    } catch (e) {
+      errors.push(`${pack.slug}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return { ok: true, synced: slugs.length, slugs, errors };
+}
+
+/** Plantillas + plugins + workflow packs oficiales en una sola pasada. */
 export async function syncBuiltinCatalogToMarketplace(): Promise<
   | {
       ok: true;
       templates: { synced: number; slugs: string[]; errors: string[] };
       plugins: { synced: number; slugs: string[]; errors: string[] };
+      workflowPacks: { synced: number; slugs: string[]; errors: string[] };
     }
   | { ok: false; error: string }
 > {
   const templates = await syncBuiltinTemplatesToMarketplace();
   if (!templates.ok) return templates;
   const plugins = await syncBuiltinPluginsToMarketplace();
-  return { ok: true, templates, plugins };
+  const workflowPacks = await syncBuiltinWorkflowPacksToMarketplace();
+  return { ok: true, templates, plugins, workflowPacks };
 }

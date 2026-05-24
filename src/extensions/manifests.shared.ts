@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { taskPlanSchema } from "@/tasks/artifacts.shared";
 
 export const EXTENSION_MANIFEST_VERSION = 1 as const;
 
@@ -59,10 +60,27 @@ export function extensionAgentSlug(listingSlug: string): string {
   return `agent:${listingSlug.replace(/^agent:/, "")}`;
 }
 
+export const workflowPackManifestSchema = z.object({
+  kind: z.literal("workflow_pack"),
+  version: z.literal(EXTENSION_MANIFEST_VERSION),
+  slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).default(""),
+  /** Instrucción sugerida al lanzar multiagente con este pack. */
+  defaultInstruction: z.string().max(4000).optional(),
+  /** Plan DAG precargado (opcional). */
+  plan: taskPlanSchema.optional(),
+});
+
+export function extensionWorkflowPackSlug(listingSlug: string): string {
+  return `workflow:${listingSlug.replace(/^workflow:/, "")}`;
+}
+
 export const extensionManifestSchema = z.discriminatedUnion("kind", [
   templateManifestSchema,
   aiPluginManifestSchema,
   externalAgentManifestSchema,
+  workflowPackManifestSchema,
 ]);
 
 export type ExtensionManifest = z.infer<typeof extensionManifestSchema>;

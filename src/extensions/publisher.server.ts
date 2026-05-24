@@ -190,7 +190,7 @@ export async function upsertListingFromManifest(input: {
   listingSlug: string;
   name: string;
   description: string;
-  kind: "template" | "ai_plugin" | "agent";
+  kind: "template" | "ai_plugin" | "agent" | "workflow_pack";
   versionLabel: string;
   manifestJson: string;
   publish: boolean;
@@ -229,6 +229,9 @@ export async function upsertListingFromManifest(input: {
   }
   if (parsed.data.kind === "agent" && parsed.data.slug !== input.listingSlug) {
     return { ok: false, error: "agent_slug_must_match_listing" };
+  }
+  if (parsed.data.kind === "workflow_pack" && parsed.data.slug !== input.listingSlug) {
+    return { ok: false, error: "workflow_slug_must_match_listing" };
   }
 
   let publisherId: string | undefined;

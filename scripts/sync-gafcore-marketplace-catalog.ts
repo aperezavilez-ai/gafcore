@@ -67,6 +67,15 @@ async function main() {
   if (result.plugins.errors.length) {
     console.warn("Avisos plugins:", result.plugins.errors.join("; "));
   }
+  console.log(
+    "Workflow packs:",
+    result.workflowPacks.synced,
+    "→",
+    result.workflowPacks.slugs.join(", "),
+  );
+  if (result.workflowPacks.errors.length) {
+    console.warn("Avisos workflow:", result.workflowPacks.errors.join("; "));
+  }
   console.log("\n[gafcore] Catálogo sincronizado. Verifica: /gafcore/marketplace\n");
 }
 

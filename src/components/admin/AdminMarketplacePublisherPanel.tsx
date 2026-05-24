@@ -140,10 +140,18 @@ export function AdminMarketplacePublisherPanel() {
         toast.error("No se sincronizó el catálogo", { description: res.error });
         return;
       }
-      const total = res.synced ?? (res.templates?.synced ?? 0) + (res.plugins?.synced ?? 0);
-      const errs = [...(res.templates?.errors ?? []), ...(res.plugins?.errors ?? [])];
+      const total =
+        res.synced ??
+        (res.templates?.synced ?? 0) +
+          (res.plugins?.synced ?? 0) +
+          (res.workflowPacks?.synced ?? 0);
+      const errs = [
+        ...(res.templates?.errors ?? []),
+        ...(res.plugins?.errors ?? []),
+        ...(res.workflowPacks?.errors ?? []),
+      ];
       toast.success(`Catálogo publicado: ${total} items`, {
-        description: errs.length ? errs.slice(0, 2).join("; ") : "Plantillas + plugins IA",
+        description: errs.length ? errs.slice(0, 2).join("; ") : "Plantillas + plugins + workflows",
       });
       await reload();
     } catch (e) {

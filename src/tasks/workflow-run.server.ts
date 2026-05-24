@@ -20,6 +20,7 @@ import {
 } from "@/tasks/file-locks.server";
 import { executeAgentTask, persistTaskArtifact } from "@/tasks/executor.server";
 import { notifyUserAgentsWorkflowEvent } from "@/extensions/external-agent.server";
+import { getInstalledWorkflowPackByListingSlug } from "@/extensions/workflow-packs.server";
 import type { AgentTaskRow } from "@/tasks/types";
 import type { FilePatch } from "@/tasks/artifacts.shared";
 
@@ -37,6 +38,26 @@ export async function planAndCreateWorkflow(
     (err as Error & { active: number; max: number }).active = limit.active;
     (err as Error & { max: number }).max = limit.max;
     throw err;
+  }
+
+  const packMatch = instruction.trim().match(/^@workflow:([a-z0-9-]+)\s*(.*)$/i);
+  if (packMatch) {
+    const pack = await getInstalledWorkflowPackByListingSlug(userId, packMatch[1]!);
+    if (pack?.plan?.tasks?.length) {
+      const instr =
+        packMatch[2]?.trim() ||
+        pack.defaultInstruction?.trim() ||
+        pack.plan.summary;
+      const { workflowRunId } = await createWorkflowRun(
+        projectId,
+        userId,
+        instr,
+        pack.plan,
+        pipelineRunId,
+        { files, planSummary: pack.plan.summary },
+      );
+      return { workflowRunId, planSummary: pack.plan.summary, pipelineRunId: pipelineRunId ?? null };
+    }
   }
 
   const plan = await generateTaskPlan(instruction, files);

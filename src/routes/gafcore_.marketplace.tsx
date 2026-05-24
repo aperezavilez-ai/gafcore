@@ -27,6 +27,7 @@ const INSTALL_ERRORS: Record<string, string> = {
   install_limit_reached: "Has alcanzado el límite de extensiones instaladas.",
   listing_not_found: "Esta extensión ya no está disponible.",
   kind_not_supported_yet: "Este tipo de extensión aún no está soportado.",
+  workflow_pack_plan_required: "El pack de workflow debe incluir un plan válido.",
   agent_webhook_required: "El agente debe definir webhookUrl en el manifest.",
   install_failed: "Error al guardar la instalación.",
   payment_required: "Compra esta extensión antes de instalarla.",

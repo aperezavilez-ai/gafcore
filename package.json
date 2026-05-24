@@ -22,6 +22,8 @@
     "gafcore:migrate-extensions": "node scripts/apply-gafcore-extensions-migrations.mjs",
     "gafcore:smoke-extensions": "node scripts/smoke-gafcore-extensions.mjs",
     "gafcore:smoke-marketplace-install": "node scripts/smoke-gafcore-marketplace-install.mjs",
+    "gafcore:smoke-projects": "node scripts/smoke-gafcore-projects.mjs",
+    "gafcore:smoke-all": "npm run gafcore:smoke-extensions && npm run gafcore:smoke-marketplace-install && npm run gafcore:smoke-projects",
     "gafcore:test-review-webhook": "npx tsx scripts/test-gafcore-review-webhook.ts",
     "gafcore:setup-review-webhook": "node scripts/setup-gafcore-review-webhook.mjs",
     "gafcore:sync-marketplace-catalog": "npx tsx scripts/sync-gafcore-marketplace-catalog.ts",

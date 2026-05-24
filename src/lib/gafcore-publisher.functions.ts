@@ -26,7 +26,7 @@ const publishSchema = z.object({
     .regex(/^[a-z0-9-]+$/),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),
-  kind: z.enum(["template", "ai_plugin", "agent"]),
+  kind: z.enum(["template", "ai_plugin", "agent", "workflow_pack"]),
   versionLabel: z.string().min(1).max(32).default("1.0.0"),
   manifestJson: z.string().min(2).max(500_000),
   publish: z.boolean().default(true),
