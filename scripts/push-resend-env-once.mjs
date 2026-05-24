@@ -44,7 +44,7 @@ if (!toPush.length) {
   1. Crea API key en https://resend.com/api-keys
   2. Añade en .env.local:
      RESEND_API_KEY=re_…
-     RESEND_FROM=GafCore <onboarding@resend.dev>
+     RESEND_FROM=GafCore <noreply@send.gafcore.com>
   3. Vuelve a ejecutar: npm run gafcore:vercel-resend
 `);
   process.exit(1);
@@ -52,11 +52,13 @@ if (!toPush.length) {
 
 for (const key of toPush) {
   console.log(`[gafcore] Vercel production → ${key}`);
-  const r = spawnSync(
-    "npx",
-    ["vercel@latest", "env", "add", key, "production", "--value", env[key], "--yes", "--force"],
-    { cwd: root, stdio: "inherit", shell: true },
-  );
+  const vercelArgs = ["vercel@latest", "env", "add", key, "production", "--value", env[key], "--yes", "--force"];
+  const r = spawnSync("npx", vercelArgs, {
+    cwd: root,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    windowsHide: true,
+  });
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
