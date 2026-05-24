@@ -50,11 +50,13 @@ async function createWebhookSiteUrl() {
 
 function pushVercelEnv(key, value) {
   console.log(`[setup-webhook] Vercel production → ${key}`);
-  const r = spawnSync(
-    "npx",
-    ["vercel@latest", "env", "add", key, "production", "--value", value, "--yes", "--force"],
-    { cwd: root, stdio: "inherit", shell: true, env: process.env },
-  );
+  const r = spawnSync("npx", ["vercel@latest", "env", "add", key, "production", "--value", value, "--yes", "--force"], {
+    cwd: root,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    windowsHide: true,
+    env: process.env,
+  });
   return r.status === 0;
 }
 
@@ -105,8 +107,10 @@ async function main() {
     const whoami = spawnSync("npx", ["vercel@latest", "whoami"], {
       cwd: root,
       stdio: "pipe",
-      shell: true,
+      shell: process.platform === "win32",
+      windowsHide: true,
       encoding: "utf8",
+      timeout: 30_000,
     });
     if (whoami.status !== 0) {
       console.warn("[setup-webhook] Vercel no autenticado. Ejecuta: npx vercel login");
