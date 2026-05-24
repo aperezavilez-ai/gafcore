@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.user_github_credentials (
 
 ALTER TABLE public.user_github_credentials ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users read own github credential meta" ON public.user_github_credentials;
 CREATE POLICY "Users read own github credential meta"
   ON public.user_github_credentials FOR SELECT
   TO authenticated

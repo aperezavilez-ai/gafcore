@@ -45,6 +45,7 @@ export async function notifyMarketplaceReviewSubmitted(
   console.info("[marketplace-review]", JSON.stringify(payload));
 
   void enqueueReviewEmailToAdmins(payload);
+  void sendReviewEmailViaResend(payload);
 
   const webhook = process.env.GAFCORE_MARKETPLACE_REVIEW_WEBHOOK_URL?.trim();
   if (!webhook) return;
@@ -132,6 +133,8 @@ export function buildReviewWebhookBody(webhookUrl: string, payload: ReviewWebhoo
 
 /** Encola correo a admins (cola transactional_emails; requiere SMTP/cron en Supabase). */
 async function enqueueReviewEmailToAdmins(payload: ReviewWebhookPayload): Promise<void> {
+  if (process.env.RESEND_API_KEY?.trim()) return;
+
   const { data: admins, error } = await supabaseAdmin
     .from("user_roles")
     .select("user_id")
@@ -167,6 +170,54 @@ async function enqueueReviewEmailToAdmins(payload: ReviewWebhookPayload): Promis
       }
     } catch (e) {
       console.warn("[marketplace-review] email failed:", e);
+    }
+  }
+}
+
+/** Envío directo vía Resend (si RESEND_API_KEY está en Vercel/.env.local). */
+async function sendReviewEmailViaResend(payload: ReviewWebhookPayload): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) return;
+
+  const from =
+    process.env.RESEND_FROM?.trim() ||
+    process.env.GAFCORE_EMAIL_FROM?.trim() ||
+    "GafCore <onboarding@resend.dev>";
+
+  const { data: admins, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin");
+
+  if (error || !admins?.length) return;
+
+  const subject = `[GafCore] Revisión marketplace: ${payload.name}`;
+  const html = [
+    `<p><strong>${payload.name}</strong> (<code>${payload.slug}</code>)</p>`,
+    `<p>Tipo: ${payload.kind}<br/>Creador: ${payload.creatorLabel}</p>`,
+    `<p><a href="${payload.adminUrl}">Abrir panel admin</a></p>`,
+  ].join("");
+
+  for (const row of admins) {
+    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(row.user_id);
+    const email = userData?.user?.email?.trim();
+    if (!email) continue;
+
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ from, to: [email], subject, html }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.warn("[marketplace-review] resend HTTP", res.status, text.slice(0, 120));
+      }
+    } catch (e) {
+      console.warn("[marketplace-review] resend failed:", e);
     }
   }
 }
