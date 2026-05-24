@@ -30,6 +30,7 @@
     "gafcore:test-review-webhook": "npx tsx scripts/test-gafcore-review-webhook.ts",
     "gafcore:setup-review-webhook": "node scripts/setup-gafcore-review-webhook.mjs",
     "gafcore:setup-auth-production": "node scripts/gafcore-setup-auth-production.mjs",
+    "gafcore:vercel-resend": "node scripts/push-resend-env-once.mjs",
     "gafcore:test-review-notify": "npx tsx scripts/test-gafcore-review-notify.ts",
     "gafcore:sync-marketplace-catalog": "npx tsx scripts/sync-gafcore-marketplace-catalog.ts",
     "gafcore:github-actions-setup": "node scripts/print-github-actions-setup.mjs",

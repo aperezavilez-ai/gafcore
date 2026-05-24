@@ -24,14 +24,17 @@ function run(label, cmd, args, opts = {}) {
 
 console.log("\n=== GafCore — setup auth / migraciones / webhook ===\n");
 
-const link = run("Supabase link (si hace falta)", "npx", [
+const link = run("Supabase link (proyecto GafCore prod)", "npx", [
   "supabase@latest",
   "link",
   "--project-ref",
   "hbfbqqwetaynblmkezeu",
+  "--yes",
 ]);
 if (link !== 0) {
-  console.warn("[setup-auth] Ejecuta: npx supabase login");
+  console.warn(
+    "[setup-auth] Link falló. En tu terminal:\n  npx supabase login\n  npx supabase link --project-ref hbfbqqwetaynblmkezeu\n",
+  );
 }
 
 const config = run("Supabase config push (Auth URLs + plantillas email)", "npx", [
