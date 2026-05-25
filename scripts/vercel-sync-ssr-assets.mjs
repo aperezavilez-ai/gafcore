@@ -181,6 +181,36 @@ for (const name of publicIcons) {
 const missingAfter = collectMissingAssets();
 ssrProbe = await probeSsrHome();
 
+// `maxDuration` / `memory` para la lambda SSR: el chat de gafcore (Claude) puede tardar
+// >30s. Sin este override, Vercel mata la función antes de que termine y el cliente ve
+// "La solicitud tardó demasiado".
+// 300s = máximo Vercel Pro Fluid; en Hobby Vercel ajusta a 60s automáticamente.
+try {
+  const vcConfigPath = join(serverFunc, ".vc-config.json");
+  if (existsSync(vcConfigPath)) {
+    const cfg = JSON.parse(readFileSync(vcConfigPath, "utf8"));
+    const desiredMaxDuration = Number(process.env.GAFCORE_SSR_MAX_DURATION_S) || 300;
+    const desiredMemory = Number(process.env.GAFCORE_SSR_MEMORY_MB) || 1024;
+    let changed = false;
+    if (cfg.maxDuration !== desiredMaxDuration) {
+      cfg.maxDuration = desiredMaxDuration;
+      changed = true;
+    }
+    if (cfg.memory !== desiredMemory) {
+      cfg.memory = desiredMemory;
+      changed = true;
+    }
+    if (changed) {
+      writeFileSync(vcConfigPath, JSON.stringify(cfg, null, 2), "utf8");
+      console.log(
+        `[vercel-sync-ssr-assets] vc-config: maxDuration=${desiredMaxDuration}s memory=${desiredMemory}MB`,
+      );
+    }
+  }
+} catch (e) {
+  console.warn("[vercel-sync-ssr-assets] vc-config patch failed:", e instanceof Error ? e.message : e);
+}
+
 console.log(
   `[vercel-sync-ssr-assets] css=${gafcoreCss ?? mainCss ?? "none"} js=${mainIndexJs ?? "none"} body=${bodyCaptured ? "captured" : "default"} public=${publicCopied} ssrProbe=${ssrProbe.ok ? "ok" : JSON.stringify(ssrProbe)} missing=${missingAfter.length} → ${filesPatched} files, ${replacements} fixes`,
 );
