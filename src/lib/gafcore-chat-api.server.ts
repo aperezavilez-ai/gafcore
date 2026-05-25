@@ -32,6 +32,8 @@ import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
 import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
 import { buildAiPluginPromptAppend } from "@/extensions/ai-plugins.server";
+import { readProjectBrand } from "@/lib/gafcore-brand.functions";
+import { brandContextBlock } from "@/lib/gafcore-brand.shared";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -72,6 +74,8 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   });
   const pluginAppend = await buildAiPluginPromptAppend(userId);
   const promptAppendix = [memory.promptAppendix, pluginAppend].filter(Boolean).join("\n\n");
+  const brand = await readProjectBrand(data.projectId);
+  const brandBlock = brand ? brandContextBlock(brand) : "";
   const model = resolveGatewayModel(gateway, {
     instruction: data.instruction,
     hasVision: data.files.some((f) => f.content.trim().startsWith("data:image/")),
@@ -81,8 +85,9 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     model,
     promptAppendix,
     memory.priorityPaths,
+    brandBlock,
   );
-  const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
+  const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}:${brand?.name ?? ""}`;
   const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
   if (cached) {
     const balance = await fetchBalance(userId);
@@ -220,6 +225,8 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   });
   const pluginAppend = await buildAiPluginPromptAppend(userId);
   const promptAppendix = [memory.promptAppendix, pluginAppend].filter(Boolean).join("\n\n");
+  const brand = await readProjectBrand(data.projectId);
+  const brandBlock = brand ? brandContextBlock(brand) : "";
   const model = resolveGatewayModel(gateway, {
     instruction: data.instruction,
     hasVision: extractVisionImageParts(data.files as ProjFile[]).length > 0,
@@ -229,9 +236,10 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     model,
     promptAppendix,
     memory.priorityPaths,
+    brandBlock,
   );
 
-  const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
+  const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}:${brand?.name ?? ""}`;
   const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
   if (cached) {
     const bal = await fetchBalance(userId);

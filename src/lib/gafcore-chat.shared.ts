@@ -330,6 +330,7 @@ export function buildGafcoreMessages(
   resolvedModel?: string,
   memoryHints = "",
   priorityPaths: string[] = [],
+  brandBlock = "",
 ): {
   messages: GafcoreChatMessage[];
   model: string;
@@ -362,7 +363,7 @@ export function buildGafcoreMessages(
         ]
       : textBlock;
 
-  const baseSystem = `${GAFCORE_SYSTEM}${GAFCORE_DESIGN_SYSTEM}`;
+  const baseSystem = `${GAFCORE_SYSTEM}${GAFCORE_DESIGN_SYSTEM}${brandBlock}`;
   const systemContent = memoryHints.trim()
     ? `${baseSystem}${memoryHints}`
     : baseSystem;

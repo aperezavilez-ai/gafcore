@@ -21,6 +21,7 @@ const PROJECT_CHILD_TABLES = [
   "gafcore_validation_runs",
   "gafcore_pipeline_runs",
   "gafcore_workflow_runs",
+  "gafcore_project_brands",
 ] as const;
 
 /** Elimina un proyecto tras verificar sesión (service role en servidor). */

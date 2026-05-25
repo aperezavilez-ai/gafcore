@@ -230,6 +230,14 @@ export default {
       const { handleGafcoreCheckoutConfirmPost } = await import("./lib/gafcore-checkout-http.server");
       return handleGafcoreCheckoutConfirmPost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/brand/get") {
+      const { handleGafcoreBrandGetPost } = await import("./lib/gafcore-brand-http.server");
+      return handleGafcoreBrandGetPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/brand/set") {
+      const { handleGafcoreBrandSetPost } = await import("./lib/gafcore-brand-http.server");
+      return handleGafcoreBrandSetPost(request);
+    }
     if (request.method === "POST" && path === "/api/extensions/v1/catalog") {
       const { handleExtensionsCatalogPost } = await import("./lib/gafcore-extensions-http.server");
       return handleExtensionsCatalogPost(request);
