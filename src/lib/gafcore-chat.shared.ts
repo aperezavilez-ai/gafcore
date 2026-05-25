@@ -7,6 +7,7 @@ import {
 } from "@/lib/gafcore-media.shared";
 import { instructionNeedsLayoutModel } from "@/lib/gafcore-layout-instruction.shared";
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
+import { GAFCORE_DESIGN_SYSTEM } from "@/lib/gafcore-design-system.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -97,9 +98,14 @@ Reglas de **archivos (eficiencia)**:
 /** Créditos que consume cada ejecución de IA vía `consume_credits` (1 solicitud = 1 unidad salvo planes ilimitados). */
 export const COST_PER_REQUEST = 1;
 
-/** Slugs compatibles con OpenRouter (o otro gateway OpenAI-compatible). */
-export const MODEL_FAST = "google/gemini-2.5-flash";
-export const MODEL_DEEP = "openai/gpt-4o";
+/**
+ * Slugs compatibles con OpenRouter (o otro gateway OpenAI-compatible).
+ * Deep usa Claude Sonnet 4.5 — mejor calidad para UI/Tailwind/diseño profesional.
+ * Fast usa GPT-4o-mini — barato y rápido para chat y validaciones.
+ * Sobrescribibles con `AI_MODEL_FAST` / `AI_MODEL_DEEP` en el entorno.
+ */
+export const MODEL_FAST = "openai/gpt-4o-mini";
+export const MODEL_DEEP = "anthropic/claude-sonnet-4.5";
 
 /** IDs por defecto en `https://api.openai.com/v1/chat/completions` (no slugs `proveedor/modelo`). */
 export const OPENAI_API_DEFAULT_FAST = "gpt-4o-mini";
@@ -350,9 +356,10 @@ export function buildGafcoreMessages(
         ]
       : textBlock;
 
+  const baseSystem = `${GAFCORE_SYSTEM}${GAFCORE_DESIGN_SYSTEM}`;
   const systemContent = memoryHints.trim()
-    ? `${GAFCORE_SYSTEM}${memoryHints}`
-    : GAFCORE_SYSTEM;
+    ? `${baseSystem}${memoryHints}`
+    : baseSystem;
 
   const messages: GafcoreChatMessage[] = [
     { role: "system", content: systemContent },
