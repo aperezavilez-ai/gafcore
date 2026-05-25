@@ -10,8 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { ChevronDown, ChevronRight, Loader2, Package, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { GAFCORE_DEFAULT_TEMPLATE_SLUG } from "@/lib/gafcore-templates.shared";
@@ -40,16 +39,8 @@ type Props = {
   onCreated: (project: { id: string; name: string; created_at: string }, files: FileItem[]) => void;
 };
 
-const SUGGESTIONS = [
-  "Una landing para mi startup SaaS con hero, features, pricing y testimonios.",
-  "Una tienda online de ropa con catálogo, carrito y checkout.",
-  "Un portafolio personal con sección de proyectos y blog.",
-  "Una app PWA tipo lista de tareas con persistencia local.",
-];
-
 export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const [name, setName] = useState("Mi proyecto");
-  const [description, setDescription] = useState("");
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [slug, setSlug] = useState(GAFCORE_DEFAULT_TEMPLATE_SLUG);
   const [loading, setLoading] = useState(false);
@@ -94,7 +85,6 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
 
   const submit = async () => {
     const trimmedName = name.trim();
-    const trimmedDesc = description.trim();
     if (!trimmedName) return;
     setLoading(true);
     try {
@@ -109,24 +99,9 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
         toast.error(result.error ?? "No se pudo crear el proyecto");
         return;
       }
-
-      // Si el usuario describió lo que quiere, lo guardamos para que el ChatPanel del
-      // editor lo autoenvíe al cerebro en cuanto se monte.
-      if (trimmedDesc.length >= 3) {
-        try {
-          sessionStorage.setItem(
-            `gafcore:initial-instruction:${result.project.id}`,
-            trimmedDesc,
-          );
-        } catch {
-          /* storage lleno o denegado: no bloquear creación */
-        }
-      }
-
       onCreated(result.project, (result.files ?? []) as FileItem[]);
       onOpenChange(false);
       setName("Mi proyecto");
-      setDescription("");
       setShowTemplates(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error de red o sesión";
@@ -138,53 +113,30 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Nuevo proyecto</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="np-name">Nombre</Label>
+            <Label htmlFor="np-name">Nombre del proyecto</Label>
             <Input
               id="np-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && name.trim() && !loading) {
+                  e.preventDefault();
+                  void submit();
+                }
+              }}
               placeholder="Mi tienda"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="np-desc" className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              ¿Qué quieres construir?
-            </Label>
-            <Textarea
-              id="np-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ej.: Una landing premium en violeta para una app de notas con IA — hero, 3 features, pricing con 3 planes, testimonios y FAQ. Mobile-first."
-              rows={5}
               autoFocus
-              className="resize-none"
             />
             <p className="text-xs text-muted-foreground">
-              El cerebro de GafCore generará todo desde tu descripción. Cuanto más concreto seas
-              (público, secciones, estilo), mejor el resultado.
+              Después, en el chat del editor, pídele al cerebro de GafCore lo que quieras
+              construir.
             </p>
-            {description.trim().length === 0 ? (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setDescription(s)}
-                    className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
-                  >
-                    {s.length > 50 ? s.slice(0, 47) + "…" : s}
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </div>
 
           <div className="border-t border-border/60 pt-3">
@@ -261,16 +213,7 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
             Cancelar
           </Button>
           <Button onClick={() => void submit()} disabled={loading || !name.trim()}>
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : description.trim().length >= 3 ? (
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5" />
-                Crear y construir
-              </span>
-            ) : (
-              "Crear"
-            )}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crear"}
           </Button>
         </DialogFooter>
       </DialogContent>
