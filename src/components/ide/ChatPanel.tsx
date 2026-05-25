@@ -1003,6 +1003,36 @@ export function ChatPanel({
     sendRef.current = send;
   });
 
+  // Si el usuario describió el proyecto en NewProjectDialog, lo recogemos del sessionStorage
+  // y lo autoenvíamos al cerebro la primera vez que abre el editor del proyecto recién creado.
+  // Solo se dispara cuando el proyecto no tiene aún mensajes (proyecto fresco).
+  const initialAutoSentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!projectId || loading) return;
+    if (initialAutoSentRef.current === projectId) return;
+    if (messages.length > 0) {
+      initialAutoSentRef.current = projectId;
+      return;
+    }
+    let pending: string | null = null;
+    try {
+      pending = sessionStorage.getItem(`gafcore:initial-instruction:${projectId}`);
+    } catch {
+      pending = null;
+    }
+    if (!pending || pending.trim().length < 3) return;
+    initialAutoSentRef.current = projectId;
+    try {
+      sessionStorage.removeItem(`gafcore:initial-instruction:${projectId}`);
+    } catch {
+      /* noop */
+    }
+    const t = window.setTimeout(() => {
+      void sendRef.current?.(pending!);
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [projectId, messages.length, loading]);
+
   // Listen for picks + preview errors
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
