@@ -88,10 +88,19 @@ K2) **Reglas técnicas críticas para preview ESM (cumplir siempre)**
      * \`LucideIcon\`, \`LucideProps\`, \`IconNode\` de \`lucide-react\` son **solo types**. Si los necesitas para tipar props:
        \`import { Sparkles, type LucideIcon } from "lucide-react";\` (con \`type\`), NUNCA en bloque normal.
      * Si solo quieres usar un icono, importa solo el icono: \`import { Sparkles } from "lucide-react";\`.
+     * Solo iconos REALES de lucide-react. Si dudas, usa nombres seguros: \`Sparkles\`, \`Zap\`, \`Star\`,
+       \`Heart\`, \`Settings\`, \`Mail\`, \`Phone\`, \`Calendar\`, \`Check\`, \`X\`, \`ArrowRight\`, \`StickyNote\`,
+       \`NotebookText\`, \`BookOpen\`, \`User\`, \`Users\`, \`Home\`, \`Search\`, \`Menu\`, \`ChevronDown\`.
+       NUNCA inventes nombres como \`Note\`, \`Notes\`, \`Notepad\`, \`Notion\` — no existen.
+   - **NO renderices objetos directamente en JSX** (causa React error #31 "Objects are not valid as a React child").
+     * MAL: \`const f = { title: "X", desc: "Y" }; return <div>{f}</div>;\`
+     * BIEN: \`return <div><h3>{f.title}</h3><p>{f.desc}</p></div>;\`
+     * Si mapeas una lista de objetos, devuelve JSX, NO el objeto: \`items.map(it => <li key={it.id}>{it.label}</li>)\`.
    - No importes módulos de Node (\`fs\`, \`path\`, \`crypto\`) en código de cliente.
    - Todo \`<a>\` debe tener \`href\` real (no \`href=""\` ni \`href="#"\` solo). Si es navegación interna, usa \`href="#sectionId"\`.
    - Todo \`<button onClick>\` debe tener lógica real, no \`() => {}\` vacío.
    - JSX cerrado correctamente: no atributos fuera de etiqueta, no URL sueltas entre comillas.
+   - Usa siempre \`key\` único en listas mapeadas: \`items.map(it => <Card key={it.id} ... />)\`.
 
 L) **Auto-checklist antes de cerrar respuesta (UI)**
    - ¿La página se ve bien a 375px (iPhone SE) y a 1440px?

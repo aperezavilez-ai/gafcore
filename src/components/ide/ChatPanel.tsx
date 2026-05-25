@@ -1038,6 +1038,11 @@ export function ChatPanel({
     return () => window.clearTimeout(t);
   }, [projectId, messages.length, loading]);
 
+  // Estado para auto-fix con IA cuando el preview falla por error de runtime.
+  // Evita loops: solo intenta UNA vez por error idéntico durante 60s.
+  const autoFixInFlightRef = useRef(false);
+  const autoFixLastErrorRef = useRef<{ msg: string; at: number } | null>(null);
+
   // Listen for picks + preview errors
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {
@@ -1049,37 +1054,116 @@ export function ChatPanel({
         setInput((v) => (v ? v + " " : "") + ref);
         taRef.current?.focus();
         toast.success(`Seleccionado: ${info.tag}`);
-      } else if (data.type === "preview-error") {
-        const msg = String(data.message || "Error desconocido");
-        const looksLikeJsxGlue =
-          /SyntaxError|Unexpected token/i.test(msg) ||
-          /"[^"]*"(https?:\/\/)/.test(msg);
-        if (looksLikeJsxGlue) {
-          setFiles((current) => {
-            const next = current.map((f) => {
-              if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
-              const content = repairCommonJsxSyntaxErrors(f.content);
-              return content !== f.content ? { ...f, content } : f;
-            });
-            const changed = next.some((f, i) => f.content !== current[i]?.content);
-            if (changed) {
-              queueMicrotask(() => {
-                toast.success("Sintaxis JSX reparada automáticamente");
-                setLastError(null);
-              });
-              return next;
-            }
-            queueMicrotask(() => setLastError(msg));
-            return current;
-          });
-        } else {
-          setLastError(msg);
-        }
+        return;
       }
+      if (data.type !== "preview-error") return;
+
+      const msg = String(data.message || "Error desconocido");
+      const looksLikeJsxGlue =
+        /SyntaxError|Unexpected token/i.test(msg) ||
+        /"[^"]*"(https?:\/\/)/.test(msg);
+
+      // 1) Auto-repair LOCAL (rápido, gratis) para sintaxis JSX rota.
+      if (looksLikeJsxGlue) {
+        setFiles((current) => {
+          const next = current.map((f) => {
+            if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
+            const content = repairCommonJsxSyntaxErrors(f.content);
+            return content !== f.content ? { ...f, content } : f;
+          });
+          const changed = next.some((f, i) => f.content !== current[i]?.content);
+          if (changed) {
+            queueMicrotask(() => {
+              toast.success("Sintaxis JSX reparada automáticamente");
+              setLastError(null);
+            });
+            return next;
+          }
+          queueMicrotask(() => setLastError(msg));
+          return current;
+        });
+        return;
+      }
+
+      // 2) Cualquier otro error de runtime: intentar auto-fix con IA (UNA vez).
+      setLastError(msg);
+
+      const now = Date.now();
+      const last = autoFixLastErrorRef.current;
+      const samePersistent = last && last.msg === msg && now - last.at < 60_000;
+      const canAutoFix =
+        !autoFixInFlightRef.current &&
+        !sendInFlightRef.current &&
+        !samePersistent &&
+        Boolean(projectId) &&
+        files.length > 0 &&
+        // Solo si el error parece venir del código del proyecto (no carga de recursos).
+        !/No se pudo cargar:|Failed to load|404|net::ERR/i.test(msg);
+
+      if (!canAutoFix) return;
+
+      autoFixLastErrorRef.current = { msg, at: now };
+      autoFixInFlightRef.current = true;
+      void (async () => {
+        const toastId = toast.loading("Corrigiendo error del preview con IA…", {
+          duration: 60_000,
+        });
+        try {
+          const tok = await getAuthAccessToken();
+          if (!tok) {
+            toast.dismiss(toastId);
+            return;
+          }
+          const fixInstruction = [
+            "El preview de tu proyecto falla con este error de runtime:",
+            "",
+            "```",
+            msg.slice(0, 600),
+            "```",
+            "",
+            "Corrige el código para que el preview funcione. Reglas críticas:",
+            "- NO renderices objetos directamente en JSX (causa React error #31). Si necesitas",
+            "  mostrar campos, accede a `.title`, `.desc`, etc. — nunca `<div>{obj}</div>`.",
+            "- Los nombres de iconos de `lucide-react` deben ser válidos. Si dudas, usa",
+            "  iconos comunes: `Sparkles`, `Zap`, `Star`, `Heart`, `StickyNote`, `Settings`, `Mail`.",
+            "- Todo `<a>` debe tener `href` real. Todo `<button onClick>` debe tener lógica real.",
+            "- `LucideIcon`, `LucideProps`, `IconNode` solo como `type` import.",
+            "- Devuelve los archivos COMPLETOS, no parches.",
+          ].join("\n");
+
+          const result = await fetchGafcoreChatComplete(
+            tok,
+            [],
+            fixInstruction,
+            files,
+            new AbortController() as unknown as AbortSignal,
+            fixInstruction,
+          );
+          if (Array.isArray(result.files) && result.files.length > 0) {
+            await applyGenerationFiles(files, result.files, fixInstruction, fixInstruction, {
+              runFunctionalAudit: false,
+              snapshotLabel: `auto-fix preview: ${msg.slice(0, 40)}`,
+            });
+            toast.dismiss(toastId);
+            toast.success("Error del preview corregido automáticamente", { duration: 5000 });
+            setLastError(null);
+          } else {
+            toast.dismiss(toastId);
+            toast.warning("No se pudo auto-corregir. Revisa los detalles en el preview.", {
+              duration: 6000,
+            });
+          }
+        } catch (e) {
+          console.warn("[gafcore-autofix-preview]", e);
+          toast.dismiss(toastId);
+        } finally {
+          autoFixInFlightRef.current = false;
+        }
+      })();
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, []);
+  }, [projectId, files]);
 
   const callGafcoreChat = useServerFn(gafcoreChat);
   const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);
