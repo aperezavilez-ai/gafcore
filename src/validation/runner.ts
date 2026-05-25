@@ -26,7 +26,7 @@ function log(logs: ValidationLogEvent[], event: string, meta?: Record<string, un
  * Punto único del AI Validation Layer (V1).
  * Orquesta reglas existentes + security/env + scoring.
  */
-export function runValidationLayer(input: ValidationRunInput): ValidationReport {
+export async function runValidationLayer(input: ValidationRunInput): Promise<ValidationReport> {
   const logs: ValidationLogEvent[] = [];
   const files = input.files.slice(0, 40).map((f) => ({
     name: f.name,
@@ -41,7 +41,7 @@ export function runValidationLayer(input: ValidationRunInput): ValidationReport 
   });
 
   log(logs, "validation.rule.core", { step: "syntax+imports+build+functional" });
-  const core = validateGafcoreProjectCore(files);
+  const core = await validateGafcoreProjectCore(files);
 
   log(logs, "validation.rule.security");
   const securityIssues = auditSecurityRules(files);
@@ -90,12 +90,12 @@ export type ValidationWithAutofixResult = {
 };
 
 /** Validación + auto-fix determinista + revalidación (hasta 2 pasadas). */
-export function runValidationWithAutofix(
+export async function runValidationWithAutofix(
   input: ValidationRunInput,
-): ValidationWithAutofixResult {
+): Promise<ValidationWithAutofixResult> {
   let files = input.files.slice(0, 40).map((f) => ({ name: f.name, content: f.content }));
   const fixesApplied: string[] = [];
-  let report = runValidationLayer({ ...input, files });
+  let report = await runValidationLayer({ ...input, files });
 
   for (let pass = 0; pass < MAX_AUTOFIX_PASSES; pass++) {
     if (report.approved && report.blockingErrorCount === 0) break;
@@ -103,7 +103,7 @@ export function runValidationWithAutofix(
     if (fix.applied.length === 0) break;
     fixesApplied.push(...fix.applied);
     files = fix.files;
-    report = runValidationLayer({
+    report = await runValidationLayer({
       ...input,
       files,
       phase: input.phase,

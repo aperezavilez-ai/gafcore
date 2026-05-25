@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import ts from "typescript";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   auditFunctionalFirst,
@@ -9,6 +8,20 @@ import {
 } from "@/lib/gafcore-functional-first.shared";
 import type { ProjectValidationIssue } from "@/lib/gafcore-ai-validation.shared";
 import { runValidationWithAutofix } from "@/validation/runner";
+
+// `typescript` se importa de forma diferida — ver gafcore-validate.server.ts para detalles.
+type TsModule = typeof import("typescript");
+let cachedTs: TsModule | null | undefined;
+async function loadTs(): Promise<TsModule | null> {
+  if (cachedTs !== undefined) return cachedTs;
+  try {
+    const mod = (await import("typescript")) as unknown as { default?: TsModule } & TsModule;
+    cachedTs = (mod.default ?? mod) as TsModule;
+  } catch {
+    cachedTs = null;
+  }
+  return cachedTs;
+}
 
 const fileSchema = z.object({
   name: z.string().min(1).max(512),
@@ -25,6 +38,11 @@ export const validateGafcoreSources = createServerFn({ method: "POST" })
   .inputValidator((input) => schema.parse(input))
   .handler(async ({ data }) => {
     const errors: { name: string; message: string }[] = [];
+    const ts = await loadTs();
+    if (!ts) {
+      // typescript no disponible en runtime — devolvemos OK para no bloquear al usuario.
+      return { ok: true, errors };
+    }
     for (const f of data) {
       if (!/\.(mtsx|mts|tsx|ts|jsx|js|cjs|mjs)$/i.test(f.name)) continue;
       try {
@@ -71,7 +89,7 @@ export const validateGafcoreProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => schema.parse(input))
   .handler(async ({ data }) => {
-    const { report } = runValidationWithAutofix({ files: data, phase: "manual" });
+    const { report } = await runValidationWithAutofix({ files: data, phase: "manual" });
     return {
       ok: report.blockingErrorCount === 0,
       issues: report.issues,

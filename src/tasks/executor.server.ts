@@ -27,7 +27,7 @@ export async function executeAgentTask(opts: {
 
   if (task.agent_type === "validation") {
     const merged = scopedFiles.length > 0 ? scopedFiles : files;
-    const { ok, issues } = validateGafcoreProjectCore(merged);
+    const { ok, issues } = await validateGafcoreProjectCore(merged);
     const errors = issues.filter((i) => i.severity === "error");
     const reply = ok
       ? "Validación OK: sin errores bloqueantes."

@@ -121,7 +121,7 @@ export async function finalizePipelineValidation(
   }
 
   const payload = files.slice(0, 40).map((f) => ({ name: f.name, content: f.content }));
-  const { report: validationReport, files: patchedFiles, fixesApplied } = runValidationWithAutofix({
+  const { report: validationReport, files: patchedFiles, fixesApplied } = await runValidationWithAutofix({
     files: payload,
     phase: "post_generate",
     projectId: current.project_id,

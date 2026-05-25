@@ -31,7 +31,7 @@ export const runGafcoreProjectValidation = createServerFn({ method: "POST" })
     }
 
     const phase = data.phase ?? "manual";
-    const { report, files: patchedFiles, fixesApplied } = runValidationWithAutofix({
+    const { report, files: patchedFiles, fixesApplied } = await runValidationWithAutofix({
       files: data.files,
       phase,
       projectId: data.projectId,

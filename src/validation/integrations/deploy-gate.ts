@@ -38,7 +38,7 @@ export async function runDeployValidationGate(
     input.files.slice(0, 40).map((f) => ({ name: f.name, content: f.content })),
   );
 
-  const report = runValidationLayer({
+  const report = await runValidationLayer({
     files: fixed,
     phase: "pre_deploy",
     projectId: input.projectId,
