@@ -67,17 +67,24 @@ export function detectModelFamily(model: string): "claude" | "openai" | "gemini"
   return "other";
 }
 
-export function resolveAiRoute(modelHint?: string): ResolvedRoute {
+/**
+ * Devuelve TODAS las rutas disponibles ordenadas por preferencia.
+ * El caller puede iterarlas como cadena de fallback cuando la primera falla con
+ * 401/402/403 (sin saldo / clave inválida en ese proveedor).
+ */
+export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
+  const routes: ResolvedRoute[] = [];
+
   const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
   const customKey = process.env.AI_API_KEY?.trim();
   if (customUrl && customKey) {
-    return {
+    routes.push({
       provider: "custom",
       url: customUrl,
       apiKey: customKey,
       extraHeaders: {},
       modelSlug: modelHint?.trim() ?? "",
-    };
+    });
   }
 
   const family = modelHint ? detectModelFamily(modelHint) : "other";
@@ -87,7 +94,7 @@ export function resolveAiRoute(modelHint?: string): ResolvedRoute {
 
   // OpenRouter primero: SSE OpenAI-compat funciona out-of-the-box con el cliente.
   if (openrouterKey) {
-    return {
+    routes.push({
       provider: "openrouter",
       url: "https://openrouter.ai/api/v1/chat/completions",
       apiKey: openrouterKey,
@@ -96,31 +103,50 @@ export function resolveAiRoute(modelHint?: string): ResolvedRoute {
         "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() || "GafCore",
       },
       modelSlug: modelHint ? normalizeModelSlug(modelHint, "openrouter") : "",
-    };
+    });
   }
 
-  // Anthropic directo: solo si NO hay OpenRouter (requiere wrapper SSE → bug latente).
+  // OpenAI directo: como fallback (o como primario si no hay OpenRouter).
+  // Cuando viene como fallback de Claude, el modelo se traduce a gpt-4o (deep) o gpt-4o-mini (fast).
+  if (openaiKey) {
+    let openaiSlug: string;
+    if (family === "claude") {
+      // Mapeo: claude-sonnet → gpt-4o (deep); claude-haiku → gpt-4o-mini (fast).
+      openaiSlug = /haiku|fast/i.test(modelHint ?? "") ? "gpt-4o-mini" : "gpt-4o";
+    } else if (family === "gemini") {
+      openaiSlug = "gpt-4o";
+    } else {
+      openaiSlug = normalizeModelSlug(modelHint ?? "gpt-4o-mini", "openai");
+    }
+    routes.push({
+      provider: "openai",
+      url: "https://api.openai.com/v1/chat/completions",
+      apiKey: openaiKey,
+      extraHeaders: {},
+      modelSlug: openaiSlug,
+    });
+  }
+
+  // Anthropic directo: último (requiere wrapper SSE no implementado para stream).
   if (family === "claude" && anthropicKey) {
-    return {
+    routes.push({
       provider: "anthropic",
       url: "https://api.anthropic.com/v1/chat/completions",
       apiKey: anthropicKey,
       extraHeaders: { "anthropic-version": "2023-06-01" },
       modelSlug: normalizeModelSlug(modelHint ?? "claude-sonnet-4-5", "anthropic"),
-    };
+    });
   }
 
-  if (openaiKey) {
-    return {
-      provider: "openai",
-      url: "https://api.openai.com/v1/chat/completions",
-      apiKey: openaiKey,
-      extraHeaders: {},
-      modelSlug: normalizeModelSlug(modelHint ?? "gpt-4o-mini", "openai"),
-    };
-  }
+  return routes;
+}
 
-  throw new Error(
-    "AI no configurado: define ANTHROPIC_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL+AI_API_KEY.",
-  );
+export function resolveAiRoute(modelHint?: string): ResolvedRoute {
+  const all = resolveAllAiRoutes(modelHint);
+  if (all.length === 0) {
+    throw new Error(
+      "AI no configurado: define ANTHROPIC_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL+AI_API_KEY.",
+    );
+  }
+  return all[0];
 }

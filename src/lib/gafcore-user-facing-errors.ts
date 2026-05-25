@@ -1,31 +1,55 @@
 /**
- * Evita mostrar al usuario nombres de variables de entorno o códigos internos
- * devueltos por gateways de IA.
+ * Sanitiza cualquier texto que se mostraría al usuario para que NUNCA aparezca:
+ * - Nombres de proveedores externos: OpenAI, OpenRouter, Anthropic, Claude, GPT, Gemini, Google.
+ * - Nombres de variables de entorno (XXX_API_KEY).
+ * - Claves API (sk-..., Bearer ...).
+ *
+ * El usuario solo conoce GafCore como marca.
  */
+const PROVIDER_NAME_RE =
+  /\b(openrouter|open[\s-]?ai|anthropic|claude(\s+sonnet|\s+opus|\s+haiku)?(\s+\d[\d.\-]*)?|gpt-?\d[\w.-]*|o\d-[\w.-]*|gemini[\w.-]*|google\s+ai|chatgpt|mistral|llama|deepseek)\b/gi;
+const ENV_VAR_RE = /\b[A-Z][A-Z0-9_]{2,}_(API_KEY|TOKEN|SECRET|URL)\b/g;
+const API_KEY_LEAK_RE = /\b(sk-[a-zA-Z0-9]{8,}|Bearer\s+[A-Za-z0-9._\-]{12,})/g;
+
 function looksLikeInternalConfigOrGatewayError(text: string): boolean {
-  if (/\b[A-Z][A-Z0-9_]{2,}_API_KEY\b/i.test(text) && /not configured|missing|invalid|unauthorized|forbidden/i.test(text)) {
+  if (ENV_VAR_RE.test(text) && /not configured|missing|invalid|unauthorized|forbidden/i.test(text)) {
+    ENV_VAR_RE.lastIndex = 0;
     return true;
   }
-  if (/\b(sk-[a-zA-Z0-9]{10,}|Bearer\s+sk-)/i.test(text)) return true;
+  ENV_VAR_RE.lastIndex = 0;
+  if (API_KEY_LEAK_RE.test(text)) {
+    API_KEY_LEAK_RE.lastIndex = 0;
+    return true;
+  }
+  API_KEY_LEAK_RE.lastIndex = 0;
   return false;
+}
+
+/** Reemplaza menciones a proveedores por "el asistente IA" / "GafCore". */
+function maskProviderNames(text: string): string {
+  return text
+    .replace(API_KEY_LEAK_RE, "[clave oculta]")
+    .replace(ENV_VAR_RE, "configuración del servidor")
+    .replace(PROVIDER_NAME_RE, "el asistente IA");
 }
 
 export function sanitizeUserFacingAiText(text: string): string {
   const raw = String(text ?? "");
   if (!raw.trim()) return raw;
   if (looksLikeInternalConfigOrGatewayError(raw)) {
-    return "El generador de IA no está disponible en este momento. Si persiste, avísanos desde soporte en tu proyecto.";
+    return "El asistente IA de GafCore no está disponible un momento. Inténtalo de nuevo en unos minutos.";
   }
   const t = raw.trim();
   const lower = t.toLowerCase();
   if (lower === "ai_not_configured" || lower.includes("ai no configurado")) {
-    return "El generador de IA no está configurado en el servidor. Inténtalo más tarde.";
+    return "El asistente IA de GafCore no está disponible un momento. Inténtalo de nuevo en unos minutos.";
   }
   if (lower === "upstream" || lower === "credits_error" || lower === "no_stream_body") {
-    return "No se pudo completar la solicitud al servicio de IA. Si tienes saldo en GafCore y sigue fallando, suele ser clave o cuota del proveedor (OpenRouter/OpenAI) en el servidor.";
+    return "El asistente IA tuvo un error temporal. Inténtalo de nuevo en unos segundos.";
   }
   if (/^http \d{3}$/i.test(t)) {
-    return "El servicio de IA respondió con un error. Inténtalo de nuevo en unos minutos.";
+    return "El asistente IA respondió con un error. Inténtalo de nuevo en unos minutos.";
   }
-  return raw;
+  // Caso general: censurar cualquier mención a proveedor que se haya colado.
+  return maskProviderNames(raw);
 }

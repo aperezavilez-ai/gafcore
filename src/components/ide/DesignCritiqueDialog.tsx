@@ -208,7 +208,7 @@ export function DesignCritiqueDialog({ files, projectId }: Props) {
         {loading && (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Analizando con Claude Sonnet 4.5…
+            Analizando tu diseño con el cerebro de GafCore…
           </div>
         )}
 

@@ -161,29 +161,33 @@ async function readSseJsonPayload(
   return full;
 }
 
-/** Mensajes claros para códigos devueltos por POST /api/gafcore/chat/stream (evita “IA no conecta” genérico). */
+/**
+ * Mensajes claros para códigos devueltos por POST /api/gafcore/chat/stream.
+ * IMPORTANTE: nunca nombrar proveedores externos (OpenAI/OpenRouter/Anthropic/Claude/GPT/Gemini).
+ * El usuario solo ve "GafCore" / "asistente IA" / "servicio de IA".
+ */
 function describeGafcoreStreamFailure(message: string): string | null {
   if (message.startsWith("UPSTREAM:")) {
     const st = Number(message.slice("UPSTREAM:".length));
     if (st === 401 || st === 403) {
-      return "El backend no pudo autenticarse con el proveedor de IA (clave incorrecta o revocada). En producción, quien administra el despliegue debe revisar OPENROUTER_API_KEY, OPENAI_API_KEY o AI_CHAT_COMPLETIONS_URL + AI_API_KEY en el panel del host.";
+      return "El servicio de IA de GafCore no pudo autenticarse. Estamos revisándolo, inténtalo de nuevo en unos minutos.";
     }
     if (st === 429) {
-      return "El proveedor de IA está limitando peticiones. Espera unos minutos y vuelve a intentarlo.";
+      return "GafCore está procesando muchas solicitudes ahora mismo. Espera unos segundos y vuelve a intentarlo.";
     }
     if (st === 402) {
-      return "El proveedor de IA (OpenRouter/OpenAI) indica falta de saldo o facturación en esa cuenta. Los créditos que ves en GafCore autorizan el uso en la app; el servidor también necesita una clave y saldo válidos en el proveedor.";
+      return "El asistente de IA está en mantenimiento temporal. Vuelve a intentarlo en unos minutos.";
     }
     if (st >= 500) {
-      return "El proveedor de IA respondió con un error temporal. Inténtalo de nuevo en unos minutos.";
+      return "El asistente de IA tuvo un error temporal. Inténtalo de nuevo en unos minutos.";
     }
-    return "El proveedor de IA rechazó la solicitud. Si ocurre a menudo, revisa modelos y límites en el panel del proveedor.";
+    return "El asistente de IA rechazó la solicitud. Reformula tu petición o inténtalo de nuevo.";
   }
   if (message === "CREDITS_VERIFY_FAILED") {
-    return "No pudimos verificar tus créditos en el servidor. Recarga la página. Si persiste, puede haber un fallo de base de datos o de configuración del backend (clave de servicio).";
+    return "No pudimos verificar tus créditos. Recarga la página y vuelve a intentar.";
   }
   if (message === "NO_STREAM_BODY") {
-    return "La IA no devolvió contenido utilizable en esta respuesta. Prueba de nuevo o acorta la petición.";
+    return "El asistente no devolvió contenido. Prueba de nuevo o acorta la petición.";
   }
   return null;
 }
@@ -2198,10 +2202,15 @@ export function ChatPanel({
           errMsg.includes("ai_not_configured") ||
           /AI.*no.*configurad/i.test(errMsg);
         const streamHint = describeGafcoreStreamFailure(msg);
+        // Mensaje al usuario SIEMPRE genérico: no exponemos nombres de proveedores ni de variables.
         const friendly = aiCfg
-          ? "El asistente de IA no encuentra clave en el servidor. En local: crea o edita **.env.local** (o `.env`) en la **raíz del proyecto** con `OPENROUTER_API_KEY`, `OPENAI_API_KEY` o la pareja `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY`, guarda y **reinicia** el servidor (`cmd /c \"npm run dev\"` si PowerShell bloquea npm). Ejecuta `npm run gafcore:doctor` para ver qué falta. En producción, define las mismas variables en el host (p. ej. Vercel)."
-          : (streamHint ?? error?.message ?? "No pude responder en este momento. Inténtalo de nuevo.");
-        if (aiCfg) toast.error("IA no configurada", { duration: 12_000 });
+          ? "El asistente IA de GafCore no está disponible un momento. Estamos al tanto, inténtalo de nuevo en unos minutos."
+          : (streamHint ?? "No pude responder en este momento. Inténtalo de nuevo.");
+        if (aiCfg) {
+          // Loguear detalle para devs sin mostrarlo al usuario.
+          console.warn("[gafcore-chat] ai_not_configured:", errMsg);
+          toast.error("Asistente IA no disponible", { duration: 8_000 });
+        }
         appendMessageDeduped("ai", sanitizeUserFacingAiText(friendly));
         scrollChatToBottomSoon("auto");
       }

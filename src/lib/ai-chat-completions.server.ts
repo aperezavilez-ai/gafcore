@@ -8,7 +8,11 @@
  * - `OPENAI_API_KEY` → OpenAI directo.
  * - `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY` → endpoint custom (máxima prioridad).
  */
-import { resolveAiRoute, type ResolvedRoute } from "@/lib/gafcore-model-routing.shared";
+import {
+  resolveAiRoute,
+  resolveAllAiRoutes,
+  type ResolvedRoute,
+} from "@/lib/gafcore-model-routing.shared";
 
 export type AiChatConfig = {
   url: string;
@@ -137,10 +141,15 @@ async function wrapAnthropicResponse(res: Response): Promise<Response> {
   });
 }
 
-export async function postChatCompletions(body: ChatCompletionsBody): Promise<Response> {
-  const route: ResolvedRoute = resolveAiRoute(body.model);
+/** Códigos en los que descartamos al proveedor y probamos el siguiente. */
+function isProviderFatalForFallback(status: number): boolean {
+  return status === 401 || status === 402 || status === 403 || status === 404;
+}
 
-  // Anthropic directo: usa endpoint nativo + body nativo + autenticación x-api-key.
+async function callRoute(
+  route: ResolvedRoute,
+  body: ChatCompletionsBody,
+): Promise<Response> {
   if (route.provider === "anthropic") {
     const anthropicBody = toAnthropicBody(body, route.modelSlug);
     const nativeUrl = "https://api.anthropic.com/v1/messages";
@@ -156,7 +165,6 @@ export async function postChatCompletions(body: ChatCompletionsBody): Promise<Re
     return wrapAnthropicResponse(res);
   }
 
-  // Resto: OpenAI-compatible nativo.
   const outBody: Record<string, unknown> = { ...body };
   if (route.modelSlug) outBody.model = route.modelSlug;
 
@@ -169,4 +177,57 @@ export async function postChatCompletions(body: ChatCompletionsBody): Promise<Re
     },
     body: JSON.stringify(outBody),
   });
+}
+
+/**
+ * Llama al primer proveedor. Si devuelve 401/402/403/404 (sin saldo / clave inválida /
+ * modelo no disponible en ese proveedor), descarta su respuesta y reintenta con el
+ * siguiente proveedor configurado. Esto garantiza que si OpenRouter está sin saldo y
+ * OpenAI sí tiene, la app sigue funcionando sin que el usuario lo note.
+ */
+export async function postChatCompletions(body: ChatCompletionsBody): Promise<Response> {
+  const routes = resolveAllAiRoutes(body.model);
+  if (routes.length === 0) {
+    return new Response(JSON.stringify({ error: "ai_not_configured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  let lastRes: Response | null = null;
+  for (let i = 0; i < routes.length; i++) {
+    const route = routes[i];
+    const res = await callRoute(route, body);
+    if (res.ok) {
+      // En el primer intento exitoso devolvemos directo (preserva stream).
+      return res;
+    }
+    if (!isProviderFatalForFallback(res.status) || i === routes.length - 1) {
+      // No es fallback-able o ya no hay más proveedores: devolvemos este error.
+      return res;
+    }
+    // Consumimos y descartamos el body para no dejar fugas y poder reintentar.
+    try {
+      await res.text();
+    } catch {
+      /* noop */
+    }
+    lastRes = res;
+    console.warn(
+      JSON.stringify({
+        event: "gafcore_ai_fallback",
+        from: route.provider,
+        status: res.status,
+        model: route.modelSlug,
+      }),
+    );
+  }
+  // Defensivo: si por alguna razón se sale del loop sin return, devuelve último.
+  return (
+    lastRes ??
+    new Response(JSON.stringify({ error: "ai_not_configured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
+  );
 }
