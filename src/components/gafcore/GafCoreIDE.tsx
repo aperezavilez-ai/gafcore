@@ -95,6 +95,7 @@ import { Input } from "@/components/ui/input";
 import { ChatPanel } from "@/components/ide/ChatPanel";
 import { CodeEditor, initialFiles, type FileItem } from "@/components/ide/CodeEditor";
 import { LivePreview } from "@/components/ide/LivePreview";
+import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
 import { SettingsDialog } from "@/components/ide/SettingsDialog";
 import { HistoryDialog } from "@/components/ide/HistoryDialog";
 import { SecretsDialog } from "@/components/ide/SecretsDialog";
@@ -1325,8 +1326,11 @@ export function GafCoreIDE() {
             <ResizablePanel id="workspace" minSize="45%">
               <div className="flex h-full flex-col bg-muted/30">
                 {view === "preview" ? (
-                  <div className="h-full p-3">
-                    <div className="h-full overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                  <div className="flex h-full flex-col gap-2 p-3">
+                    <div className="flex shrink-0 items-center justify-end">
+                      <DesignCritiqueDialog files={files} projectId={currentProjectId ?? null} />
+                    </div>
+                    <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
                       <LivePreview key={previewKey} files={files} />
                     </div>
                   </div>

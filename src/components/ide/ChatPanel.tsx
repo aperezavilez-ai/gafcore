@@ -973,6 +973,20 @@ export function ChatPanel({
     });
   }, [visualEditOn]);
 
+  // Aplica una instrucción externa (p. ej. del Auditor de Diseño) en el input.
+  useEffect(() => {
+    const onApply = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ instruction?: string }>).detail;
+      const instruction = detail?.instruction?.trim();
+      if (!instruction) return;
+      setInput((v) => (v ? v + "\n\n" : "") + instruction);
+      taRef.current?.focus();
+      toast.success("Mejoras añadidas al chat — envíalas con Enter");
+    };
+    window.addEventListener("gafcore:apply-instruction", onApply as EventListener);
+    return () => window.removeEventListener("gafcore:apply-instruction", onApply as EventListener);
+  }, []);
+
   // Listen for picks + preview errors
   useEffect(() => {
     const onMsg = (ev: MessageEvent) => {

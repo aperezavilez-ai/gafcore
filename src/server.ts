@@ -238,6 +238,12 @@ export default {
       const { handleGafcoreBrandSetPost } = await import("./lib/gafcore-brand-http.server");
       return handleGafcoreBrandSetPost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/design-critique") {
+      const { handleGafcoreDesignCritiquePost } = await import(
+        "./lib/gafcore-design-critique-http.server"
+      );
+      return handleGafcoreDesignCritiquePost(request);
+    }
     if (request.method === "POST" && path === "/api/extensions/v1/catalog") {
       const { handleExtensionsCatalogPost } = await import("./lib/gafcore-extensions-http.server");
       return handleExtensionsCatalogPost(request);
