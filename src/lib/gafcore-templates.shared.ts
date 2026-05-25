@@ -100,36 +100,37 @@ export const GAFCORE_DEFAULT_TEMPLATE_FILES: GafcoreTemplateFile[] = [
   {
     name: "App.tsx",
     language: "typescript",
-    content: `import React, { useEffect, useState } from "react";
-import { loadJson, saveJson } from "./lib/store";
-
-const STORAGE_KEY = "gafcore-demo-visits";
+    content: `import React from "react";
 
 export default function App() {
-  const [visits, setVisits] = useState(0);
-  const [status, setStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    setVisits(loadJson<number>(STORAGE_KEY, 0));
-  }, []);
-
-  const registerVisit = () => {
-    const next = visits + 1;
-    setVisits(next);
-    saveJson(STORAGE_KEY, next);
-    setStatus(\`Visita #\${next} guardada.\`);
-  };
-
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
-      <section className="mx-auto max-w-3xl">
-        <h1 className="text-4xl font-black">Proyecto listo</h1>
-        <p className="mt-4 text-slate-300">Plantilla functional-first con estado y localStorage.</p>
-        <p className="mt-2 text-sm text-slate-400">Visitas: {visits}</p>
-        {status ? <p className="mt-2 text-sm text-emerald-400">{status}</p> : null}
-        <button type="button" onClick={registerVisit} className="mt-8 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold hover:bg-blue-500">
-          Registrar visita
-        </button>
+    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-violet-950 to-slate-900 px-6 py-20 text-white">
+      <section className="mx-auto flex max-w-3xl flex-col items-center text-center">
+        <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-violet-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+          GafCore
+        </span>
+        <h1 className="bg-gradient-to-r from-white via-violet-200 to-violet-400 bg-clip-text text-5xl font-black leading-tight text-transparent sm:text-6xl">
+          Bienvenidos a GafCore
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg text-slate-300 sm:text-xl">
+          Diseña, construye y publica tu sitio web o app describiéndolo en lenguaje natural.
+          La IA escribe el código, tú diriges la visión.
+        </p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm">
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
+            🎨 Diseño profesional
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
+            ⚡ Build automático
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
+            🚀 Deploy en 1 clic
+          </span>
+        </div>
+        <p className="mt-12 text-sm text-slate-400">
+          Empieza escribiendo en el chat lo que quieres construir.
+        </p>
       </section>
     </main>
   );

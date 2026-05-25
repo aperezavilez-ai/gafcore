@@ -111,6 +111,7 @@ import {
   buildLiteralVisualChangePrefix,
 } from "@/lib/gafcore-chat-intent.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
+import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -1683,12 +1684,8 @@ export function ChatPanel({
       const text = await readSseJsonPayload(res, ac?.signal, (n) => {
         if (myEpoch === requestEpochRef.current) setStreamChars(n);
       });
-      let parsed: { reply?: string; files?: unknown };
-      try {
-        parsed = JSON.parse(text || "{}");
-      } catch {
-        throw new Error("No se pudo interpretar la respuesta del modelo.");
-      }
+      // Tolerante: el modelo a veces envuelve el JSON en ```json ... ``` o prepone texto.
+      const parsed = parseJsonLoose<{ reply?: string; files?: unknown }>(text || "{}") ?? {};
       const rawFiles = Array.isArray(parsed.files) ? parsed.files : [];
       const replyRaw = typeof parsed.reply === "string" ? parsed.reply : "Listo.";
       return {

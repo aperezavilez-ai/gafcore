@@ -373,7 +373,8 @@ export function GafCoreIDE() {
         appFile.content,
       ) ||
       /Hola desde GafCore/i.test(appFile.content) ||
-      (/Proyecto listo/i.test(appFile.content) && !/useState/i.test(appFile.content));
+      (/Proyecto listo/i.test(appFile.content) && !/useState/i.test(appFile.content)) ||
+      /Bienvenidos a GafCore/i.test(appFile.content);
 
     if (!isStale && remote?.length) {
       const sanitized = sanitizeProjectJsxFiles(remote);

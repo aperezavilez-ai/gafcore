@@ -1,11 +1,15 @@
 /**
  * Router de proveedores IA: decide URL/headers/slug según el modelo solicitado.
  *
- * Lógica:
- * - Si el modelo es Claude y hay ANTHROPIC_API_KEY → Anthropic directo (más barato, prompt caching nativo).
- * - Si el modelo es OpenAI puro y hay OPENAI_API_KEY → OpenAI directo.
- * - Si hay OPENROUTER_API_KEY → OpenRouter (cubre Claude, GPT, Gemini y 200+).
- * - Si hay AI_CHAT_COMPLETIONS_URL + AI_API_KEY → endpoint custom (gana siempre, máxima prioridad).
+ * Lógica (orden de preferencia):
+ * 1. AI_CHAT_COMPLETIONS_URL + AI_API_KEY → endpoint custom (máxima prioridad).
+ * 2. OPENROUTER_API_KEY → OpenRouter (OpenAI-compat 100%, cubre Claude/GPT/Gemini en SSE estándar).
+ * 3. ANTHROPIC_API_KEY (solo si no hay OpenRouter) → Anthropic directo + wrapper.
+ * 4. OPENAI_API_KEY → OpenAI directo.
+ *
+ * NOTA: OpenRouter se prioriza sobre Anthropic directo porque su SSE es OpenAI-compat
+ * (`choices[0].delta.content`) y el cliente del IDE consume ese formato. El SSE nativo
+ * de Anthropic usa `content_block_delta` y rompía el stream.
  */
 
 export type ResolvedProvider = "anthropic" | "openai" | "openrouter" | "custom";
@@ -81,26 +85,7 @@ export function resolveAiRoute(modelHint?: string): ResolvedRoute {
   const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (family === "claude" && anthropicKey) {
-    return {
-      provider: "anthropic",
-      url: "https://api.anthropic.com/v1/chat/completions",
-      apiKey: anthropicKey,
-      extraHeaders: { "anthropic-version": "2023-06-01" },
-      modelSlug: normalizeModelSlug(modelHint ?? "claude-sonnet-4-5", "anthropic"),
-    };
-  }
-
-  if (family === "openai" && openaiKey && !openrouterKey) {
-    return {
-      provider: "openai",
-      url: "https://api.openai.com/v1/chat/completions",
-      apiKey: openaiKey,
-      extraHeaders: {},
-      modelSlug: normalizeModelSlug(modelHint ?? "gpt-4o-mini", "openai"),
-    };
-  }
-
+  // OpenRouter primero: SSE OpenAI-compat funciona out-of-the-box con el cliente.
   if (openrouterKey) {
     return {
       provider: "openrouter",
@@ -111,6 +96,17 @@ export function resolveAiRoute(modelHint?: string): ResolvedRoute {
         "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() || "GafCore",
       },
       modelSlug: modelHint ? normalizeModelSlug(modelHint, "openrouter") : "",
+    };
+  }
+
+  // Anthropic directo: solo si NO hay OpenRouter (requiere wrapper SSE → bug latente).
+  if (family === "claude" && anthropicKey) {
+    return {
+      provider: "anthropic",
+      url: "https://api.anthropic.com/v1/chat/completions",
+      apiKey: anthropicKey,
+      extraHeaders: { "anthropic-version": "2023-06-01" },
+      modelSlug: normalizeModelSlug(modelHint ?? "claude-sonnet-4-5", "anthropic"),
     };
   }
 
