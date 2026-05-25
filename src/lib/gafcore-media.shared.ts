@@ -232,11 +232,63 @@ export function injectPreviewFallbackScript(html: string): string {
  * Quita URLs pegadas entre atributos JSX.
  * Ej.: htmlFor="from"https://esm.sh/" className=… → htmlFor="from" className=…
  */
+/**
+ * Símbolos de `lucide-react` que SOLO existen como tipos en TypeScript y rompen el
+ * preview si se importan como runtime (esm.sh los excluye del bundle JS).
+ */
+const LUCIDE_TYPE_ONLY = new Set(["LucideIcon", "LucideProps", "IconNode", "LucideProvider"]);
+
+/**
+ * Convierte `import { LucideIcon, Sparkles } from "lucide-react"` (que rompe el preview)
+ * en `import { Sparkles, type LucideIcon } from "lucide-react"` (válido en TS + runtime).
+ */
+function fixLucideTypeImports(source: string): string {
+  return source.replace(
+    /import\s*\{([^}]+)\}\s*from\s*["']lucide-react["']/g,
+    (full, members: string) => {
+      const parts = members.split(",").map((s) => s.trim()).filter(Boolean);
+      const runtime: string[] = [];
+      const types: string[] = [];
+      for (const p of parts) {
+        // Soporta "X", "type X" y "X as Y"
+        const m = p.match(/^(?:type\s+)?([A-Za-z_]\w*)(?:\s+as\s+[A-Za-z_]\w*)?$/);
+        if (!m) {
+          runtime.push(p);
+          continue;
+        }
+        const base = m[1];
+        if (LUCIDE_TYPE_ONLY.has(base)) {
+          // Si ya viene como "type X" lo mantenemos; si no, lo prefijamos.
+          types.push(/^type\s+/.test(p) ? p : `type ${p}`);
+        } else {
+          runtime.push(p);
+        }
+      }
+      if (types.length === 0) return full;
+      const merged = [...runtime, ...types].join(", ");
+      return `import { ${merged} } from "lucide-react"`;
+    },
+  );
+}
+
+/** Reemplaza `href=""` o `href="#"` por `href="#section"` (evita warnings de a11y). */
+function fixEmptyAnchors(source: string): string {
+  return source
+    .replace(/href=""/g, 'href="#"')
+    // a "vacío" sin href → role="button" para a11y, mantiene visual
+    .replace(/<a(\s+[^>]*?)(?<!href=)>/g, (m, attrs) => {
+      if (/href=/.test(attrs)) return m;
+      return `<a${attrs} href="#">`;
+    });
+}
+
 export function repairCommonJsxSyntaxErrors(source: string): string {
   let out = source.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
   out = out.replace(/\s+(https?:\/\/[^\s"'<>]+)(?=\s+[a-zA-Z_][\w-]*=)/g, " ");
   out = out.replace(/(\w)="([^"]*)"\s+"(\s+[a-zA-Z_][\w-]*=)/g, '$1="$2"$3');
+  out = fixLucideTypeImports(out);
+  out = fixEmptyAnchors(out);
   return out;
 }
 

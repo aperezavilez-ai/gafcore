@@ -83,6 +83,16 @@ K) **Prohibido en diseño profesional**
    - Iconos de proveedores distintos mezclados (usa una sola librería: lucide-react preferido).
    - Animaciones de carga eternas o efectos parallax pesados que rompan móvil.
 
+K2) **Reglas técnicas críticas para preview ESM (cumplir siempre)**
+   - El preview corre en navegador con \`esm.sh\`. NO uses imports que rompan en runtime:
+     * \`LucideIcon\`, \`LucideProps\`, \`IconNode\` de \`lucide-react\` son **solo types**. Si los necesitas para tipar props:
+       \`import { Sparkles, type LucideIcon } from "lucide-react";\` (con \`type\`), NUNCA en bloque normal.
+     * Si solo quieres usar un icono, importa solo el icono: \`import { Sparkles } from "lucide-react";\`.
+   - No importes módulos de Node (\`fs\`, \`path\`, \`crypto\`) en código de cliente.
+   - Todo \`<a>\` debe tener \`href\` real (no \`href=""\` ni \`href="#"\` solo). Si es navegación interna, usa \`href="#sectionId"\`.
+   - Todo \`<button onClick>\` debe tener lógica real, no \`() => {}\` vacío.
+   - JSX cerrado correctamente: no atributos fuera de etiqueta, no URL sueltas entre comillas.
+
 L) **Auto-checklist antes de cerrar respuesta (UI)**
    - ¿La página se ve bien a 375px (iPhone SE) y a 1440px?
    - ¿Hay jerarquía clara (h1 único, h2 por sección, h3 dentro)?
