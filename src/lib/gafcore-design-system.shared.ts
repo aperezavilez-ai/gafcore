@@ -58,12 +58,25 @@ H) **Accesibilidad mínima**
    - Iconos sin texto: \`aria-label\` o \`<span className="sr-only">\`.
    - Foco siempre visible (no eliminar \`outline\` sin reemplazo).
 
-I) **Imágenes — selección de visual**
-   - Hero: 16:9 o 21:9 fotorrealista, alto contraste con el texto superpuesto.
-   - Producto: cuadradas 1:1 fondo neutro.
-   - Equipo/testimonios: cuadradas 1:1 retrato.
-   - Categoría/blog: 4:3 o 16:9 contextual.
-   - Si el usuario no aporta imagen, usa los seeds Picsum del bloque anterior O describe en \`reply\` que generaste una con Replicate si está disponible.
+I) **Imágenes — REGLAS ESTRICTAS (nada de fotos genéricas de paisaje)**
+   - **El hero NUNCA debe usar una foto random de Unsplash que no tenga relación con el producto.**
+     Una foto de río, montaña o atardecer en una landing de SaaS de notas es INACEPTABLE.
+   - **Regla 1 (preferida): genera un MOCKUP del producto en JSX + Tailwind**, no una foto.
+     Ej: para una app de notas → mockup de UI con sidebar, lista de notas, vista de editor, mini chat IA,
+     todo construido con \`<div>\` + clases Tailwind, dentro de un "browser frame" con barra de título y dots
+     (rojo/amarillo/verde) o un "phone frame" si es app móvil. Esto es lo que hacen Linear, Vercel, Stripe,
+     Notion, Cal.com, Resend, Framer en sus landings — NO usan fotos de stock.
+   - **Regla 2 (cuando sí se necesita foto)**: usa Unsplash con query ESPECÍFICA al vertical:
+     * App de notas/productividad: \`?notes,desk,workspace,laptop\` (no \`?nature\`).
+     * E-commerce moda: \`?fashion,product,studio\` (no \`?landscape\`).
+     * Restaurante: \`?food,plate,restaurant\` (no \`?river\`).
+     * SaaS B2B: usa MOCKUP, no foto.
+     * Wellness/fitness: \`?yoga,wellness,fitness\` (no \`?mountain\`).
+   - **Regla 3 (decorativo de fondo)**: prefiere SVG/CSS — mesh gradients, orbs blur, grid pattern, dots.
+     NO uses fotos como fondo del hero salvo verticales muy específicos (viajes, real estate, restaurantes).
+   - Proporciones cuando sí usas fotos: producto 1:1, equipo/testimonios 1:1, blog 16:9, hero feature 4:3.
+   - Cada \`<img>\` con \`alt\` descriptivo real ("Captura de la app mostrando lista de notas"), nunca "imagen 1".
+   - \`loading="lazy"\` en imágenes below-the-fold; el hero siempre con \`loading="eager"\`.
 
 J) **Estilo del producto según vertical (presets de mood)**
    - **SaaS B2B / fintech**: minimalista, mucho whitespace, Inter, paleta neutra + 1 acento (azul/violeta), iconos lineales, ilustraciones isométricas o abstractas.
@@ -111,4 +124,65 @@ L) **Auto-checklist antes de cerrar respuesta (UI)**
    - ¿Espaciado en escala 4px sin valores arbitrarios?
    - ¿Imágenes con \`alt\` y \`aspect-*\` para evitar layout shift?
    - ¿Estados hover/focus visibles en todo interactivo?
+   - ¿Hay un mockup del producto en el hero (no foto random de paisaje)?
+   - ¿Hay social proof (stats, logos, testimonios) above-the-fold o cerca?
+   - ¿Hay densidad visual (gradientes, glow, shadows, borders sutiles), no un diseño plano blanco?
+
+M) **DENSIDAD VISUAL PREMIUM (obligatorio para landings y home pages)**
+   Una landing profesional NUNCA se ve plana. Aplica TODAS estas capas:
+
+   1) **Background con profundidad** (3 capas mínimo):
+      - Capa base: \`bg-background\` o gradiente sutil \`bg-gradient-to-b from-background via-background to-muted/30\`.
+      - Capa media: **orbs blur** absolutos en el hero — 2 o 3 elementos así:
+        \`<div className="absolute top-20 -left-20 size-[500px] rounded-full bg-primary/20 blur-3xl" />\`
+        \`<div className="absolute bottom-0 right-0 size-[400px] rounded-full bg-violet-500/15 blur-3xl" />\`
+        El contenedor del hero debe ser \`relative overflow-hidden\` para contenerlos.
+      - Capa decorativa: grid pattern o dots pattern sutiles (\`bg-[radial-gradient(circle,#0001_1px,transparent_1px)] bg-[size:24px_24px]\`).
+
+   2) **Tarjetas con material rico** (no rectángulos planos):
+      - \`bg-card/60 backdrop-blur-xl border border-border/50 rounded-2xl shadow-[0_8px_30px_-8px_rgba(0,0,0,0.12)]\`
+      - Hover: \`hover:border-primary/30 hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.18)] hover:-translate-y-1 transition-all duration-300\`
+
+   3) **Tipografía expresiva en títulos**:
+      - Hero h1: \`text-5xl md:text-7xl font-bold tracking-tight\` con palabra clave en gradiente:
+        \`<span className="bg-gradient-to-r from-primary via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">palabra</span>\`
+      - Eyebrow con icon + texto en pill: \`<span className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/80 px-4 py-1.5 text-sm backdrop-blur"><Sparkles className="size-3.5 text-primary" /> Nuevo</span>\`.
+
+   4) **Iconos en contenedores con accent** (no iconos sueltos sin marco):
+      - \`<div className="inline-flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/20"><Icon className="size-6 text-primary" /></div>\`
+
+   5) **Social proof obligatorio** above-the-fold o justo debajo del hero:
+      - Stats row: 3-4 números grandes (\`text-4xl font-bold\`) + label pequeño (\`text-sm text-muted-foreground uppercase tracking-wider\`). Ej: "10k+ usuarios · 99.9% uptime · 4.9/5 rating · 24/7 soporte".
+      - O logos row: 5-6 nombres de empresas grises (\`text-muted-foreground/60 font-semibold\`) con label "Confían en nosotros".
+      - O ambos.
+
+   6) **Bento grid para features** (no 3 cards iguales repetidas):
+      - Grid asimétrico: una card grande 2x1 + dos cards 1x1 + una card ancha 2x1 abajo, etc.
+      - Estructura sugerida: \`grid-cols-1 md:grid-cols-3 md:grid-rows-2 gap-4 md:gap-6\` con \`md:col-span-2\` en la primera.
+
+   7) **CTA final premium**:
+      - Sección con background especial: \`relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet-600 p-12 md:p-20\` + orbs internos.
+      - Título grande blanco, texto white/80, 2 botones (sólido blanco + outline white/30).
+
+N) **ANATOMÍA DE UN HERO PREMIUM (cópialo como template mental)**
+   Estructura recomendada (split o centered), siempre con mockup en lugar de foto random:
+
+   - Section relative overflow-hidden con orbs blur de fondo (2 orbs con colores del brand).
+   - Grid 2 cols en lg: lado izquierdo texto, lado derecho **mockup del producto**.
+   - Texto: eyebrow pill → h1 grande con palabra clave en gradiente → lead 1-2 líneas → 2 CTAs (primario + ghost) → mini social proof (avatares + "10k+ usuarios").
+   - Mockup del producto: una "card" con frame de browser o phone (3 dots de colores como tráfico) y DENTRO el UI real del producto construido con \`<div>\` + Tailwind. NO uses \`<img>\` con foto.
+     * Para apps de notas: sidebar con items + main con cards/lines como notas.
+     * Para e-commerce: grid de productos con thumbnails de gradiente.
+     * Para dashboards: chart fake con barras de \`<div>\`, KPIs.
+     * Para messaging: bubbles de chat.
+   - El mockup debe estar envuelto en un wrapper con halo: \`<div className="absolute -inset-6 rounded-3xl bg-gradient-to-br from-primary/30 via-violet-500/20 to-fuchsia-500/20 blur-2xl" />\` detrás del frame.
+
+O) **ANTI-PATRONES (no hagas esto NUNCA en una landing profesional)**
+   - Foto de paisaje / río / montaña / atardecer en el hero de un producto digital. PROHIBIDO.
+   - Hero con foto de stock genérica de gente sonriendo en oficina si no es una agencia/consultoría.
+   - 3 cards de features idénticas en grid simétrico sin densidad (icono + título + 2 líneas y ya).
+   - CTA final como rectángulo plano sin gradient, sin orbs, sin profundidad.
+   - Tipografía monótona: todos los títulos del mismo tamaño y color sólido sin acento gradient.
+   - Footer minimal de 1 fila. Footer pro: 4 columnas + newsletter + redes + badges + copyright.
+   - Sin scroll: si la landing tiene <3 secciones visibles, falta contenido. Mínimo: hero + social proof + features + cómo funciona + testimonios/precios + FAQ + CTA final + footer.
 `;

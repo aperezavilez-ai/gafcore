@@ -55,12 +55,23 @@ export function buildHeroBackgroundInstructionPrefix(userText: string): string {
   if (!userWantsHeroBackgroundChange(userText)) return "";
   const theme = resolveHeroImageFromInstruction(userText);
   const literal = userText.trim().slice(0, 280);
+  // Solo damos URL si el vertical es de foto natural (viajes, paisaje, comida, etc.).
+  if (theme.matched && theme.url) {
+    return (
+      `[HERO IMAGEN — PEDIDO LITERAL] El usuario pidió: «${literal}». ` +
+      `Implementa EXACTAMENTE eso en el hero (${theme.descriptionEs}). ` +
+      `PROHIBIDO sustituir por otra escena (si pidió cielo/avión, NO uses skyline de ciudad). ` +
+      `URL obligatoria del fondo: ${theme.url} — style backgroundImage o <img> absolute inset-0 object-cover bajo el texto. ` +
+      `Quita fondos azules/sólidos del hero. Conserva buscador, registro y secciones existentes salvo que pida quitarlas. `
+    );
+  }
+  // Producto digital / SaaS / app: NO meter foto random. Mockup del producto en JSX.
   return (
-    `[HERO IMAGEN — PEDIDO LITERAL] El usuario pidió: «${literal}». ` +
-    `Implementa EXACTAMENTE eso en el hero (${theme.descriptionEs}). ` +
-    `PROHIBIDO sustituir por otra escena (si pidió cielo/avión, NO uses skyline de ciudad). ` +
-    `URL obligatoria del fondo: ${theme.url} — style backgroundImage o <img> absolute inset-0 object-cover bajo el texto. ` +
-    `Quita fondos azules/sólidos del hero. Conserva buscador, registro y secciones existentes salvo que pida quitarlas. `
+    `[HERO PREMIUM — PEDIDO LITERAL] El usuario pidió: «${literal}». ` +
+    `Implementa el hero al estilo SaaS premium (Linear/Vercel/Stripe): orbs blur de fondo, eyebrow pill, ` +
+    `h1 grande con palabra clave en gradient bg-clip-text, lead, 2 CTAs, social proof, y un MOCKUP DEL PRODUCTO ` +
+    `construido en JSX/Tailwind a la derecha (browser/phone frame con la UI real adentro). ` +
+    `PROHIBIDO usar fotos de paisaje, río, montaña, atardecer u otra imagen random — el hero NO es una foto. `
   );
 }
 
@@ -74,9 +85,16 @@ export function buildLiteralVisualChangePrefix(userText: string): string {
     return "";
   }
   const theme = resolveHeroImageFromInstruction(t);
+  if (theme.matched && theme.url) {
+    return (
+      `[CAMBIO VISUAL LITERAL] Respeta al pie de la letra: «${t.slice(0, 220)}». ` +
+      `Si aplica al hero, usa ${theme.url} (${theme.descriptionEs}). No inventes otra escena ni respondas solo con texto. ` +
+      `Devuelve el archivo del hero/App modificado en files[]. `
+    );
+  }
   return (
     `[CAMBIO VISUAL LITERAL] Respeta al pie de la letra: «${t.slice(0, 220)}». ` +
-    `Si aplica al hero, usa ${theme.url} (${theme.descriptionEs}). No inventes otra escena ni respondas solo con texto. ` +
+    `Si aplica al hero y el producto es digital, sustituye por un mockup en JSX (no foto random). ` +
     `Devuelve el archivo del hero/App modificado en files[]. `
   );
 }
@@ -92,11 +110,22 @@ export function isVisualOnlyTweak(text: string): boolean {
 
 export function buildCreativeBuildPrefix(userText: string): string {
   if (!isSubstantiveBuildRequest(userText)) return "";
+  const theme = resolveHeroImageFromInstruction(userText);
+  const isPhotoVertical = theme.matched;
+  if (isPhotoVertical) {
+    return (
+      "[CREATIVIDAD OBLIGATORIA] El usuario pide un producto concreto — no entregues la misma pantalla genérica. " +
+      `Hero con foto temática (${theme.descriptionEs}) usando ${theme.url}, secciones distintas, tipografía cuidada, UI premium. ` +
+      "Aplica densidad visual (orbs blur, gradientes, glass cards, social proof). Implementa el pedido literal del usuario. "
+    );
+  }
   return (
-    "[CREATIVIDAD OBLIGATORIA] El usuario pide un producto concreto — no entregues la misma pantalla genérica de siempre. " +
-    "Hero con imagen https://picsum.photos/seed/ temática al negocio, secciones distintas, tipografía cuidada, UI premium. " +
-    "Si piden agencia de viajes: banner con foto de viaje, buscador ida/vuelta, registro con estado real. " +
-    "Implementa el pedido literal del usuario en esta respuesta. "
+    "[CREATIVIDAD OBLIGATORIA — SAAS PREMIUM] El usuario pide un producto digital. " +
+    "PROHIBIDO usar foto random de paisaje/río/montaña/atardecer en el hero. " +
+    "Hero estilo Linear/Vercel/Stripe: orbs blur de fondo, eyebrow pill con icono, h1 grande con una palabra clave en gradient bg-clip-text, " +
+    "lead, 2 CTAs (primario sólido + ghost), social proof (avatares + stat) Y a la derecha un MOCKUP del producto construido en JSX (browser/phone frame con la UI real). " +
+    "Sigue con: stats row, bento grid de features, sección 'cómo funciona' en pasos, testimonios, pricing si aplica, FAQ, CTA final con gradient premium y orbs, footer rico. " +
+    "Tipografía: Inter + Space Grotesk (o Geist). Paleta limitada (1 acento + neutros). Densidad visual obligatoria. "
   );
 }
 

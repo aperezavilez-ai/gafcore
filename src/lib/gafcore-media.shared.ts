@@ -52,7 +52,10 @@ export function themedPicsumUrl(
     return picsumFallbackUrl(seed, w, h);
   }
   if (label === "hero" || /hero|banner|fondo|cielo|avion|avión|viaje|vuelo/i.test(ctx)) {
-    return resolveHeroImageFromInstruction(instruction).url;
+    const theme = resolveHeroImageFromInstruction(instruction);
+    if (theme.matched && theme.url) return theme.url;
+    // Sin vertical con foto natural: no inyectamos foto random.
+    return "";
   }
   return picsumFallbackUrl(label || `slot-${slot}`, w, h);
 }
@@ -522,13 +525,16 @@ export function sanitizeProjectJsxFiles<T extends { name: string; content: strin
 /** Si pidieron cambio de fondo/hero: reemplaza bloque azul por imagen acorde al pedido. */
 export function applyTravelHeroBackgroundFix(source: string, instruction: string): string {
   if (
-    !/ciudad|city|fondo|banner|hero|imagen|foto|azul|skyline|viaje|cielos?|avion|avión|recuadro|cambia|modifica|background/i.test(
+    !/ciudad|city|skyline|viaje|cielos?|avion|avión|hotel|playa|montañ|paisaje/i.test(
       instruction,
     )
   ) {
+    // Solo activamos este fix si la instrucción es claramente de un vertical de viaje/paisaje.
     return source;
   }
-  const heroUrl = resolveHeroImageFromInstruction(instruction).url;
+  const theme = resolveHeroImageFromInstruction(instruction);
+  if (!theme.matched || !theme.url) return source;
+  const heroUrl = theme.url;
   if (/backgroundImage|background-image|picsum\.photos/i.test(source)) {
     return source.replace(
       /https:\/\/picsum\.photos\/seed\/[^"'`)\s]+(?:\/\d+)?(?:\/\d+)?/gi,
