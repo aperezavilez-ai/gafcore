@@ -27,6 +27,7 @@
     "gafcore:smoke-extra": "node scripts/smoke-gafcore-extra.mjs",
     "gafcore:smoke-routing": "npx tsx scripts/smoke-gafcore-routing.mjs",
     "gafcore:smoke-brain": "npx tsx scripts/smoke-gafcore-brain.mjs",
+    "gafcore:smoke-images": "npx tsx scripts/smoke-gafcore-images.mjs",
     "gafcore:smoke-project-import": "node scripts/smoke-gafcore-extra.mjs import",
     "gafcore:smoke-marketplace-workflow": "node scripts/smoke-gafcore-extra.mjs workflow",
     "gafcore:test-review-webhook": "npx tsx scripts/test-gafcore-review-webhook.ts",
