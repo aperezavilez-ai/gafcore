@@ -26,6 +26,7 @@
     "gafcore:smoke-all": "npm run gafcore:smoke-extensions && npm run gafcore:smoke-marketplace-install && npm run gafcore:smoke-projects && npm run gafcore:smoke-extra",
     "gafcore:smoke-extra": "node scripts/smoke-gafcore-extra.mjs",
     "gafcore:smoke-routing": "npx tsx scripts/smoke-gafcore-routing.mjs",
+    "gafcore:smoke-brain": "npx tsx scripts/smoke-gafcore-brain.mjs",
     "gafcore:smoke-project-import": "node scripts/smoke-gafcore-extra.mjs import",
     "gafcore:smoke-marketplace-workflow": "node scripts/smoke-gafcore-extra.mjs workflow",
     "gafcore:test-review-webhook": "npx tsx scripts/test-gafcore-review-webhook.ts",
