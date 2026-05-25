@@ -974,18 +974,34 @@ export function ChatPanel({
   }, [visualEditOn]);
 
   // Aplica una instrucción externa (p. ej. del Auditor de Diseño) en el input.
+  // Si autoSend === true (modo "Auditar y mejorar"), envía sola la próxima vez que se ejecute send.
   useEffect(() => {
     const onApply = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ instruction?: string }>).detail;
+      const detail = (ev as CustomEvent<{ instruction?: string; autoSend?: boolean }>).detail;
       const instruction = detail?.instruction?.trim();
       if (!instruction) return;
       setInput((v) => (v ? v + "\n\n" : "") + instruction);
       taRef.current?.focus();
-      toast.success("Mejoras añadidas al chat — envíalas con Enter");
+      if (detail?.autoSend) {
+        toast.success("Aplicando mejoras…");
+        // Pequeño delay para que React aplique el setInput y send recoja el valor.
+        setTimeout(() => {
+          void sendRef.current?.(instruction);
+        }, 120);
+      } else {
+        toast.success("Mejoras añadidas al chat — envíalas con Enter");
+      }
     };
     window.addEventListener("gafcore:apply-instruction", onApply as EventListener);
     return () => window.removeEventListener("gafcore:apply-instruction", onApply as EventListener);
   }, []);
+
+  const sendRef = useRef<((text?: string) => Promise<void>) | null>(null);
+
+  // Mantiene sendRef.current apuntando al send más reciente para llamadas externas (auditor).
+  useEffect(() => {
+    sendRef.current = send;
+  });
 
   // Listen for picks + preview errors
   useEffect(() => {

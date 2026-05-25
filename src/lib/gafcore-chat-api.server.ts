@@ -34,6 +34,7 @@ import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
 import { buildAiPluginPromptAppend } from "@/extensions/ai-plugins.server";
 import { readProjectBrand } from "@/lib/gafcore-brand.functions";
 import { brandContextBlock } from "@/lib/gafcore-brand.shared";
+import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -128,14 +129,9 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
       try {
         const completed = await completeChatMessage({ model, messages, json: true });
         const content = completed.content || "{}";
-        let parsedOut: { reply?: string; files?: unknown };
-        try {
-          parsedOut = JSON.parse(content);
-        } catch {
-          return jsonResponse({
-            reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, content)),
-            files: [],
-          });
+        const parsedOut = parseJsonLoose<{ reply?: string; files?: unknown }>(content) ?? {};
+        if (!parsedOut.reply && !parsedOut.files) {
+          console.warn("[gafcore-chat] stream-fallback non-JSON content len=" + content.length);
         }
         let safeFiles = validateOutputFiles(parsedOut.files);
         if (safeFiles.length === 0) {
@@ -287,15 +283,11 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     return jsonResponse({ error: "upstream", detail: err.message }, 502);
   }
 
-  let parsedOut: { reply?: string; files?: unknown };
-  try {
-    parsedOut = JSON.parse(content);
-  } catch {
-    return jsonResponse({
-      reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, content)),
-      files: [],
-      balance: balanceAfterConsume,
-    });
+  const parsedOut = parseJsonLoose<{ reply?: string; files?: unknown }>(content) ?? {};
+  if (!parsedOut.reply && !parsedOut.files) {
+    console.warn(
+      "[gafcore-chat] complete non-JSON content len=" + content.length + " preview=" + content.slice(0, 120),
+    );
   }
 
   let safeFiles = validateOutputFiles(parsedOut.files);

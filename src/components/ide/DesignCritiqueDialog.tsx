@@ -93,15 +93,64 @@ export function DesignCritiqueDialog({ files, projectId }: Props) {
     }
   }, [files, projectId]);
 
-  const applyImprovements = useCallback(() => {
-    if (!data?.followupInstruction) return;
-    window.dispatchEvent(
-      new CustomEvent("gafcore:apply-instruction", {
-        detail: { instruction: data.followupInstruction },
-      }),
-    );
-    setOpen(false);
-  }, [data]);
+  const applyImprovements = useCallback(
+    (autoSend = false) => {
+      if (!data?.followupInstruction) return;
+      window.dispatchEvent(
+        new CustomEvent("gafcore:apply-instruction", {
+          detail: { instruction: data.followupInstruction, autoSend },
+        }),
+      );
+      setOpen(false);
+    },
+    [data],
+  );
+
+  const auditAndAutoApply = useCallback(async () => {
+    setLoading(true);
+    setData(null);
+    try {
+      const token = await getAuthAccessToken();
+      if (!token) {
+        toast.error("Inicia sesión para auditar el diseño.");
+        setLoading(false);
+        return;
+      }
+      const res = await fetch("/api/gafcore/design-critique", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          projectId: projectId ?? undefined,
+          files: files.map((f) => ({ name: f.name, content: f.content })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        toast.error("No se pudo completar la auditoría.");
+        setLoading(false);
+        return;
+      }
+      const critique = json.critique as DesignCritiqueResponse;
+      setData(critique);
+      if (critique.issues.length === 0) {
+        toast.success("Sin issues — diseño OK.");
+        setLoading(false);
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent("gafcore:apply-instruction", {
+          detail: { instruction: critique.followupInstruction, autoSend: true },
+        }),
+      );
+      toast.success(`Auditoría OK (${critique.issues.length} mejoras) — aplicando…`);
+      setOpen(false);
+    } catch (e) {
+      console.error("[critique-auto]", e);
+      toast.error("Error al auditar.");
+    } finally {
+      setLoading(false);
+    }
+  }, [files, projectId]);
 
   const grouped: Record<DesignIssueSeverity, DesignIssue[]> = {
     blocker: [],
@@ -118,17 +167,33 @@ export function DesignCritiqueDialog({ files, projectId }: Props) {
         if (o && !data && !loading) void runCritique();
       }}
     >
-      <DialogTrigger asChild>
+      <div className="flex items-center gap-2">
         <Button
-          variant="outline"
+          variant="default"
           size="sm"
           className="gap-1.5"
-          title="Auditar el diseño actual con Claude Sonnet 4.5"
+          onClick={auditAndAutoApply}
+          disabled={loading}
+          title="Audita el diseño y aplica las mejoras automáticamente en el chat"
         >
-          <Sparkles className="h-3.5 w-3.5" />
-          Auditar diseño
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="h-3.5 w-3.5" />
+          )}
+          Auditar y mejorar
         </Button>
-      </DialogTrigger>
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            title="Ver detalles antes de aplicar"
+          >
+            Ver detalles
+          </Button>
+        </DialogTrigger>
+      </div>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -219,10 +284,15 @@ export function DesignCritiqueDialog({ files, projectId }: Props) {
             </Button>
           )}
           {data && data.issues.length > 0 && (
-            <Button onClick={applyImprovements} className="gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" />
-              Aplicar mejoras en el chat
-            </Button>
+            <>
+              <Button onClick={() => applyImprovements(false)} variant="outline" className="gap-1.5">
+                Solo añadir al chat
+              </Button>
+              <Button onClick={() => applyImprovements(true)} className="gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" />
+                Aplicar mejoras ya
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

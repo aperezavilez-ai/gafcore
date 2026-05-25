@@ -121,10 +121,13 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       }
       throw e;
     }
+    const { parseJsonLoose } = await import("@/lib/gafcore-json-loose.shared");
+    const looseParsed = parseJsonLoose<{ reply?: string; files?: unknown }>(content);
     let parsed: { reply?: string; files?: unknown };
-    try {
-      parsed = JSON.parse(content);
-    } catch {
+    if (looseParsed) {
+      parsed = looseParsed;
+    } else {
+      parsed = {};
       console.info(
         JSON.stringify({
           event: "gafcore_chat",
