@@ -1039,9 +1039,10 @@ export function ChatPanel({
   }, [projectId, messages.length, loading]);
 
   // Estado para auto-fix con IA cuando el preview falla por error de runtime.
-  // Evita loops: solo intenta UNA vez por error idéntico durante 60s.
+  // Evita loops: solo bloquea reintentos si el MISMO error ya fue intentado y falló.
   const autoFixInFlightRef = useRef(false);
-  const autoFixLastErrorRef = useRef<{ msg: string; at: number } | null>(null);
+  const autoFixAttemptedErrorsRef = useRef<Set<string>>(new Set());
+  const [autoFixActive, setAutoFixActive] = useState(false);
 
   // Listen for picks + preview errors
   useEffect(() => {
@@ -1085,28 +1086,28 @@ export function ChatPanel({
         return;
       }
 
-      // 2) Cualquier otro error de runtime: intentar auto-fix con IA (UNA vez).
+      // 2) Cualquier otro error de runtime: intentar auto-fix con IA.
       setLastError(msg);
 
-      const now = Date.now();
-      const last = autoFixLastErrorRef.current;
-      const samePersistent = last && last.msg === msg && now - last.at < 60_000;
+      // Clave estable para deduplicar (primeros 120 chars del mensaje).
+      const errKey = msg.slice(0, 120);
+      const alreadyTried = autoFixAttemptedErrorsRef.current.has(errKey);
       const canAutoFix =
         !autoFixInFlightRef.current &&
         !sendInFlightRef.current &&
-        !samePersistent &&
+        !alreadyTried &&
         Boolean(projectId) &&
         files.length > 0 &&
-        // Solo si el error parece venir del código del proyecto (no carga de recursos).
         !/No se pudo cargar:|Failed to load|404|net::ERR/i.test(msg);
 
       if (!canAutoFix) return;
 
-      autoFixLastErrorRef.current = { msg, at: now };
+      autoFixAttemptedErrorsRef.current.add(errKey);
       autoFixInFlightRef.current = true;
+      setAutoFixActive(true);
       void (async () => {
         const toastId = toast.loading("Corrigiendo error del preview con IA…", {
-          duration: 60_000,
+          duration: 90_000,
         });
         try {
           const tok = await getAuthAccessToken();
@@ -1115,20 +1116,22 @@ export function ChatPanel({
             return;
           }
           const fixInstruction = [
-            "El preview de tu proyecto falla con este error de runtime:",
+            "El preview del proyecto falla con este error de runtime:",
             "",
             "```",
-            msg.slice(0, 600),
+            msg.slice(0, 800),
             "```",
             "",
             "Corrige el código para que el preview funcione. Reglas críticas:",
-            "- NO renderices objetos directamente en JSX (causa React error #31). Si necesitas",
-            "  mostrar campos, accede a `.title`, `.desc`, etc. — nunca `<div>{obj}</div>`.",
+            "- React error #31 = renderizar un objeto en JSX. NUNCA hagas `<div>{obj}</div>`",
+            "  con un objeto literal. Accede a sus campos: `<div>{obj.title}</div>`.",
+            "- Cuando mapees listas de objetos, devuelve JSX dentro del map, NO el objeto:",
+            "  `items.map(it => <Card key={it.id}>{it.label}</Card>)`.",
             "- Los nombres de iconos de `lucide-react` deben ser válidos. Si dudas, usa",
-            "  iconos comunes: `Sparkles`, `Zap`, `Star`, `Heart`, `StickyNote`, `Settings`, `Mail`.",
-            "- Todo `<a>` debe tener `href` real. Todo `<button onClick>` debe tener lógica real.",
+            "  `Sparkles`, `Zap`, `Star`, `Heart`, `StickyNote`, `Settings`, `Mail`, `Check`.",
+            "- Todo `<a>` debe tener `href` real. Todo `<button onClick>` lógica real.",
             "- `LucideIcon`, `LucideProps`, `IconNode` solo como `type` import.",
-            "- Devuelve los archivos COMPLETOS, no parches.",
+            "- Devuelve los archivos COMPLETOS (no parches, no fragmentos).",
           ].join("\n");
 
           const result = await fetchGafcoreChatComplete(
@@ -1147,10 +1150,12 @@ export function ChatPanel({
             toast.dismiss(toastId);
             toast.success("Error del preview corregido automáticamente", { duration: 5000 });
             setLastError(null);
+            // Si el fix funcionó, permitimos reintentar más adelante si vuelve el mismo error.
+            autoFixAttemptedErrorsRef.current.delete(errKey);
           } else {
             toast.dismiss(toastId);
-            toast.warning("No se pudo auto-corregir. Revisa los detalles en el preview.", {
-              duration: 6000,
+            toast.warning("No se pudo auto-corregir. Usa 'Intenta arreglarlo' o describe el cambio.", {
+              duration: 7000,
             });
           }
         } catch (e) {
@@ -1158,6 +1163,7 @@ export function ChatPanel({
           toast.dismiss(toastId);
         } finally {
           autoFixInFlightRef.current = false;
+          setAutoFixActive(false);
         }
       })();
     };
@@ -2497,31 +2503,61 @@ export function ChatPanel({
       {/* Composer */}
       <div className="shrink-0 border-t border-border/40 bg-background px-3 pb-3 pt-2">
         {lastError && (
-          <div className="mb-2 rounded-lg border border-destructive/40 bg-destructive/10 p-2.5 text-[12px]">
+          <div
+            className={
+              autoFixActive
+                ? "mb-2 rounded-lg border border-primary/40 bg-primary/10 p-2.5 text-[12px]"
+                : "mb-2 rounded-lg border border-destructive/40 bg-destructive/10 p-2.5 text-[12px]"
+            }
+          >
             <div className="flex items-start gap-2">
-              <span className="mt-0.5 text-destructive">⚠</span>
+              {autoFixActive ? (
+                <span className="mt-0.5 inline-block size-3 shrink-0 animate-pulse rounded-full bg-primary" />
+              ) : (
+                <span className="mt-0.5 text-destructive">⚠</span>
+              )}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-destructive">Construcción fallida</p>
-                <p className="mt-0.5 line-clamp-2 text-destructive/80">{lastError}</p>
+                <p
+                  className={
+                    autoFixActive
+                      ? "font-semibold text-primary"
+                      : "font-semibold text-destructive"
+                  }
+                >
+                  {autoFixActive ? "Auto-corrigiendo con IA…" : "Construcción fallida"}
+                </p>
+                <p
+                  className={
+                    autoFixActive
+                      ? "mt-0.5 line-clamp-2 text-primary/80"
+                      : "mt-0.5 line-clamp-2 text-destructive/80"
+                  }
+                >
+                  {autoFixActive
+                    ? "GafCore detectó un error de runtime y está reescribiendo el código. Esto toma 20-40 segundos."
+                    : lastError}
+                </p>
               </div>
             </div>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => {
-                  send(`Arregla este error de build:\n\n\`\`\`\n${lastError}\n\`\`\``);
-                  setLastError(null);
-                }}
-                className="rounded-md bg-destructive px-2.5 py-1 text-[11px] font-semibold text-destructive-foreground hover:opacity-90"
-              >
-                Intenta arreglarlo
-              </button>
-              <button
-                onClick={() => setLastError(null)}
-                className="rounded-md border border-border px-2.5 py-1 text-[11px] hover:bg-muted"
-              >
-                Descartar
-              </button>
-            </div>
+            {!autoFixActive && (
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={() => {
+                    send(`Arregla este error de build:\n\n\`\`\`\n${lastError}\n\`\`\``);
+                    setLastError(null);
+                  }}
+                  className="rounded-md bg-destructive px-2.5 py-1 text-[11px] font-semibold text-destructive-foreground hover:opacity-90"
+                >
+                  Intenta arreglarlo
+                </button>
+                <button
+                  onClick={() => setLastError(null)}
+                  className="rounded-md border border-border px-2.5 py-1 text-[11px] hover:bg-muted"
+                >
+                  Descartar
+                </button>
+              </div>
+            )}
           </div>
         )}
         {pendingComposerImages.length > 0 ? (
