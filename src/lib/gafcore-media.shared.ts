@@ -239,36 +239,252 @@ export function injectPreviewFallbackScript(html: string): string {
 const LUCIDE_TYPE_ONLY = new Set(["LucideIcon", "LucideProps", "IconNode", "LucideProvider"]);
 
 /**
- * Convierte `import { LucideIcon, Sparkles } from "lucide-react"` (que rompe el preview)
- * en `import { Sparkles, type LucideIcon } from "lucide-react"` (válido en TS + runtime).
+ * Whitelist embebida de iconos comunes de lucide-react. Cubre el 99% de los casos que
+ * un LLM va a usar al generar UIs. Si el modelo importa un nombre fuera de esta lista
+ * (e.g. "Note", "Cog", "Crosshair"), lo redirigimos a un sinónimo válido o a un fallback
+ * neutro para que el preview NUNCA falle por un icono inexistente.
+ */
+const LUCIDE_VALID = new Set<string>([
+  // arrows/movement
+  "ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowUpRight", "ArrowDownRight",
+  "ChevronRight", "ChevronLeft", "ChevronUp", "ChevronDown", "MoveRight", "Move",
+  // ui
+  "Menu", "X", "Plus", "Minus", "Check", "CheckCircle", "CheckCircle2", "Circle",
+  "Square", "MoreHorizontal", "MoreVertical", "Search", "Filter", "Settings", "Settings2",
+  "Sliders", "Home", "User", "Users", "UserPlus", "UserCheck", "LogIn", "LogOut",
+  // status/alerts
+  "AlertCircle", "AlertTriangle", "Info", "HelpCircle", "Loader", "Loader2", "Bell", "BellOff",
+  // media
+  "Image", "ImagePlus", "Video", "Camera", "Mic", "MicOff", "Play", "Pause", "Stop",
+  "SkipBack", "SkipForward", "Volume", "Volume1", "Volume2", "VolumeX",
+  // files/docs
+  "File", "FileText", "FileCode", "FileImage", "FilePlus", "Folder", "FolderOpen",
+  "Download", "Upload", "Save", "Trash", "Trash2", "Copy", "Clipboard", "ClipboardCheck",
+  "ClipboardCopy", "ClipboardList", "ClipboardPaste",
+  // notes
+  "StickyNote", "Notebook", "NotebookText", "NotebookPen", "BookOpen", "Book", "BookmarkPlus",
+  "Bookmark",
+  // shapes/abstract
+  "Sparkles", "Sparkle", "Star", "StarHalf", "Heart", "Zap", "Flame", "Lightbulb", "Sun", "Moon",
+  // tech
+  "Code", "Code2", "Terminal", "Cpu", "Database", "Server", "Cloud", "CloudDownload", "CloudUpload",
+  "Wifi", "WifiOff", "Smartphone", "Tablet", "Laptop", "Monitor", "Keyboard", "Mouse", "MousePointer",
+  // brand
+  "Github", "Twitter", "Facebook", "Instagram", "Linkedin", "Youtube", "Twitch",
+  // social/comm
+  "Mail", "MessageSquare", "MessageCircle", "Send", "Share", "Share2", "Phone", "PhoneCall",
+  "PhoneIncoming", "PhoneOutgoing",
+  // commerce
+  "ShoppingCart", "ShoppingBag", "CreditCard", "DollarSign", "Tag", "Tags", "Gift", "Package",
+  "Receipt", "Wallet", "Banknote",
+  // location/transport
+  "MapPin", "Map", "Navigation", "Compass", "Globe", "Car", "Bike", "Truck", "Plane", "Train",
+  "Bus", "Anchor",
+  // time
+  "Clock", "Calendar", "CalendarDays", "Timer", "AlarmClock", "History", "Hourglass",
+  // misc useful
+  "Eye", "EyeOff", "Lock", "Unlock", "Key", "Shield", "ShieldCheck", "ShieldAlert",
+  "Edit", "Edit2", "Edit3", "Pencil", "PenTool", "PenLine", "Trash", "Trash2",
+  "Link", "Link2", "ExternalLink", "Paperclip", "Tag", "Award", "Trophy", "Target",
+  "Briefcase", "Building", "Building2", "Store", "Coffee", "Utensils", "Pizza", "Wine",
+  "Activity", "TrendingUp", "TrendingDown", "BarChart", "BarChart2", "BarChart3", "BarChart4",
+  "LineChart", "PieChart", "Gauge",
+  "Brain", "Bot", "Robot",
+  "RefreshCw", "RotateCw", "RotateCcw", "Power", "Plug", "Battery", "BatteryCharging",
+  "ThumbsUp", "ThumbsDown", "Smile", "Frown", "Meh",
+  "Layers", "Layout", "LayoutGrid", "LayoutList", "Columns", "Rows", "Grid", "Grid2x2", "Grid3x3",
+  "Maximize", "Maximize2", "Minimize", "Minimize2", "Expand", "Shrink", "Move", "Pin",
+  // form
+  "Type", "Hash", "AtSign", "Quote", "Bold", "Italic", "Underline", "Strikethrough",
+  "AlignLeft", "AlignCenter", "AlignRight", "AlignJustify",
+  // type-only (incluidos en whitelist para que pasen al detector type-only abajo)
+  "LucideIcon", "LucideProps", "IconNode", "LucideProvider",
+]);
+
+/**
+ * Mapa de errores comunes del LLM → icono real equivalente.
+ * Cuando un import contiene una de estas claves, se sustituye por su valor.
+ */
+const LUCIDE_SYNONYMS: Record<string, string> = {
+  Note: "StickyNote",
+  Notes: "NotebookText",
+  Notepad: "NotebookText",
+  Cog: "Settings",
+  Gear: "Settings",
+  Trashcan: "Trash2",
+  Recycle: "Trash2",
+  Magnifier: "Search",
+  Magnify: "Search",
+  Pen: "PenLine",
+  Document: "FileText",
+  Doc: "FileText",
+  Picture: "Image",
+  Photo: "Image",
+  Cart: "ShoppingCart",
+  Bag: "ShoppingBag",
+  Money: "DollarSign",
+  Cash: "Banknote",
+  Email: "Mail",
+  Envelope: "Mail",
+  Inbox: "Mail",
+  Chat: "MessageSquare",
+  Comment: "MessageCircle",
+  Robot: "Bot",
+  AI: "Sparkles",
+  Idea: "Lightbulb",
+  Bulb: "Lightbulb",
+  Flash: "Zap",
+  Thunderbolt: "Zap",
+  Fire: "Flame",
+  Tick: "Check",
+  Cross: "X",
+  Close: "X",
+  Cancel: "X",
+  Cogwheel: "Settings",
+  Wrench: "Settings2",
+  Light: "Sun",
+  Dark: "Moon",
+  Profile: "User",
+  Account: "User",
+  Person: "User",
+  People: "Users",
+  Group: "Users",
+  Team: "Users",
+  Globe2: "Globe",
+  World: "Globe",
+  Earth: "Globe",
+  Location: "MapPin",
+  Pin: "MapPin",
+  Place: "MapPin",
+  Time: "Clock",
+  Date: "Calendar",
+  Schedule: "Calendar",
+  Stopwatch: "Timer",
+  Eye2: "Eye",
+  View: "Eye",
+  Hide: "EyeOff",
+  Show: "Eye",
+  Padlock: "Lock",
+  Security: "Shield",
+  Shop: "Store",
+  Cup: "Coffee",
+  Drink: "Coffee",
+  Food: "Utensils",
+  Burger: "Utensils",
+  Plug2: "Plug",
+  Trending: "TrendingUp",
+  Up: "TrendingUp",
+  Down: "TrendingDown",
+  Stats: "BarChart3",
+  Chart: "BarChart3",
+  Graph: "LineChart",
+  Speed: "Gauge",
+  Reload: "RefreshCw",
+  Refresh: "RefreshCw",
+  Restart: "RotateCw",
+  Undo: "RotateCcw",
+  Redo: "RotateCw",
+  Battery2: "Battery",
+  Like: "ThumbsUp",
+  Dislike: "ThumbsDown",
+  Happy: "Smile",
+  Sad: "Frown",
+  Stack: "Layers",
+  Grid2: "Grid2x2",
+  Fullscreen: "Maximize",
+  FullscreenExit: "Minimize",
+  Tag2: "Tag",
+  Label: "Tag",
+};
+
+const LUCIDE_FALLBACK = "Square"; // icono neutro disponible siempre.
+
+/**
+ * Reescribe imports de lucide-react para que TODOS los nombres importados sean válidos:
+ * - LucideIcon / LucideProps / IconNode → `type` import (no runtime).
+ * - Sinónimos comunes (`Note`, `Cog`, etc.) → equivalente real.
+ * - Nombres desconocidos → `Square` (fallback neutro) + renombrado del uso en JSX.
+ *
+ * Si un nombre no está en la whitelist y tampoco en el mapa de sinónimos, lo reemplazamos
+ * por `Square` y renombramos todas las referencias al símbolo en el archivo para que el
+ * código siga compilando.
  */
 function fixLucideTypeImports(source: string): string {
-  return source.replace(
+  const renamesByFile = new Map<string, string>(); // nombre original → nombre final
+  let modified = source.replace(
     /import\s*\{([^}]+)\}\s*from\s*["']lucide-react["']/g,
     (full, members: string) => {
       const parts = members.split(",").map((s) => s.trim()).filter(Boolean);
       const runtime: string[] = [];
       const types: string[] = [];
+      const seen = new Set<string>();
+      let changed = false;
       for (const p of parts) {
-        // Soporta "X", "type X" y "X as Y"
-        const m = p.match(/^(?:type\s+)?([A-Za-z_]\w*)(?:\s+as\s+[A-Za-z_]\w*)?$/);
+        const m = p.match(/^(?:type\s+)?([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/);
         if (!m) {
           runtime.push(p);
           continue;
         }
         const base = m[1];
+        const alias = m[2];
+        const importedAs = alias ?? base;
+
         if (LUCIDE_TYPE_ONLY.has(base)) {
-          // Si ya viene como "type X" lo mantenemos; si no, lo prefijamos.
-          types.push(/^type\s+/.test(p) ? p : `type ${p}`);
+          const entry = /^type\s+/.test(p) ? p : `type ${p}`;
+          if (!seen.has(entry)) {
+            types.push(entry);
+            seen.add(entry);
+          }
+          changed = changed || !/^type\s+/.test(p);
+          continue;
+        }
+
+        // Resuelve nombre válido: válido directo > sinónimo > fallback.
+        let resolved: string;
+        if (LUCIDE_VALID.has(base)) {
+          resolved = base;
+        } else if (LUCIDE_SYNONYMS[base]) {
+          resolved = LUCIDE_SYNONYMS[base];
+          changed = true;
         } else {
-          runtime.push(p);
+          resolved = LUCIDE_FALLBACK;
+          changed = true;
+        }
+
+        if (resolved !== base) {
+          // Mantener el alias usado en el código original; si no había, renombrar usos.
+          if (alias) {
+            const newEntry = `${resolved} as ${alias}`;
+            if (!seen.has(newEntry)) {
+              runtime.push(newEntry);
+              seen.add(newEntry);
+            }
+          } else {
+            // Usar alias al nombre original para no romper referencias JSX.
+            const newEntry = `${resolved} as ${base}`;
+            if (!seen.has(newEntry)) {
+              runtime.push(newEntry);
+              seen.add(newEntry);
+            }
+            renamesByFile.set(base, base); // ya está aliasado, no hay que renombrar usos.
+          }
+        } else {
+          const entry = alias ? `${base} as ${alias}` : base;
+          if (!seen.has(entry)) {
+            runtime.push(entry);
+            seen.add(entry);
+          }
         }
       }
-      if (types.length === 0) return full;
+      if (!changed) return full;
       const merged = [...runtime, ...types].join(", ");
       return `import { ${merged} } from "lucide-react"`;
     },
   );
+  // No renames pendientes (siempre alias al nombre original arriba), pero dejamos
+  // el hook para futuro si se necesita.
+  void renamesByFile;
+  return modified;
 }
 
 /** Reemplaza `href=""` o `href="#"` por `href="#section"` (evita warnings de a11y). */
