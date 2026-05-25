@@ -111,16 +111,22 @@ export const MODEL_DEEP = "anthropic/claude-sonnet-4.5";
 export const OPENAI_API_DEFAULT_FAST = "gpt-4o-mini";
 export const OPENAI_API_DEFAULT_DEEP = "gpt-4o";
 
-/** Elige defaults de modelo según el host del endpoint (OpenAI directo vs OpenRouter u otro). */
+/**
+ * Elige defaults de modelo según el host del endpoint.
+ * Con el router multi-proveedor (ANTHROPIC_API_KEY + OPENROUTER_API_KEY) los
+ * slugs estilo OpenRouter (`anthropic/claude-sonnet-4.5`, `openai/gpt-4o-mini`)
+ * son válidos en cualquier ruta: el router normaliza al formato del proveedor.
+ */
 export function resolveGafcoreModelDefaults(chatCompletionsUrl: string): {
   fast: string;
   deep: string;
 } {
   const u = chatCompletionsUrl.toLowerCase();
-  const useOpenAiNativeIds = u.includes("api.openai.com") && !u.includes("openrouter");
+  const isOpenAiNative =
+    u.includes("api.openai.com") && !u.includes("openrouter") && !u.includes("anthropic");
   return {
-    fast: useOpenAiNativeIds ? OPENAI_API_DEFAULT_FAST : MODEL_FAST,
-    deep: useOpenAiNativeIds ? OPENAI_API_DEFAULT_DEEP : MODEL_DEEP,
+    fast: isOpenAiNative ? OPENAI_API_DEFAULT_FAST : MODEL_FAST,
+    deep: isOpenAiNative ? OPENAI_API_DEFAULT_DEEP : MODEL_DEEP,
   };
 }
 
