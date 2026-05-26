@@ -2176,6 +2176,17 @@ export function ChatPanel({
           toast.error("No encontré App.tsx/JSX para parchear. Abre Código y confirma que existe App.tsx.", {
             duration: 10_000,
           });
+        } else if (isSubstantiveBuildRequest(raw)) {
+          // El usuario pidió construir algo sustantivo pero el cerebro devolvió 0 archivos.
+          // Aviso claro: probablemente el prompt era demasiado largo/ambiguo o el modelo
+          // lo interpretó como confirmación.
+          toast.error(
+            "El cerebro respondió sin archivos. Intenta de nuevo con un prompt más corto y claro (ej: 'Crea la landing de X'). Si persiste, pulsa enviar otra vez.",
+            { duration: 12_000 },
+          );
+          replyText = sanitizeUserFacingAiText(
+            `${replyText}\n\nNo recibí archivos generados. Reescribe tu pedido en 1-3 frases claras y vuelve a enviar.`,
+          );
         }
       }
 
