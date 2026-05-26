@@ -11,16 +11,14 @@ import {
 
 const ESM = "https://esm.sh";
 
-// Usamos React en modo DEV para que los errores no salgan minificados
-// (Minified React error #31 ↦ "Objects are not valid as a React child").
-// El preview NO es producción — necesitamos mensajes legibles para que el cerebro IA
-// pueda auto-corregir con contexto real.
+// React en modo prod (single instance) para evitar incompatibilidad de $$typeof
+// entre módulos del usuario y deps transitivas. Los errores minificados los
+// hacemos legibles capturando console.error en el iframe (ver script de error).
 const REACT_DEPS: Record<string, string> = {
-  react: `${ESM}/react@18.3.1?dev`,
-  "react-dom": `${ESM}/react-dom@18.3.1?dev`,
-  "react-dom/client": `${ESM}/react-dom@18.3.1/client?dev`,
-  "react/jsx-runtime": `${ESM}/react@18.3.1/jsx-runtime?dev`,
-  "react/jsx-dev-runtime": `${ESM}/react@18.3.1/jsx-dev-runtime?dev`,
+  react: `${ESM}/react@18.3.1`,
+  "react-dom": `${ESM}/react-dom@18.3.1`,
+  "react-dom/client": `${ESM}/react-dom@18.3.1/client`,
+  "react/jsx-runtime": `${ESM}/react@18.3.1/jsx-runtime`,
 };
 
 function isJsModule(name: string) {
@@ -247,8 +245,6 @@ export function LivePreview({ files }: { files: FileItem[] }) {
   }
 
   function decodeReactMinified(text) {
-    // Convierte "Minified React error #31; visit https://...?invariant=31&args[]=object,Object..."
-    // en un mensaje legible. Solo errors conocidos comunes.
     var KNOWN = {
       "31": "Objects are not valid as a React child (received an object instead of a React element/string/number). Si quieres mostrar campos, accede a sus props (.title, .desc) o devuelve JSX al mapear.",
       "130": "Component type is invalid (expected a string/function but received an object). Probablemente importaste algo que no es un componente, o usas un objeto como tag.",
@@ -262,11 +258,36 @@ export function LivePreview({ files }: { files: FileItem[] }) {
       var argsMatch = text.match(/args\\[\\]=([^&\\s]+)/g);
       var argsList = argsMatch ? argsMatch.map(function(a){ return decodeURIComponent(a.replace('args[]=','')); }).join(' / ') : '';
       var human = KNOWN[num] || ("React error #" + num);
-      return human + (argsList ? "\\n\\nDetalles: " + argsList : "");
+      // Si el último console.error capturado tiene info útil, anexarla.
+      var captured = (window.__gafcore_last_console_error || "").toString();
+      var extra = captured && captured.length < 1000 ? "\\n\\nDetalle React: " + captured : (argsList ? "\\n\\nDetalles: " + argsList : "");
+      return human + extra;
     } catch (_) {
       return text;
     }
   }
+
+  // Intercepta console.error para capturar el mensaje legible que React emite
+  // antes de lanzar el error minificado en runtime.
+  (function(){
+    var origError = console.error.bind(console);
+    console.error = function() {
+      try {
+        var parts = [];
+        for (var i = 0; i < arguments.length; i++) {
+          var a = arguments[i];
+          if (a instanceof Error) parts.push(a.message);
+          else if (typeof a === "string") parts.push(a);
+          else { try { parts.push(JSON.stringify(a).slice(0, 300)); } catch(_) {} }
+        }
+        var msg = parts.join(" ").slice(0, 1200);
+        if (msg && /react|object|child|invalid|render|hook|component/i.test(msg)) {
+          window.__gafcore_last_console_error = msg;
+        }
+      } catch (_) {}
+      return origError.apply(console, arguments);
+    };
+  })();
 
   function fmt(e) {
     if (!e) return "Error desconocido";
@@ -277,6 +298,11 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     else if (e && e.target && e.target.src) return "No se pudo cargar: " + e.target.src;
     else {
       try { raw = JSON.stringify(e); } catch (_) { raw = String(e); }
+    }
+    // Si tenemos un console.error capturado más legible, prefiérelo.
+    var captured = (window.__gafcore_last_console_error || "").toString();
+    if (captured && /react|child|render|invalid/i.test(captured) && !/Minified/i.test(captured)) {
+      return captured + (raw && raw !== captured ? "\\n\\nStack: " + raw.slice(0, 800) : "");
     }
     return decodeReactMinified(raw);
   }
