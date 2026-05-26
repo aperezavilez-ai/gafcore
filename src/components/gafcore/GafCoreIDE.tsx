@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { GafCoreAuthDialog } from "@/components/ide/GafCoreAuthDialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import {
   loadProjectFiles,
@@ -187,6 +188,9 @@ export function GafCoreIDE() {
   const [view, setView] = useState<View>("preview");
   const [previewKey, setPreviewKey] = useState(0);
   const [projectName, setProjectName] = useState(readCachedProjectName);
+  const isMobile = useIsMobile();
+  const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
+  const mobileScrollRef = useRef<HTMLDivElement | null>(null);
   /** ID del proyecto activo (sincronizado con `setCurrentProjectId` en userSupabase). */
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(null);
   const [userProjects, setUserProjects] = useState<ProjectRow[]>([]);
@@ -1318,8 +1322,12 @@ export function GafCoreIDE() {
 
       <div className="relative min-h-0 flex-1">
         <main className="h-full overflow-hidden">
-          <ResizablePanelGroup orientation="horizontal" className="h-full">
-            {/* Left: Chat (fixed open) */}
+          {!isMobile ? (
+          <ResizablePanelGroup
+            orientation="horizontal"
+            className="h-full"
+          >
+            {/* Left: Chat (fixed open) — solo desktop */}
             <ResizablePanel id="chat" defaultSize="34%" minSize="28%" maxSize="55%" className="min-h-0">
               <div className="h-full min-h-0">
               <ChatPanel
@@ -1407,6 +1415,130 @@ export function GafCoreIDE() {
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
+          ) : (
+            /* Mobile layout: 2 paneles full-screen con scroll snap horizontal */
+            <div className="flex h-full flex-col">
+              <div
+                ref={mobileScrollRef}
+                onScroll={(e) => {
+                  const target = e.currentTarget;
+                  const idx = Math.round(target.scrollLeft / target.clientWidth);
+                  setMobilePane(idx === 0 ? "chat" : "workspace");
+                }}
+                className="flex flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {/* Pane 1: Chat */}
+                <div className="h-full w-screen shrink-0 snap-start snap-always">
+                  <ChatPanel
+                    files={files}
+                    setFiles={setFiles}
+                    projectId={currentProjectId}
+                    onCodeGenerated={() => {
+                      setView("preview");
+                      setPreviewKey((k) => k + 1);
+                      // Cambia automáticamente al workspace tras generar.
+                      requestAnimationFrame(() => {
+                        const el = mobileScrollRef.current;
+                        if (el) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
+                      });
+                    }}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onOpenHistory={() => setHistoryOpen(true)}
+                    onOpenConnectors={() => setConnectorsOpen(true)}
+                  />
+                </div>
+                {/* Pane 2: Workspace */}
+                <div className="h-full w-screen shrink-0 snap-start snap-always bg-muted/30">
+                  <div className="flex h-full flex-col">
+                    {view === "preview" ? (
+                      <div className="flex h-full flex-col gap-2 p-2">
+                        <div className="flex shrink-0 items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const el = mobileScrollRef.current;
+                              if (el) el.scrollTo({ left: 0, behavior: "smooth" });
+                            }}
+                            className="rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            ← Chat
+                          </button>
+                          <DesignCritiqueDialog files={files} projectId={currentProjectId ?? null} />
+                        </div>
+                        <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                          <LivePreview key={previewKey} files={files} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-full flex-col bg-background">
+                        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const el = mobileScrollRef.current;
+                              if (el) el.scrollTo({ left: 0, behavior: "smooth" });
+                            }}
+                            className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                          >
+                            ← Chat
+                          </button>
+                          <div className="flex flex-1 items-center overflow-x-auto">
+                            {openTabs.map((name) => {
+                              const isActive = files[activeIndex]?.name === name;
+                              return (
+                                <div
+                                  key={name}
+                                  onClick={() => {
+                                    const i = files.findIndex((f) => f.name === name);
+                                    if (i >= 0) setActiveIndex(i);
+                                  }}
+                                  className={`flex h-8 cursor-pointer items-center gap-2 border-r border-border px-2 text-[11px] ${
+                                    isActive
+                                      ? "bg-background text-foreground border-b-2 border-b-primary"
+                                      : "bg-muted/40 text-muted-foreground"
+                                  }`}
+                                >
+                                  <span>{name}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <CodeEditor files={files} setFiles={setFiles} activeIndex={activeIndex} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {/* Indicador de pane activo (dots) */}
+              <div className="flex shrink-0 items-center justify-center gap-1.5 border-t border-border bg-background py-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = mobileScrollRef.current;
+                    if (el) el.scrollTo({ left: 0, behavior: "smooth" });
+                  }}
+                  className={`h-1.5 rounded-full transition-all ${
+                    mobilePane === "chat" ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/40"
+                  }`}
+                  aria-label="Ver chat"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = mobileScrollRef.current;
+                    if (el) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
+                  }}
+                  className={`h-1.5 rounded-full transition-all ${
+                    mobilePane === "workspace" ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/40"
+                  }`}
+                  aria-label="Ver área de trabajo"
+                />
+              </div>
+            </div>
+          )}
         </main>
         {loaded && getUserSupabase() && !currentProjectId ? (
           <div
