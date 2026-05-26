@@ -501,6 +501,60 @@ function fixEmptyAnchors(source: string): string {
     });
 }
 
+/**
+ * Defensa local contra "Objects are not valid as a React child" (React error #31).
+ *
+ * Detecta variables declaradas como objetos/arrays literales y envuelve sus
+ * usos en posición JSX con un wrapper seguro que:
+ *   - Si es ReactElement (tiene $$typeof) → lo deja pasar.
+ *   - Si es objeto plano → muestra title/label/name o cadena vacía.
+ *   - Si es array → no lo toca (asumimos que ya tenían .map).
+ *   - Si es primitivo → lo deja pasar.
+ *
+ * Esto evita que un bug del LLM ("renderizar `{feature}` cuando feature es
+ * objeto") rompa toda la página. El render no será perfecto, pero el preview
+ * no quedará en pantalla roja y el auto-fix con IA podrá iterar.
+ */
+function fixObjectAsJsxChild(source: string): string {
+  // 1) Recolectar nombres declarados como objeto/array literal.
+  //    const X = { ... }   →  X candidato.
+  //    const X = [{ ... }] →  X candidato.
+  //    const X = func()    →  ignorado (no sabemos su tipo).
+  const objectVars = new Set<string>();
+  const declRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*([\[{])/g;
+  let m: RegExpExecArray | null;
+  while ((m = declRe.exec(source))) {
+    // Para arrays, solo cuenta si el primer elemento es un objeto literal
+    // (heurística: `const X = [{`).
+    if (m[2] === "[") {
+      const after = source.slice(declRe.lastIndex, declRe.lastIndex + 10);
+      if (!/^\s*\{/.test(after)) continue;
+    }
+    objectVars.add(m[1]);
+  }
+  if (objectVars.size === 0) return source;
+
+  // 2) Reemplazar `>{X}<` y `>{X}\n<` y similares: solo en posición child de JSX.
+  //    Patrón: precedido por `>` (cierre de tag) + opcional whitespace + `{name}` + opcional whitespace + `<` (apertura tag).
+  return source.replace(
+    /(>[\s\n]*)\{(\w+)\}([\s\n]*<)/g,
+    (match, before: string, name: string, after: string) => {
+      if (!objectVars.has(name)) return match;
+      // Wrapper defensivo. Usamos un IIFE para no perder concisión y para
+      // que el optimizador pueda inlinear.
+      const safe =
+        "{(" +
+        `(${name} == null) ? null :` +
+        ` (typeof ${name} === 'string' || typeof ${name} === 'number' || typeof ${name} === 'boolean') ? ${name} :` +
+        ` (${name}.$$typeof) ? ${name} :` +
+        ` Array.isArray(${name}) ? null :` +
+        ` (${name}.title || ${name}.label || ${name}.name || '')` +
+        ")}";
+      return before + safe + after;
+    },
+  );
+}
+
 export function repairCommonJsxSyntaxErrors(source: string): string {
   let out = source.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
@@ -508,6 +562,7 @@ export function repairCommonJsxSyntaxErrors(source: string): string {
   out = out.replace(/(\w)="([^"]*)"\s+"(\s+[a-zA-Z_][\w-]*=)/g, '$1="$2"$3');
   out = fixLucideTypeImports(out);
   out = fixEmptyAnchors(out);
+  out = fixObjectAsJsxChild(out);
   return out;
 }
 
