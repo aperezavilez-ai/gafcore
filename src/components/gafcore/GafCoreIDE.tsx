@@ -1295,6 +1295,24 @@ export function GafCoreIDE() {
           >
             <SettingsIcon className="h-4 w-4" />
           </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Cerrar sesión"
+            aria-label="Cerrar sesión"
+            onClick={async () => {
+              const { supabase } = await import("@/integrations/supabase/client");
+              await supabase.auth.signOut();
+              toast.success("Sesión cerrada");
+              navigate({
+                to: "/gafcore/login",
+                search: { redirect: "/gafcore/app", signedOut: true },
+              });
+            }}
+            className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </header>
 
