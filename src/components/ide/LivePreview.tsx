@@ -11,11 +11,16 @@ import {
 
 const ESM = "https://esm.sh";
 
+// Usamos React en modo DEV para que los errores no salgan minificados
+// (Minified React error #31 ↦ "Objects are not valid as a React child").
+// El preview NO es producción — necesitamos mensajes legibles para que el cerebro IA
+// pueda auto-corregir con contexto real.
 const REACT_DEPS: Record<string, string> = {
-  react: `${ESM}/react@18.3.1`,
-  "react-dom": `${ESM}/react-dom@18.3.1`,
-  "react-dom/client": `${ESM}/react-dom@18.3.1/client`,
-  "react/jsx-runtime": `${ESM}/react@18.3.1/jsx-runtime`,
+  react: `${ESM}/react@18.3.1?dev`,
+  "react-dom": `${ESM}/react-dom@18.3.1?dev`,
+  "react-dom/client": `${ESM}/react-dom@18.3.1/client?dev`,
+  "react/jsx-runtime": `${ESM}/react@18.3.1/jsx-runtime?dev`,
+  "react/jsx-dev-runtime": `${ESM}/react@18.3.1/jsx-dev-runtime?dev`,
 };
 
 function isJsModule(name: string) {
@@ -241,13 +246,39 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     });
   }
 
+  function decodeReactMinified(text) {
+    // Convierte "Minified React error #31; visit https://...?invariant=31&args[]=object,Object..."
+    // en un mensaje legible. Solo errors conocidos comunes.
+    var KNOWN = {
+      "31": "Objects are not valid as a React child (received an object instead of a React element/string/number). Si quieres mostrar campos, accede a sus props (.title, .desc) o devuelve JSX al mapear.",
+      "130": "Component type is invalid (expected a string/function but received an object). Probablemente importaste algo que no es un componente, o usas un objeto como tag.",
+      "152": "createRoot was passed an invalid container (null o no es un elemento).",
+      "200": "useState/useEffect called outside a component or before mount."
+    };
+    try {
+      var m = /Minified React error #(\\d+)/.exec(text);
+      if (!m) return text;
+      var num = m[1];
+      var argsMatch = text.match(/args\\[\\]=([^&\\s]+)/g);
+      var argsList = argsMatch ? argsMatch.map(function(a){ return decodeURIComponent(a.replace('args[]=','')); }).join(' / ') : '';
+      var human = KNOWN[num] || ("React error #" + num);
+      return human + (argsList ? "\\n\\nDetalles: " + argsList : "");
+    } catch (_) {
+      return text;
+    }
+  }
+
   function fmt(e) {
     if (!e) return "Error desconocido";
-    if (e instanceof Error) return e.stack || e.message;
-    if (typeof e === "string") return e;
-    if (e && e.message) return e.message;
-    if (e && e.target && e.target.src) return "No se pudo cargar: " + e.target.src;
-    try { return JSON.stringify(e); } catch (_) { return String(e); }
+    var raw = "";
+    if (e instanceof Error) raw = e.stack || e.message;
+    else if (typeof e === "string") raw = e;
+    else if (e && e.message) raw = e.message;
+    else if (e && e.target && e.target.src) return "No se pudo cargar: " + e.target.src;
+    else {
+      try { raw = JSON.stringify(e); } catch (_) { raw = String(e); }
+    }
+    return decodeReactMinified(raw);
   }
   function showError(e) {
     const el = document.getElementById('__err');
