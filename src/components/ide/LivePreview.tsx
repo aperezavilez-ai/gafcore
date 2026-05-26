@@ -307,10 +307,23 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     return decodeReactMinified(raw);
   }
   function showError(e) {
-    const el = document.getElementById('__err');
-    el.style.display = 'block';
-    el.textContent = fmt(e);
-    parent && parent.postMessage({ type: 'preview-error', message: fmt(e) }, '*');
+    // El Error Boundary ya muestra UI amigable dentro del #root.
+    // Aquí solo emitimos al parent para que el auto-fix se entere.
+    // El div __err queda como fallback escondido por si el boundary nunca monta.
+    var msg = fmt(e);
+    try {
+      parent && parent.postMessage({ type: 'preview-error', message: msg }, '*');
+    } catch (_) {}
+    // Solo mostramos el div rojo si #root está vacío (es decir, ni siquiera
+    // se montó el boundary). Esto cubre errores de carga del bundle inicial.
+    var root = document.getElementById('root');
+    if (root && !root.firstChild) {
+      var el = document.getElementById('__err');
+      if (el) {
+        el.style.display = 'block';
+        el.textContent = msg;
+      }
+    }
   }
 
   window.addEventListener('error', (ev) => showError(ev.error || ev));
@@ -376,10 +389,71 @@ export function LivePreview({ files }: { files: FileItem[] }) {
           }
           return null;
         }
+
+        class GafcoreErrorBoundary extends React.Component {
+          constructor(props) {
+            super(props);
+            this.state = { error: null, info: null };
+          }
+          static getDerivedStateFromError(error) {
+            return { error: error };
+          }
+          componentDidCatch(error, info) {
+            this.setState({ info: info });
+            try {
+              var msg = (error && error.message) || String(error);
+              var stack = (info && info.componentStack) || "";
+              // Anexa el componentStack al postMessage para que el auto-fix sepa
+              // exactamente qué componente falló.
+              parent && parent.postMessage({
+                type: "preview-error",
+                message: msg + (stack ? "\\\\n\\\\nComponente que falló:" + stack : "")
+              }, "*");
+            } catch (_) {}
+          }
+          render() {
+            if (this.state.error) {
+              var msg = (this.state.error && this.state.error.message) || String(this.state.error);
+              var stack = (this.state.info && this.state.info.componentStack) || "";
+              return React.createElement(
+                "div",
+                { style: { padding: "40px 24px", maxWidth: "800px", margin: "60px auto", fontFamily: "system-ui, -apple-system, sans-serif", color: "#1f2937" }},
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }},
+                  React.createElement("div", { style: { width: "40px", height: "40px", borderRadius: "10px", background: "linear-gradient(135deg,#fef3c7,#fde68a)", display: "grid", placeItems: "center", fontSize: "20px" }}, "⚠"),
+                  React.createElement("h1", { style: { fontSize: "20px", fontWeight: 700, margin: 0 }}, "El preview encontró un error de render")
+                ),
+                React.createElement("p", { style: { color: "#6b7280", marginBottom: "20px", lineHeight: 1.6 }}, "GafCore detectó el problema y ya está pidiéndole al cerebro IA que lo arregle automáticamente. Espera unos segundos."),
+                React.createElement("div", { style: { padding: "16px", background: "#fef3c7", borderRadius: "10px", border: "1px solid #fde68a", marginBottom: "16px" }},
+                  React.createElement("div", { style: { fontSize: "12px", fontWeight: 600, color: "#92400e", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.05em" }}, "Mensaje"),
+                  React.createElement("code", { style: { fontSize: "13px", color: "#78350f", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}, msg)
+                ),
+                stack ? React.createElement("details", { style: { fontSize: "12px", color: "#6b7280" }},
+                  React.createElement("summary", { style: { cursor: "pointer", padding: "8px 0", fontWeight: 600 }}, "Componente afectado"),
+                  React.createElement("pre", { style: { padding: "12px", background: "#f9fafb", borderRadius: "8px", overflow: "auto", fontSize: "11px", lineHeight: 1.5 }}, stack)
+                ) : null
+              );
+            }
+            return this.props.children;
+          }
+        }
+
         const Comp = pickComponent(Entry);
         const el = document.getElementById('root');
         if (Comp) {
-          createRoot(el).render(React.createElement(Comp));
+          try {
+            createRoot(el).render(
+              React.createElement(GafcoreErrorBoundary, null, React.createElement(Comp))
+            );
+          } catch (e) {
+            // Error sincrónico en el primer render: enviar al parent y mostrar amigable.
+            try {
+              parent && parent.postMessage({
+                type: "preview-error",
+                message: (e && e.message) || String(e)
+              }, "*");
+            } catch (_) {}
+            el.innerHTML = '<div style="padding:40px 24px;max-width:600px;margin:60px auto;font-family:system-ui;color:#374151"><h1 style="font-size:18px;margin-bottom:12px">Error al iniciar el preview</h1><p style="color:#6b7280;margin-bottom:16px">GafCore lo está corrigiendo automáticamente.</p><pre style="padding:12px;background:#fef3c7;border-radius:8px;font-size:12px;color:#78350f;white-space:pre-wrap">' + ((e && e.message) || String(e)).replace(/</g,"&lt;") + '</pre></div>';
+          }
         } else {
           const keys = Entry ? Object.keys(Entry).join(', ') || '(ninguno)' : '(módulo vacío)';
           el.innerHTML = '<pre style="padding:20px;color:#900;font:12px ui-monospace,monospace;white-space:pre-wrap">El archivo de entrada no exporta un componente válido.\\n\\nExports detectados: ' + keys + '\\n\\nAsegúrate de tener: export default function App() { ... }</pre>';
