@@ -1,14 +1,15 @@
 /**
- * Código inyectado en el iframe de LivePreview antes de cargar el entry.
- * Evita React error #31 convirtiendo objetos planos en texto/fragmentos seguros.
+ * Guardia de preview: NO muta namespace ESM (evita "Cannot assign to property 'jsx'").
+ * Exporta jsx/jsxs/createElement envueltos desde un único shim.
  */
-export const PREVIEW_IFRAME_JSX_GUARD = `
+
+const PREVIEW_JSX_GUARD_HELPERS = `
 function __gafcoreCoerceChild(v) {
   if (v == null || typeof v === "boolean") return v;
   if (typeof v === "string" || typeof v === "number") return v;
   if (typeof v === "function") {
     try {
-      return React.createElement(v, { className: "h-5 w-5 shrink-0", "aria-hidden": true });
+      return ReactOriginal.createElement(v, { className: "h-5 w-5 shrink-0", "aria-hidden": true });
     } catch (_) {
       return null;
     }
@@ -46,39 +47,42 @@ function __gafcoreSanitizeProps(p) {
   }
   return Object.assign({}, p, { children: __gafcoreCoerceChild(ch) });
 }
-function __gafcoreInstallJsxGuard(React, JSX) {
-  if (JSX && JSX.jsx && !JSX.__gafPatched) {
-    var _jsx = JSX.jsx;
-    var _jsxs = JSX.jsxs;
-    JSX.jsx = function(t, p, k) { return _jsx(t, __gafcoreSanitizeProps(p), k); };
-    JSX.jsxs = function(t, p, k) { return _jsxs(t, __gafcoreSanitizeProps(p), k); };
-    JSX.__gafPatched = true;
-  }
-  if (React && React.createElement && !React.__gafPatched) {
-    var _ce = React.createElement;
-    React.createElement = function(t, p) {
-      var rest = Array.prototype.slice.call(arguments, 2);
-      var safe = rest.map(__gafcoreCoerceChild);
-      return _ce.apply(React, [t, p].concat(safe));
-    };
-    React.__gafPatched = true;
-  }
-}
-__gafcoreInstallJsxGuard(React, __gafJsx);
 `;
 
-/** Nombre del módulo virtual que parchea jsx/jsxs para todo el preview. */
-export const PREVIEW_JSX_RUNTIME_SHIM_NAME = "__gafcore_jsx_shim.js";
+/** @deprecated Solo para compat; el mount ya no lo usa. */
+export const PREVIEW_IFRAME_JSX_GUARD = "";
 
-/** Shim ESM: todos los imports de react/jsx-runtime deben apuntar aquí. */
+/** Módulo virtual: reemplaza imports de `react` y `react/jsx-runtime` en el preview. */
+export const PREVIEW_REACT_SHIM_NAME = "__gafcore_preview_react.js";
+
+/** @deprecated Usar PREVIEW_REACT_SHIM_NAME */
+export const PREVIEW_JSX_RUNTIME_SHIM_NAME = PREVIEW_REACT_SHIM_NAME;
+
 export function buildPreviewJsxRuntimeShimCode(reactEsmBase: string): string {
+  return buildPreviewReactShimCode(reactEsmBase);
+}
+
+/** Shim ESM sin mutar módulos importados (compatible con esm.sh). */
+export function buildPreviewReactShimCode(reactEsmBase: string): string {
   const base = reactEsmBase.replace(/\/$/, "");
   return `
-import React from "${base}";
-import * as __gafJsx from "${base}/jsx-runtime";
-${PREVIEW_IFRAME_JSX_GUARD}
-export const jsx = __gafJsx.jsx;
-export const jsxs = __gafJsx.jsxs;
-export const Fragment = __gafJsx.Fragment;
+import ReactOriginal from "${base}";
+import { jsx as __jsxOrig, jsxs as __jsxsOrig, Fragment } from "${base}/jsx-runtime";
+${PREVIEW_JSX_GUARD_HELPERS}
+var __gafcoreCe = ReactOriginal.createElement.bind(ReactOriginal);
+var React = Object.assign({}, ReactOriginal, {
+  createElement: function(type, props) {
+    var rest = Array.prototype.slice.call(arguments, 2).map(__gafcoreCoerceChild);
+    return __gafcoreCe.apply(ReactOriginal, [type, props].concat(rest));
+  },
+});
+export default React;
+export function jsx(type, props, key) {
+  return __jsxOrig(type, __gafcoreSanitizeProps(props), key);
+}
+export function jsxs(type, props, key) {
+  return __jsxsOrig(type, __gafcoreSanitizeProps(props), key);
+}
+export { Fragment };
 `.trim();
 }

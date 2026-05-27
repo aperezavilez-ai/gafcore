@@ -10,9 +10,8 @@ import {
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
 import {
-  PREVIEW_IFRAME_JSX_GUARD,
-  PREVIEW_JSX_RUNTIME_SHIM_NAME,
-  buildPreviewJsxRuntimeShimCode,
+  PREVIEW_REACT_SHIM_NAME,
+  buildPreviewReactShimCode,
 } from "@/lib/preview-iframe-jsx-guard.snippet";
 
 const ESM = "https://esm.sh";
@@ -77,8 +76,11 @@ function rewriteImports(
     if (/\.css($|\?)/i.test(spec)) {
       return `${lead}${quote}data:text/javascript,${quote}`;
     }
+    if (spec === "react") {
+      return `${lead}${quote}app:${PREVIEW_REACT_SHIM_NAME}${quote}`;
+    }
     if (spec === "react/jsx-runtime" || spec === "react/jsx-dev-runtime") {
-      return `${lead}${quote}app:${PREVIEW_JSX_RUNTIME_SHIM_NAME}${quote}`;
+      return `${lead}${quote}app:${PREVIEW_REACT_SHIM_NAME}${quote}`;
     }
     if (spec.startsWith(".") || spec.startsWith("/")) {
       const resolved = resolveRelative(ownName, spec);
@@ -110,11 +112,12 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     const sanitizedFiles = sanitizeProjectJsxFiles(
       deferredFiles.map((f) => ({ name: f.name, content: f.content })),
     );
-    const jsxShim: FileItem = {
-      name: PREVIEW_JSX_RUNTIME_SHIM_NAME,
-      content: buildPreviewJsxRuntimeShimCode(REACT_DEPS.react),
+    const userJsFiles = sanitizedFiles.filter((f) => isJsModule(f.name));
+    const reactShim: FileItem = {
+      name: PREVIEW_REACT_SHIM_NAME,
+      content: buildPreviewReactShimCode(REACT_DEPS.react),
     };
-    const jsFiles = [jsxShim, ...sanitizedFiles.filter((f) => isJsModule(f.name))];
+    const jsFiles = [reactShim, ...userJsFiles];
     const cssFiles = deferredFiles.filter((f) => isCss(f.name));
 
     // If no JS modules at all → fall back to plain HTML preview
@@ -153,28 +156,29 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     );
 
     // Encode each module as its source string; the iframe transpiles + blob-URLs them.
-    const modulesPayload = jsFiles.map((f) => ({
-      name: f.name,
-      code: rewriteImports(
-        applyAllMediaRepairs(
-          repairCommonJsxSyntaxErrors(repairHtmlMedia(f.content, assetMap)),
-          mediaContextHint,
-        ),
-        f.name,
-        jsFiles,
-        cssNames,
-      ),
-    }));
+    const modulesPayload = jsFiles.map((f) => {
+      const source =
+        f.name === PREVIEW_REACT_SHIM_NAME
+          ? f.content
+          : applyAllMediaRepairs(
+              repairCommonJsxSyntaxErrors(repairHtmlMedia(f.content, assetMap)),
+              mediaContextHint,
+            );
+      return {
+        name: f.name,
+        code: rewriteImports(source, f.name, jsFiles, cssNames),
+      };
+    });
 
     const cssPayload = cssFiles.map((f) => f.content).join("\n");
 
     const entry =
-      jsFiles.find((f) => /(^|\/)main\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      jsFiles.find((f) => /(^|\/)index\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      jsFiles.find((f) => /(^|\/)app\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      jsFiles.find((f) => /(^|\/)aplicaci[oó]n\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      jsFiles.find((f) => /createRoot\s*\(|ReactDOM\.render\s*\(/.test(f.content))?.name ??
-      jsFiles[0]?.name!;
+      userJsFiles.find((f) => /(^|\/)main\.(jsx?|tsx?)$/i.test(f.name))?.name ??
+      userJsFiles.find((f) => /(^|\/)index\.(jsx?|tsx?)$/i.test(f.name))?.name ??
+      userJsFiles.find((f) => /(^|\/)app\.(jsx?|tsx?)$/i.test(f.name))?.name ??
+      userJsFiles.find((f) => /(^|\/)aplicaci[oó]n\.(jsx?|tsx?)$/i.test(f.name))?.name ??
+      userJsFiles.find((f) => /createRoot\s*\(|ReactDOM\.render\s*\(/.test(f.content))?.name ??
+      userJsFiles[0]?.name!;
 
     const importMap = {
       imports: {
@@ -408,16 +412,9 @@ export function LivePreview({ files }: { files: FileItem[] }) {
       /ReactDOM\\.render\\s*\\(/.test(entryRaw);
 
     const mountSrc = isMain
-      ? \`
-        import React from "react";
-        import * as __gafJsx from "react/jsx-runtime";
-        ${PREVIEW_IFRAME_JSX_GUARD}
-        import "\${entryUrl}";
-      \`
+      ? \`import "\${entryUrl}";\`
       : \`
         import React from "react";
-        import * as __gafJsx from "react/jsx-runtime";
-        ${PREVIEW_IFRAME_JSX_GUARD}
         import * as Entry from "\${entryUrl}";
         import { createRoot } from "react-dom/client";
         function pickComponent(mod) {

@@ -1118,6 +1118,17 @@ export function ChatPanel({
         /error #31/i.test(msg);
       const looksLikeCssModule =
         /Failed to resolve module specifier/i.test(msg) && /\.css/i.test(msg);
+      const looksLikeJsxShimAssign =
+        /Cannot assign to property ['"]jsx['"]/i.test(msg) ||
+        /__gafcoreInstallJsxGuard/i.test(msg);
+
+      if (looksLikeJsxShimAssign) {
+        setLastError(
+          "El preview usa una versión antigua del guard JSX. Recarga con Ctrl+Shift+R; si persiste, espera el deploy en Vercel (último fix del shim React).",
+        );
+        queueMicrotask(() => onCodeGenerated?.());
+        return;
+      }
 
       if (looksLikeCssModule) {
         let repairedCss = false;
