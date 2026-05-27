@@ -64,6 +64,10 @@ export async function executeGafcoreFactoryRun(
   }
 
   const profile = resolveFactoryTemplateProfile(input.instruction, input.factoryProfileId);
+  const profileMetrics = {
+    factoryProfileId: profile.id,
+    factoryProfileLabel: profile.label,
+  };
   const withProfile = buildFactoryInstructionWithProfile(input.instruction, profile);
   const factoryInstruction = instructionIncludesFactoryPrefix(withProfile)
     ? withProfile
@@ -114,7 +118,7 @@ export async function executeGafcoreFactoryRun(
       input.sb,
       pipelineRun.id,
       input.userId,
-      timer.finish(false),
+      timer.finish(false, profileMetrics),
     );
     if (code === "workflow_limit_reached") {
       return {
@@ -170,7 +174,7 @@ export async function executeGafcoreFactoryRun(
       input.sb,
       pipelineRun.id,
       input.userId,
-      timer.finish(false),
+      timer.finish(false, profileMetrics),
     );
     return {
       ok: false,
@@ -217,6 +221,7 @@ export async function executeGafcoreFactoryRun(
       pipelineRun.id,
       input.userId,
       timer.finish(false, {
+        ...profileMetrics,
         validationScore: overallScore,
         buildSmokeOk: false,
       }),
@@ -342,6 +347,7 @@ export async function executeGafcoreFactoryRun(
     pipelineRun.id,
     input.userId,
     timer.finish(success && (!deployMeta.attempted || deployMeta.ok), {
+      ...profileMetrics,
       validationScore: overallScore,
       buildSmokeOk: buildSmoke.ok,
       deployOk: deployMeta.attempted ? deployMeta.ok : undefined,

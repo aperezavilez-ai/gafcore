@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { getGafcoreFactoryAdminDashboard } from "@/lib/gafcore-factory-admin.functions";
+import { listFactoryProfileSelectorOptions } from "@/lib/gafcore-factory-templates.shared";
 import type { FactoryAdminDashboard } from "@/lib/gafcore-factory-admin.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,15 +15,28 @@ function pctBadge(value: number | null): string {
   return `${value}%`;
 }
 
+const PROFILE_FILTER_OPTIONS = [
+  { id: "all", label: "Todas las plantillas" },
+  ...listFactoryProfileSelectorOptions()
+    .filter((o) => o.id !== "auto")
+    .map((o) => ({ id: o.id, label: o.label })),
+];
+
 export function FactoryMetricsPanel() {
   const load = useServerFn(getGafcoreFactoryAdminDashboard);
   const [dashboard, setDashboard] = useState<FactoryAdminDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileFilter, setProfileFilter] = useState("all");
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await load({ data: { limit: 40 } });
+      const res = await load({
+        data: {
+          limit: 40,
+          ...(profileFilter !== "all" ? { profileFilter } : {}),
+        },
+      });
       if (!res.ok) {
         toast.error("Sin permiso o error cargando métricas de fábrica.");
         setDashboard(null);
@@ -34,7 +48,7 @@ export function FactoryMetricsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [load, profileFilter]);
 
   useEffect(() => {
     void reload();
@@ -52,14 +66,28 @@ export function FactoryMetricsPanel() {
           <Factory className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold">Métricas Modo Fábrica</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
-          {loading ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-2 h-4 w-4" />
-          )}
-          Actualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={profileFilter}
+            onChange={(e) => setProfileFilter(e.target.value)}
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            aria-label="Filtrar por plantilla"
+          >
+            {PROFILE_FILTER_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {loading && !dashboard ? (
@@ -187,6 +215,9 @@ export function FactoryMetricsPanel() {
                   <span className="font-mono text-[10px] text-muted-foreground">
                     {r.pipelineRunId.slice(0, 8)}…
                   </span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {r.profileLabel}
+                  </Badge>
                   <span>
                     {r.metrics.success ? (
                       <Badge variant="default">OK</Badge>

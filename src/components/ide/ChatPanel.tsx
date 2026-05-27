@@ -3296,6 +3296,24 @@ export function ChatPanel({
                     title="Modo de respuesta"
                   >
                     {mode === "build" ? "Construir" : "Chatear"}
+                    {mode === "build" && factoryMode ? (
+                      <span
+                        className="max-w-[4.5rem] truncate rounded-full bg-primary-foreground/20 px-1.5 text-[9px] font-semibold leading-tight"
+                        title={
+                          FACTORY_PROFILE_OPTIONS.find((o) => o.id === factoryProfileId)?.label ??
+                          "Fábrica"
+                        }
+                      >
+                        {(() => {
+                          const opt = FACTORY_PROFILE_OPTIONS.find(
+                            (o) => o.id === factoryProfileId,
+                          );
+                          if (!opt) return "Fábrica";
+                          if (opt.id === FACTORY_PROFILE_AUTO_ID) return "Auto";
+                          return opt.label.split(" ")[0] ?? opt.label;
+                        })()}
+                      </span>
+                    ) : null}
                     <ChevronDown className="h-3 w-3 shrink-0" />
                   </button>
                 </DropdownMenuTrigger>

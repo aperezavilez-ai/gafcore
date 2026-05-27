@@ -7,13 +7,23 @@ import { listFactoryTemplateProfiles } from "@/lib/gafcore-factory-templates.sha
 
 export const getGafcoreFactoryAdminDashboard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => z.object({ limit: z.number().int().min(1).max(80).optional() }).parse(input))
+  .inputValidator((input) =>
+    z
+      .object({
+        limit: z.number().int().min(1).max(80).optional(),
+        profileFilter: z.string().min(1).max(32).optional(),
+      })
+      .parse(input),
+  )
   .handler(async ({ data, context }) => {
     const userId = context.userId!;
     if (!(await isGafcoreAdminUser(userId))) {
       return { ok: false as const, error: "forbidden" as const };
     }
-    const dashboard = await loadFactoryAdminDashboard(data.limit ?? 40);
+    const dashboard = await loadFactoryAdminDashboard(
+      data.limit ?? 40,
+      data.profileFilter ?? null,
+    );
     return { ok: true as const, dashboard };
   });
 

@@ -99,7 +99,7 @@ Si **Publicar al terminar** está ON y el deploy a GitHub/Vercel OK, el servidor
 
 ## Panel admin
 
-`/gafcore/admin/ops` — bloque **Métricas Modo Fábrica** (% éxito por fase, últimos runs).
+`/gafcore/admin/ops` — bloque **Métricas Modo Fábrica** (% éxito por fase, últimos runs, filtro por plantilla).
 
 **Alertas de calidad:** si una fase tiene ≥3 muestras y tasa de éxito &lt;70%, aparece alerta por fase. Tasa global &lt;55% con ≥3 runs → alerta global.
 

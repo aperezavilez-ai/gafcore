@@ -15,6 +15,8 @@ export type FactoryRunListItem = {
   userId: string;
   state: string;
   createdAt: string;
+  profileId: string;
+  profileLabel: string;
   metrics: FactoryRunMetrics;
 };
 
@@ -43,8 +45,28 @@ export type FactoryAdminDashboard = {
   phaseAggregates: FactoryPhaseAggregate[];
   phaseAlerts: FactoryPhaseAlert[];
   globalAlert: string | null;
+  profileFilter: string | null;
   recentRuns: FactoryRunListItem[];
 };
+
+function resolveRunProfile(
+  metrics: FactoryRunMetrics,
+  payload: Record<string, unknown> | null,
+): { profileId: string; profileLabel: string } {
+  if (metrics.factoryProfileId) {
+    return {
+      profileId: metrics.factoryProfileId,
+      profileLabel: metrics.factoryProfileLabel ?? metrics.factoryProfileId,
+    };
+  }
+  const id =
+    typeof payload?.factoryProfileId === "string" ? payload.factoryProfileId : "unknown";
+  const label =
+    typeof payload?.factoryProfileLabel === "string"
+      ? payload.factoryProfileLabel
+      : id;
+  return { profileId: id, profileLabel: label };
+}
 
 function isFactoryMetrics(v: unknown): v is FactoryRunMetrics {
   if (!v || typeof v !== "object") return false;
@@ -52,7 +74,14 @@ function isFactoryMetrics(v: unknown): v is FactoryRunMetrics {
   return m.version === 1 && Array.isArray(m.phases);
 }
 
-export async function loadFactoryAdminDashboard(limit = 40): Promise<FactoryAdminDashboard> {
+export async function loadFactoryAdminDashboard(
+  limit = 40,
+  profileFilter?: string | null,
+): Promise<FactoryAdminDashboard> {
+  const activeFilter =
+    profileFilter && profileFilter !== "all" && profileFilter.length > 0
+      ? profileFilter
+      : null;
   const { data, error } = await supabaseAdmin
     .from("gafcore_pipeline_runs")
     .select("id, project_id, user_id, state, created_at, payload_json")
@@ -61,7 +90,7 @@ export async function loadFactoryAdminDashboard(limit = 40): Promise<FactoryAdmi
 
   if (error) {
     console.error("[factory-admin] load:", error);
-    return emptyDashboard();
+    return emptyDashboard(activeFilter);
   }
 
   const recentRuns: FactoryRunListItem[] = [];
@@ -69,12 +98,16 @@ export async function loadFactoryAdminDashboard(limit = 40): Promise<FactoryAdmi
     const payload = row.payload_json as Record<string, unknown> | null;
     const raw = payload?.factoryMetrics;
     if (!isFactoryMetrics(raw)) continue;
+    const { profileId, profileLabel } = resolveRunProfile(raw, payload);
+    if (activeFilter && profileId !== activeFilter) continue;
     recentRuns.push({
       pipelineRunId: row.id as string,
       projectId: row.project_id as string,
       userId: row.user_id as string,
       state: row.state as string,
       createdAt: row.created_at as string,
+      profileId,
+      profileLabel,
       metrics: raw,
     });
     if (recentRuns.length >= limit) break;
@@ -149,11 +182,12 @@ export async function loadFactoryAdminDashboard(limit = 40): Promise<FactoryAdmi
     phaseAggregates,
     phaseAlerts,
     globalAlert,
+    profileFilter: activeFilter,
     recentRuns,
   };
 }
 
-function emptyDashboard(): FactoryAdminDashboard {
+function emptyDashboard(profileFilter: string | null = null): FactoryAdminDashboard {
   return {
     totalRuns: 0,
     successRuns: 0,
@@ -165,6 +199,7 @@ function emptyDashboard(): FactoryAdminDashboard {
     phaseAggregates: [],
     phaseAlerts: [],
     globalAlert: null,
+    profileFilter,
     recentRuns: [],
   };
 }

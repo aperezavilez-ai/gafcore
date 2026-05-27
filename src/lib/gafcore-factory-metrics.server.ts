@@ -16,6 +16,8 @@ export type FactoryRunMetrics = {
   startedAt: string;
   completedAt: string;
   success: boolean;
+  factoryProfileId?: string;
+  factoryProfileLabel?: string;
   validationScore?: number;
   buildSmokeOk?: boolean;
   deployOk?: boolean;
