@@ -31,6 +31,7 @@
     "gafcore:smoke-brand-wizard": "npx tsx scripts/smoke-gafcore-brand.mjs",
     "gafcore:smoke-critique": "npx tsx scripts/smoke-gafcore-critique.mjs",
     "gafcore:smoke-json-loose": "npx tsx scripts/smoke-gafcore-json-loose.mjs",
+    "gafcore:smoke-factory": "npx tsx scripts/smoke-gafcore-factory.mjs",
     "gafcore:smoke-project-import": "node scripts/smoke-gafcore-extra.mjs import",
     "gafcore:smoke-marketplace-workflow": "node scripts/smoke-gafcore-extra.mjs workflow",
     "gafcore:test-review-webhook": "npx tsx scripts/test-gafcore-review-webhook.ts",

@@ -1,64 +1,74 @@
-# Modo Fábrica GafCore (v1)
+# Modo Fábrica GafCore (v1 + Fase B/C)
 
-Flujo automatizado: **idea → plan multiagente → código → validación → (opcional) mejora de diseño**.
+Flujo automatizado: **idea → plan → código → validación → build smoke → diseño → (opcional) deploy**.
 
 ## Activación
 
-1. IDE → panel de chat → menú **+** → **Modo Fábrica** → ON.
-2. Escribe tu idea y pulsa **Construir** (modo build).
+1. IDE → menú **+** → **Modo Fábrica** → ON.
+2. (Opcional) **Fábrica → Publicar al terminar** → ON (requiere GitHub conectado en servidor).
+3. Escribe tu idea y pulsa **Construir**.
 
-Al activar Fábrica se enciende multiagente y se desactiva ejecución en 2º plano (todo en una sola petición).
+## Fases
+
+| Fase | Qué hace |
+|------|----------|
+| Plan | Planner multiagente + pipeline `interpret` |
+| Generar | Workflow en olas (máx. 12) |
+| Validar | `finalizePipelineValidation` + autofix |
+| Build smoke | Transpile TS/JS + exige `App.tsx` |
+| Diseño | Crítica automática si score &lt; 80 |
+| Deploy | Solo si **Publicar al terminar** ON y gate OK |
 
 ## API
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/api/gafcore/factory/run` | Ejecuta el flujo completo |
-| POST | `/api/gafcore/factory/status` | Estado de `pipelineRunId` / `workflowRunId` |
+| Método | Ruta |
+|--------|------|
+| POST | `/api/gafcore/factory/run` |
+| POST | `/api/gafcore/factory/status` |
 
 Body `run`:
 
 ```json
 {
   "projectId": "uuid",
-  "instruction": "Crea una landing para…",
-  "files": [{ "name": "App.tsx", "content": "…" }],
-  "runDesignCritique": true
+  "instruction": "Landing SaaS con hero y pricing",
+  "files": [{ "name": "App.tsx", "content": "..." }],
+  "runDesignCritique": true,
+  "autoDeploy": false
 }
 ```
 
-Server function equivalente: `runGafcoreFactory` en `src/lib/gafcore-factory.functions.ts`.
+Server fn: `runGafcoreFactory` · `getGafcoreFactoryStatus`.
 
-## Fases internas
+## Métricas (Fase C)
 
-1. **Pipeline** — `interpret` (intención + plantilla sugerida).
-2. **Workflow** — planner + olas paralelas (máx. 12).
-3. **Validación** — `finalizePipelineValidation` + autofix.
-4. **Crítica de diseño** — si score &lt; 80 y validación OK (1 crédito extra).
-5. **Cliente** — si hay `followupInstruction`, un pase extra de generación en el IDE.
+Cada run guarda `factoryMetrics` en `gafcore_pipeline_runs.payload_json`:
+
+- `phases[]`: planificación, generating, validating, build_smoke, design_critique, deploy
+- `validationScore`, `buildSmokeOk`, `deployOk`, `deployHost`
+
+Consulta en Supabase o vía `getGafcoreFactoryStatus` + `pipeline.payload_json`.
+
+## Deploy automático
+
+- Usa `publishProjectOnServer` (mismo gate que **Publicar** manual: `GAFCORE_DEPLOY_VALIDATION_GATE`).
+- Requiere token GitHub guardado en servidor (Publicar → Conectar).
+- Si falla el gate o GitHub, el run devuelve `deploy_failed` con mensaje.
 
 ## Requisitos
 
-- Supabase: migraciones workflow (`npm run gafcore:migrate-workflow`).
-- IA: `OPENROUTER_API_KEY` o `OPENAI_API_KEY`.
-- Vercel: timeout suficiente (Pro recomendado; runs largos).
+- Migraciones workflow: `npm run gafcore:migrate-workflow`
+- IA configurada (`OPENROUTER_API_KEY` / `OPENAI_API_KEY`)
+- Vercel Pro recomendado (runs largos)
 
-## Límites v1
+## Smoke
 
-- Sin deploy automático (Fase B).
-- Sin E2E Playwright del proyecto generado.
-- Rate limit: bucket `gafcore_factory_run` (8 req/min por usuario).
-- Proyectos muy grandes o prompts enormes pueden agotar tiempo → dividir en fases.
+```bash
+npm run gafcore:smoke-factory
+```
 
-## Variables
+## Límites
 
-| Variable | Efecto |
-|----------|--------|
-| `GAFCORE_DEPLOY_VALIDATION_GATE` | Solo afecta **Publicar**, no la fábrica |
-
-## Smoke manual
-
-1. Proyecto nuevo → Modo Fábrica ON → prompt corto: «Landing SaaS con hero y pricing».
-2. Esperar barra de estado «Fábrica: listo…».
-3. Preview sin error React #31.
-4. Revisar historial workflow en ajustes del proyecto.
+- Rate limit: `gafcore_factory_run` (8/min)
+- Sin E2E Playwright del sitio desplegado (futuro)
+- Proyectos muy grandes: dividir en varios prompts

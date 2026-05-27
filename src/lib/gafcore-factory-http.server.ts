@@ -23,9 +23,11 @@ const fileSchema = z.object({
 
 const runBodySchema = z.object({
   projectId: z.string().uuid(),
+  projectName: z.string().min(1).max(200).optional(),
   instruction: z.string().min(1).max(8000),
   files: z.array(fileSchema).max(80),
   runDesignCritique: z.boolean().optional(),
+  autoDeploy: z.boolean().optional(),
 });
 
 const statusBodySchema = z.object({
@@ -66,9 +68,11 @@ export async function handleGafcoreFactoryRunPost(request: Request): Promise<Res
     sb: supabaseAdmin,
     userId,
     projectId: parsed.data.projectId,
+    projectName: parsed.data.projectName,
     instruction: parsed.data.instruction,
     files: parsed.data.files,
     runDesignCritique: parsed.data.runDesignCritique,
+    autoDeploy: parsed.data.autoDeploy,
   });
 
   return jsonResponse(result, result.ok ? 200 : 422);

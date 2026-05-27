@@ -1591,6 +1591,7 @@ export function GafCoreIDE() {
                 files={files}
                 setFiles={setFiles}
                 projectId={currentProjectId}
+                projectName={projectName}
                 onCodeGenerated={() => {
                   setView("preview");
                   setPreviewKey((k) => k + 1);
@@ -1701,6 +1702,7 @@ export function GafCoreIDE() {
                     files={files}
                     setFiles={setFiles}
                     projectId={currentProjectId}
+                    projectName={projectName}
                     onCodeGenerated={() => {
                       setView("preview");
                       setPreviewKey((k) => k + 1);

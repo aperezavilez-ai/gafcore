@@ -20,6 +20,8 @@ export type GafcoreBuildPipelineStep = (typeof GAFCORE_BUILD_PIPELINE_STEPS)[num
 
 export const GAFCORE_EXTENDED_PIPELINE_STEPS = [
   ...GAFCORE_BUILD_PIPELINE_STEPS,
+  "build_smoke",
+  "design_critique",
   "document",
   "deploy",
 ] as const;

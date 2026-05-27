@@ -13,9 +13,11 @@ const fileSchema = z.object({
 
 const runSchema = z.object({
   projectId: z.string().uuid(),
+  projectName: z.string().min(1).max(200).optional(),
   instruction: z.string().min(1).max(8000),
   files: z.array(fileSchema).max(80),
   runDesignCritique: z.boolean().optional(),
+  autoDeploy: z.boolean().optional(),
 });
 
 /** Ejecuta el flujo completo Modo Fábrica (plan → workflow → validación → crítica). */
@@ -30,9 +32,11 @@ export const runGafcoreFactory = createServerFn({ method: "POST" })
       sb,
       userId,
       projectId: data.projectId,
+      projectName: data.projectName,
       instruction: data.instruction,
       files: data.files,
       runDesignCritique: data.runDesignCritique,
+      autoDeploy: data.autoDeploy,
     });
 
     return result;
@@ -73,6 +77,12 @@ export const getGafcoreFactoryStatus = createServerFn({ method: "POST" })
             state: pipeline.state,
             current_step: pipeline.current_step,
             events: pipeline.events_json,
+            factoryMetrics:
+              typeof pipeline.payload_json === "object" &&
+              pipeline.payload_json &&
+              !Array.isArray(pipeline.payload_json)
+                ? (pipeline.payload_json as Record<string, unknown>).factoryMetrics
+                : undefined,
           }
         : null,
       workflow: workflow

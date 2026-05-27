@@ -1,5 +1,5 @@
 /**
- * Modo Fábrica GafCore v1 — idea → plan → código → validación → (opcional) mejora de diseño.
+ * Modo Fábrica GafCore — idea → plan → código → validación → build smoke → diseño → (opcional) deploy.
  */
 export const GAFCORE_FACTORY_CRITIQUE_THRESHOLD = 80;
 export const GAFCORE_FACTORY_MAX_WAVES = 12;
@@ -8,8 +8,10 @@ export const GAFCORE_FACTORY_PHASES = [
   "planning",
   "generating",
   "validating",
+  "build_smoke",
   "design_critique",
   "design_apply",
+  "deploy",
   "completed",
   "failed",
 ] as const;
@@ -17,7 +19,7 @@ export const GAFCORE_FACTORY_PHASES = [
 export type GafcoreFactoryPhase = (typeof GAFCORE_FACTORY_PHASES)[number];
 
 export const FACTORY_BUILD_PREFIX =
-  "[modo fábrica GafCore] Objetivo: entregar software funcional listo para preview. " +
+  "[modo fábrica GafCore] Objetivo: entregar software funcional listo para preview y publicación. " +
   "Plan coherente, UI profesional con tokens semánticos, JSX válido (sin objetos como hijos React), iconos lucide reales. ";
 
 export type FactoryFileOut = {
@@ -42,12 +44,23 @@ export type FactoryRunResult =
         status: string;
         issuesCount: number;
       };
+      buildSmoke: {
+        ok: boolean;
+        message: string;
+        entryFiles: string[];
+      };
       critique?: {
         score: number;
         issuesCount: number;
         followupInstruction?: string;
         skipped?: boolean;
         reason?: string;
+      };
+      deploy?: {
+        attempted: boolean;
+        ok: boolean;
+        message: string;
+        siteHost?: string;
       };
       reply: string;
     }
@@ -59,7 +72,9 @@ export type FactoryRunResult =
         | "plan_failed"
         | "pipeline_failed"
         | "workflow_empty"
-        | "validation_failed";
+        | "validation_failed"
+        | "build_smoke_failed"
+        | "deploy_failed";
       active?: number;
       max?: number;
       message?: string;

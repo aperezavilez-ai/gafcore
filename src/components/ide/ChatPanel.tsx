@@ -22,6 +22,7 @@ import {
   Info,
   GitFork,
   Factory,
+  Globe,
   Plug,
   Image as ImageIcon,
   Folder,
@@ -286,6 +287,7 @@ export function ChatPanel({
   onOpenHistory,
   onOpenConnectors,
   projectId,
+  projectName,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -294,6 +296,7 @@ export function ChatPanel({
   onOpenHistory?: () => void;
   onOpenConnectors?: () => void;
   projectId?: string | null;
+  projectName?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -367,6 +370,14 @@ export function ChatPanel({
     if (typeof window === "undefined") return false;
     try {
       return window.localStorage.getItem("gafcore_factory_mode") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [factoryAutoDeploy, setFactoryAutoDeploy] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("gafcore_factory_auto_deploy") === "1";
     } catch {
       return false;
     }
@@ -1897,6 +1908,8 @@ export function ChatPanel({
           content: f.content,
         })),
         runDesignCritique: true,
+        autoDeploy: factoryAutoDeploy,
+        ...(projectName ? { projectName } : {}),
       },
     });
 
@@ -1912,7 +1925,11 @@ export function ChatPanel({
         factoryRes.message ??
         (factoryRes.error === "plan_failed"
           ? "No se pudo planificar el proyecto."
-          : "La fábrica no pudo completar el build.");
+          : factoryRes.error === "build_smoke_failed"
+            ? "Build smoke falló: revisa App.tsx y errores de sintaxis."
+            : factoryRes.error === "deploy_failed"
+              ? "Deploy bloqueado o fallido."
+              : "La fábrica no pudo completar el build.");
       toast.error(msg, { duration: 9000 });
       throw new Error(factoryRes.error ?? "FACTORY_FAILED");
     }
@@ -1927,11 +1944,19 @@ export function ChatPanel({
 
     setWorkflowPlanSummary(factoryRes.planSummary);
     setWorkflowState(factoryRes.workflowState);
+    const deployNote = factoryRes.deploy?.ok
+      ? " · publicado"
+      : factoryRes.deploy?.attempted
+        ? " · deploy pendiente"
+        : "";
     setPipelineStatus(
       factoryRes.phase === "completed"
-        ? `Fábrica: listo · validación ${factoryRes.validation.overallScore}/100`
+        ? `Fábrica: listo · ${factoryRes.validation.overallScore}/100 · ${factoryRes.buildSmoke.message}${deployNote}`
         : `Fábrica: ${factoryRes.workflowState}`,
     );
+    if (factoryRes.deploy?.ok && factoryRes.deploy.siteHost) {
+      toast.success(`Sitio publicado: ${factoryRes.deploy.siteHost}`, { duration: 8000 });
+    }
 
     appendMessageDeduped("ai", factoryRes.reply);
     scrollChatToBottomSoon("auto");
@@ -2946,6 +2971,41 @@ export function ChatPanel({
                     <Factory className="mr-2 h-4 w-4" />
                     <span className="flex-1">Modo Fábrica</span>
                     {factoryMode ? (
+                      <span className="text-[10px] font-medium text-primary">ON</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">OFF</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!factoryMode}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (!factoryMode) {
+                        toast.message("Activa Modo Fábrica primero.");
+                        return;
+                      }
+                      setFactoryAutoDeploy((v) => {
+                        const next = !v;
+                        try {
+                          window.localStorage.setItem(
+                            "gafcore_factory_auto_deploy",
+                            next ? "1" : "0",
+                          );
+                        } catch {
+                          /* */
+                        }
+                        toast.message(
+                          next
+                            ? "Al terminar la fábrica se publicará si pasa el gate de calidad."
+                            : "Publicar automático desactivado (usa Publicar manual).",
+                        );
+                        return next;
+                      });
+                    }}
+                  >
+                    <Globe className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Fábrica → Publicar al terminar</span>
+                    {factoryAutoDeploy ? (
                       <span className="text-[10px] font-medium text-primary">ON</span>
                     ) : (
                       <span className="text-[10px] text-muted-foreground">OFF</span>

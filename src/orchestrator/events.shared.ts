@@ -22,6 +22,8 @@ export function pipelineEventMessage(
     validate: "Validando proyecto",
     retry: "Reintentando corrección",
     memory: "Guardando memoria IA",
+    build_smoke: "Comprobando compilación",
+    design_critique: "Auditoría de diseño",
     document: "Generando documentación",
     deploy: "Preparando deploy",
   };
