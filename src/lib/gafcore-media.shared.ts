@@ -538,7 +538,6 @@ function safeJsxChildExpr(name: string): string {
     "{(" +
     `(${name} == null) ? null :` +
     ` (typeof ${name} === 'string' || typeof ${name} === 'number' || typeof ${name} === 'boolean') ? ${name} :` +
-    ` (${name}.$$typeof) ? ${name} :` +
     ` Array.isArray(${name}) ? null :` +
     ` (typeof ${name} === 'object' ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? '') : null)` +
     ")}"
@@ -569,6 +568,12 @@ function fixObjectAsJsxChild(source: string): string {
         ` ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? '') : ${name})`;
       return `.map((${name}) => ${safe})`;
     },
+  );
+
+  // Corrige `{ {...obj} }` usado por error como child JSX.
+  out = out.replace(
+    /\{\s*\{\s*\.\.\.\s*(\w+)\s*\}\s*\}/g,
+    (_m, name: string) => safeJsxChildExpr(name),
   );
 
   // Marca arrays literales de objetos: `const items = [{ ... }]`
