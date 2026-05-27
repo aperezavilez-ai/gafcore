@@ -283,7 +283,7 @@ function GafCoreLanding() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 gc-hero-glow pointer-events-none" />
-        <div className="relative mx-auto max-w-5xl px-6 pt-20 pb-10 text-center">
+        <div className="relative mx-auto max-w-5xl px-4 pt-16 pb-10 text-center sm:px-6 sm:pt-20">
           <span className="gc-chip mb-6">
             <Sparkles className="h-3.5 w-3.5" /> {t("gc.hero.badge")}
           </span>
@@ -303,12 +303,12 @@ function GafCoreLanding() {
           <p className="mx-auto mt-5 max-w-2xl text-base sm:text-lg gc-muted">
             {t("gc.hero.subtitle")}
           </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="lg" className="gc-cta rounded-full px-7 h-12 text-base font-semibold">
+          <div className="mx-auto mt-8 flex w-full max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
+            <Button asChild size="lg" className="gc-cta h-12 w-full rounded-full px-7 text-base font-semibold sm:w-auto">
               <a href="#plan-free">{t("gc.hero.cta")}</a>
             </Button>
           </div>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
             <span className="gc-chip"><Check className="h-3 w-3" /> {t("gc.hero.trust0")}</span>
             <span className="gc-chip"><Check className="h-3 w-3" /> {t("gc.hero.trust1")}</span>
             <span className="gc-chip"><Check className="h-3 w-3" /> {t("gc.hero.trust2")}</span>
@@ -319,12 +319,12 @@ function GafCoreLanding() {
 
       {/* Plans — justo tras el hero; ancla #plan-free para CTA "Comenzar gratis" */}
       <section id="planes" className="scroll-mt-24 pb-20 pt-2" style={{ background: "var(--gc-bg-soft)" }}>
-        <div className="mx-auto max-w-6xl px-6">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mb-10 text-center">
             <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: "var(--gc-fg)" }}>{t("gc.plans.title")}</h2>
             <p className="mt-3 gc-muted">{t("gc.plans.subtitle")}</p>
           </div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
             {GAFCORE_PLANS_UI.map((plan) => {
               const Icon = plan.icon;
               const highlight = plan.highlight;
@@ -333,7 +333,7 @@ function GafCoreLanding() {
                 <div
                   key={plan.id}
                   id={plan.id === "free" ? "plan-free" : undefined}
-                  className={`gc-card gc-card--dim relative flex scroll-mt-28 flex-col p-6 sm:p-6 ${highlight ? "gc-card--popular" : ""}`}
+                  className={`gc-card gc-card--dim relative flex min-w-0 scroll-mt-28 flex-col p-5 sm:p-6 ${highlight ? "gc-card--popular" : ""}`}
                 >
                   {highlight && (
                     <span
@@ -414,8 +414,8 @@ function GafCoreLanding() {
       </section>
 
       {/* Features — cuadrícula responsive, sin columna única tipo lista */}
-      <section id="producto" className="relative scroll-mt-24 py-20">
-        <div className="mx-auto max-w-6xl px-6">
+      <section id="producto" className="relative scroll-mt-24 py-16 sm:py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mb-12 text-center">
             <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: "var(--gc-fg)" }}>
               {t("gc.features.title")}

@@ -78,3 +78,8 @@ export function resolveHeroImageFromInstruction(text: string): HeroImageTheme {
   // Default: NO devolvemos foto. El hero debe ser un mockup en JSX (la IA lo construye).
   return { seed: "", url: "", descriptionEs: "", matched: false };
 }
+
+/** true cuando el hero debe ser mockup JSX (no inyectar fotos stock). */
+export function prefersProductMockupHero(text: string): boolean {
+  return !resolveHeroImageFromInstruction(text).matched;
+}

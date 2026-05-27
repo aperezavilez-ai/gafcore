@@ -1,5 +1,8 @@
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
-import { resolveHeroImageFromInstruction } from "@/lib/gafcore-hero-image.shared";
+import {
+  prefersProductMockupHero,
+  resolveHeroImageFromInstruction,
+} from "@/lib/gafcore-hero-image.shared";
 
 /** Mapa nombre de archivo → data URL o https para resolver rutas en preview. */
 export function buildAssetUrlMap(files: ProjFile[]): Record<string, string> {
@@ -147,6 +150,14 @@ export function applyPicsumFallbacksInSource(
   instruction = "",
   assetMap: Record<string, string> = {},
 ): string {
+  // SaaS / apps digitales: no inyectar fotos stock; el hero debe ser mockup JSX.
+  if (
+    prefersProductMockupHero(instruction) &&
+    !isPaintThemedInstruction(`${instruction}\n${source}`)
+  ) {
+    return source;
+  }
+
   const resolveOrPicsum = (src: string, alt: string, hero = false): string => {
     const s = src.trim();
     if (assetMap && Object.keys(assetMap).length > 0) {
@@ -188,7 +199,14 @@ export function applyPicsumFallbacksInSource(
 
 /** Reparación completa para preview / post-proceso. */
 export function applyAllMediaRepairs(source: string, contextHint = ""): string {
-  return applyPicsumFallbacksInSource(repairCommonJsxSyntaxErrors(source), contextHint);
+  const repaired = repairCommonJsxSyntaxErrors(source);
+  if (
+    prefersProductMockupHero(contextHint) &&
+    !isPaintThemedInstruction(`${contextHint}\n${repaired}`)
+  ) {
+    return repaired;
+  }
+  return applyPicsumFallbacksInSource(repaired, contextHint);
 }
 
 /** @deprecated Usa applyPicsumFallbacksInSource */

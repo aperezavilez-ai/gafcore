@@ -130,6 +130,33 @@ export function runStaticHeuristics(files: ProjFileLike[]): DesignIssue[] {
   }
 
   for (const f of allCode) {
+    if (!/\.(tsx?|jsx?|html?)$/i.test(f.name)) continue;
+    const hasStockPhoto = /picsum\.photos|images\.unsplash\.com/i.test(f.content);
+    const isDigitalProduct =
+      /saas|dashboard|app\b|software|plataforma|productividad|notas|notes|landing|startup|fintech|crm|ia\b|inteligencia artificial/i.test(
+        f.content,
+      );
+    const isPhotoVertical =
+      /viaje|travel|restaurante|food|moda|fashion|inmobiliaria|real\s*estate|pintura|paint|playa|montañ/i.test(
+        f.content,
+      );
+    if (hasStockPhoto && isDigitalProduct && !isPhotoVertical) {
+      issues.push({
+        id: `stock-hero-${f.name}`,
+        category: "imagery",
+        severity: "blocker",
+        title: `Foto stock genérica en producto digital (${f.name})`,
+        detail:
+          "Picsum/Unsplash de paisaje o stock aleatorio en SaaS/apps destruye la propuesta de valor. Las landings premium usan mockup del producto en JSX.",
+        suggestion:
+          "Reemplaza el hero por un mockup en JSX/Tailwind (browser frame con UI real, orbs blur, gradientes). Elimina <img> o background-image con picsum/unsplash del hero.",
+        file: f.name,
+      });
+      break;
+    }
+  }
+
+  for (const f of allCode) {
     if (!/\.(tsx?|jsx?)$/i.test(f.name)) continue;
     if (/onClick=\{\s*\(\s*\)\s*=>\s*\{\s*\}\s*\}/.test(f.content)) {
       issues.push({
@@ -177,7 +204,7 @@ Tu salida DEBE ser JSON puro:
       "file": "ruta/del/archivo.tsx (opcional)"
     }
   ],
-  "followupInstruction": "Instrucción accionable lista para que el cerebro GafCore aplique los fixes en el próximo turno. Debe empezar por '[modo profundo] Aplica estas mejoras de diseño:' y listar 5-10 mejoras concretas con su archivo."
+  "followupInstruction": "Instrucción accionable lista para que el cerebro GafCore aplique los fixes en el próximo turno. Debe empezar por '[modo profundo] Aplica estas mejoras de diseño:' y listar 5-10 mejoras concretas con su archivo. Si hay foto stock en hero de SaaS, prioriza mockup JSX premium (orbs, gradientes, browser frame) y elimina picsum/unsplash del hero."
 }
 
 Reglas:
