@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -48,6 +49,8 @@ import { useServerFn } from "@tanstack/react-start";
 import type { ChatMsg } from "@/lib/openaiChat";
 import { gafcoreChat } from "@/lib/gafcore-chat.functions";
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
+import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
+import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import {
   validateGafcoreSources,
@@ -57,6 +60,7 @@ import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import {
   patchProjectFilesVisually,
   repairCommonJsxSyntaxErrors,
+  repairGeneratedSourceFiles,
   repairGafcoreProjectMedia,
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
@@ -210,20 +214,6 @@ function describeGafcoreStreamFailure(message: string): string | null {
   }
   return null;
 }
-
-const SUGGESTIONS = [
-  "Crea una landing moderna con hero",
-  "Agrega un formulario de contacto",
-  "Diseña un dashboard con tarjetas",
-  "Convierte esto a modo oscuro",
-];
-
-const FOLLOWUPS = [
-  "Persistir tamaño del panel",
-  "Hacer responsive el layout",
-  "Agregar modo oscuro",
-  "Mejorar el diseño",
-];
 
 const CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 /** Data URL en `project_files`; debe caber en el presupuesto de contexto del modelo (truncado por archivo ~14k). */
@@ -1118,11 +1108,13 @@ export function ChatPanel({
       if (looksLikeJsxGlue || looksLikeObjectChild) {
         let repairedLocally = false;
         setFiles((current) => {
-          const next = current.map((f) => {
-            if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
-            const content = repairCommonJsxSyntaxErrors(f.content);
-            return content !== f.content ? { ...f, content } : f;
-          });
+          const next = sanitizeProjectJsxFiles(
+            current.map((f) => {
+              if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
+              const content = repairCommonJsxSyntaxErrors(f.content);
+              return content !== f.content ? { ...f, content } : f;
+            }),
+          );
           const changed = next.some((f, i) => f.content !== current[i]?.content);
           if (changed) {
             repairedLocally = true;
@@ -1133,6 +1125,7 @@ export function ChatPanel({
                   : "Sintaxis JSX reparada automáticamente",
               );
               setLastError(null);
+              onCodeGenerated?.();
             });
             return next;
           }
@@ -1202,7 +1195,12 @@ export function ChatPanel({
             fixInstruction,
           );
           if (Array.isArray(result.files) && result.files.length > 0) {
-            await applyGenerationFiles(files, result.files, fixInstruction, fixInstruction, {
+            await applyGenerationFiles(
+              files,
+              repairGeneratedSourceFiles(result.files),
+              fixInstruction,
+              fixInstruction,
+              {
               runFunctionalAudit: false,
               snapshotLabel: `auto-fix preview: ${msg.slice(0, 40)}`,
             });
@@ -1228,7 +1226,7 @@ export function ChatPanel({
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [projectId, files]);
+  }, [projectId, files, onCodeGenerated]);
 
   const callGafcoreChat = useServerFn(gafcoreChat);
   const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);
@@ -1418,7 +1416,7 @@ export function ChatPanel({
       }
     }
     let outFiles = repairGafcoreProjectMedia(
-      generated,
+      repairGeneratedSourceFiles(generated),
       baseFiles.map((f) => ({ name: f.name, content: f.content, language: f.language })),
       userInstruction,
     );
@@ -2053,13 +2051,13 @@ export function ChatPanel({
       );
     }
 
-    let patchFiles = factoryRes.files.map((p) => ({
-      name: p.name,
-      language: p.language,
-      content: /\.(jsx|tsx|js|ts)$/i.test(p.name)
-        ? repairCommonJsxSyntaxErrors(p.content)
-        : p.content,
-    }));
+    let patchFiles = repairGeneratedSourceFiles(
+      factoryRes.files.map((p) => ({
+        name: p.name,
+        language: p.language,
+        content: p.content,
+      })),
+    );
 
     if (patchFiles.length > 0 && effectiveBuild) {
       const { merged } = await applyGenerationFiles(files, patchFiles, instruction, userLabel, {
@@ -2476,7 +2474,7 @@ export function ChatPanel({
       );
       setStreamChars(null);
 
-      let filesToApply = result.files ?? [];
+      let filesToApply = repairGeneratedSourceFiles(result.files ?? []);
       if (effectiveBuild && filesToApply.length === 0) {
         const localPatch = patchProjectFilesVisually(
           files.map((f) => ({ name: f.name, language: f.language, content: f.content })),
@@ -2581,9 +2579,9 @@ export function ChatPanel({
               }
             }
           }
-        } else if (issues.length > 0) {
+        } else if (issues.some((i) => i.severity === "error")) {
           toast.message("Revisa validación del proyecto", {
-            description: issues[0]?.message,
+            description: issues.find((i) => i.severity === "error")?.message,
             duration: 8000,
           });
         }
@@ -2644,6 +2642,34 @@ export function ChatPanel({
   };
 
   const empty = messages.length === 0;
+
+  const nextSteps = useMemo(
+    () =>
+      getGafcoreChatNextSteps({
+        messages,
+        files: files.map((f) => ({ name: f.name, content: f.content })),
+        mode,
+        factoryMode,
+        visualEditOn,
+        multiAgentMode,
+        factoryAutoDeploy,
+        lastError,
+        pipelineStatus,
+        validationLabel,
+      }),
+    [
+      messages,
+      files,
+      mode,
+      factoryMode,
+      visualEditOn,
+      multiAgentMode,
+      factoryAutoDeploy,
+      lastError,
+      pipelineStatus,
+      validationLabel,
+    ],
+  );
 
   const openPinConvention = (content: string) => {
     setPinConventionBody(content);
@@ -2773,26 +2799,15 @@ export function ChatPanel({
               <h2 className="text-[15px] font-semibold tracking-tight">
                 ¿Qué quieres construir hoy?
               </h2>
-              <p className="mt-1 max-w-[260px] text-[12.5px] text-foreground/80">
-                Describe tu idea y la IA generará el código por ti.
+              <p className="mt-1 max-w-[280px] text-[12.5px] text-foreground/80">
+                Describe tu idea o elige una sugerencia debajo del chat.
               </p>
-              <div className="mt-6 flex w-full max-w-full flex-col gap-2 sm:max-w-[320px]">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => send(s)}
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-left text-[12.5px] text-foreground transition hover:border-primary/40 hover:bg-muted"
-                  >
-                    {s}
-                  </button>
-                ))}
-                <Link
-                  to="/gafcore/marketplace"
-                  className="rounded-lg border border-primary/50 bg-primary/10 px-3 py-2 text-left text-[12.5px] font-medium text-primary transition hover:bg-primary/15"
-                >
-                  Ver plantillas en Marketplace
-                </Link>
-              </div>
+              <Link
+                to="/gafcore/marketplace"
+                className="mt-6 inline-flex rounded-lg border border-primary/50 bg-primary/10 px-3 py-2 text-[12.5px] font-medium text-primary transition hover:bg-primary/15"
+              >
+                Ver plantillas en Marketplace
+              </Link>
             </div>
           ) : (
             <div className="space-y-5">
@@ -2903,7 +2918,19 @@ export function ChatPanel({
               <div className="mt-2 flex gap-2">
                 <button
                   onClick={() => {
-                    send(`Arregla este error de build:\n\n\`\`\`\n${lastError}\n\`\`\``);
+                    setFiles((current) =>
+                      sanitizeProjectJsxFiles(
+                        current.map((f) =>
+                          /\.(jsx|tsx|js|ts)$/i.test(f.name)
+                            ? { ...f, content: repairCommonJsxSyntaxErrors(f.content) }
+                            : f,
+                        ),
+                      ),
+                    );
+                    onCodeGenerated?.();
+                    send(
+                      `Arregla este error de runtime (React #31 u otro). NUNCA renderices objetos en JSX — usa .title/.label o JSX dentro del .map:\n\n\`\`\`\n${lastError}\n\`\`\``,
+                    );
                     setLastError(null);
                   }}
                   className="rounded-md bg-destructive px-2.5 py-1 text-[11px] font-semibold text-destructive-foreground hover:opacity-90"
@@ -2920,6 +2947,20 @@ export function ChatPanel({
             )}
           </div>
         )}
+        <ChatNextStepSuggestions
+          steps={nextSteps}
+          disabled={loading}
+          onSelect={(prompt) => {
+            if (loading) return;
+            if (mode === "build") {
+              void send(prompt);
+              return;
+            }
+            setInput((v) => (v.trim() ? `${v.trim()}\n\n${prompt}` : prompt));
+            taRef.current?.focus();
+            toast.message("Sugerencia añadida — pulsa Enter para enviar");
+          }}
+        />
         {pendingComposerImages.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-border bg-muted/30 px-2 py-2">
             {pendingComposerImages.map((img) => (

@@ -18,6 +18,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { toast } from "sonner";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
+import { GafcoreInstallApp } from "@/components/GafcoreInstallApp";
 
 type ThemeKey = "black" | "white" | "blue" | "gray";
 const THEME_KEY = "gafcore-theme";
@@ -317,6 +318,10 @@ function GafCoreLanding() {
         </div>
       </section>
 
+      <section id="descargar-app" className="scroll-mt-24 mx-auto max-w-5xl px-4 pb-4 sm:px-6">
+        <GafcoreInstallApp />
+      </section>
+
       {/* Plans — justo tras el hero; ancla #plan-free para CTA "Comenzar gratis" */}
       <section id="planes" className="scroll-mt-24 pb-20 pt-2" style={{ background: "var(--gc-bg-soft)" }}>
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -515,6 +520,11 @@ function GafCoreLanding() {
                   <li>
                     <a href="#planes" className="transition-opacity hover:opacity-80">
                       {t("gc.footer.pricing")}
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#descargar-app" className="transition-opacity hover:opacity-80">
+                      Descargar app
                     </a>
                   </li>
                 </ul>

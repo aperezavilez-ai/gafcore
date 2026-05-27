@@ -47,7 +47,12 @@
     "gafcore:stripe-bootstrap:live": "node scripts/bootstrap-stripe-gafcore.mjs --live",
     "gafcore:vercel-env": "node scripts/push-vercel-env-once.mjs",
     "gafcore:setup-production": "node scripts/gafcore-setup-production.mjs",
-    "gafcore:finish": "node scripts/gafcore-finish.mjs"
+    "gafcore:finish": "node scripts/gafcore-finish.mjs",
+    "gafcore:mobile:install": "npm install --prefix apps/gafcore-mobile",
+    "gafcore:mobile:init": "npm run gafcore:mobile:install && npm run cap:init --prefix apps/gafcore-mobile",
+    "gafcore:mobile:sync": "npm run cap:sync --prefix apps/gafcore-mobile",
+    "gafcore:mobile:android": "npm run cap:android --prefix apps/gafcore-mobile",
+    "gafcore:mobile:ios": "npm run cap:ios --prefix apps/gafcore-mobile"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

@@ -7,10 +7,12 @@ import {
   GAFCORE_FAVICON_PATH,
   GAFCORE_FAVICON_SVG_PATH,
   gafcoreHeadIconLinks,
+  gafcorePwaMetaTags,
 } from "@/lib/site-icons.shared";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
+import { GafcorePwaRegister } from "@/components/GafcorePwaRegister";
 import { installServerFnAuth } from "@/lib/server-fn-auth";
 
 if (typeof window !== "undefined") {
@@ -67,6 +69,7 @@ export const Route = createRootRoute({
       { property: "og:image", content: `${site}/og-image.png` },
       { name: "twitter:image", content: `${site}/og-image.png` },
       { name: "theme-color", content: "#6366f1" },
+      ...gafcorePwaMetaTags(),
     ],
     links: [{ rel: "canonical", href: site }, ...gafcoreHeadIconLinks()],
     };
@@ -101,6 +104,7 @@ function RootComponent() {
       <MobileViewportGuard />
       <Outlet />
       <ClientOnly>
+        <GafcorePwaRegister />
         <ClientRootWidgets />
       </ClientOnly>
     </I18nProvider>

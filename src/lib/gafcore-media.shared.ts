@@ -538,26 +538,62 @@ function safeJsxChildExpr(name: string): string {
     "{(" +
     `(${name} == null) ? null :` +
     ` (typeof ${name} === 'string' || typeof ${name} === 'number' || typeof ${name} === 'boolean') ? ${name} :` +
+    ` (typeof ${name} === 'object' && ${name} != null && ${name}.$$typeof) ? ${name} :` +
     ` Array.isArray(${name}) ? null :` +
-    ` (typeof ${name} === 'object' ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? '') : null)` +
+    ` (typeof ${name} === 'object' && 'type' in ${name} && 'props' in ${name}` +
+    ` ? (${name}.props?.children ?? ${name}.props?.title ?? ${name}.props?.label ?? '') :` +
+    ` (typeof ${name} === 'object' ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? ${name}.value ?? ${name}.text ?? ${name}.desc ?? '') : null)` +
     ")}"
   );
 }
 
+/** `{feature.icon}` como texto → `<feature.icon />` (componente Lucide en objeto). */
+function fixComponentFieldAsJsxChild(source: string): string {
+  return source.replace(
+    /\{(\w+)\.(icon|Icon)\}(?!\s*[/.\w])/g,
+    (_m, obj: string, prop: string) =>
+      `{typeof ${obj}.${prop} === "function" ? <${obj}.${prop} className="h-5 w-5 shrink-0" aria-hidden /> : null}`,
+  );
+}
+
+/** Parámetros de `.map` renderizados como `{item}` sin `.campo`. */
+function fixAllMapCallbackBareChildren(source: string): string {
+  let out = source;
+  const mapParamRe = /\.map\s*\(\s*(?:\(\s*(\w+)\s*\)|(\w+))\s*=>/g;
+  const params = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = mapParamRe.exec(source))) {
+    const p = m[1] || m[2];
+    if (p) params.add(p);
+  }
+  for (const param of params) {
+    const bareChild = new RegExp(`\\{${param}\\}(?!\\.)`, "g");
+    out = out.replace(bareChild, safeJsxChildExpr(param));
+  }
+  return out;
+}
+
 function fixObjectAsJsxChild(source: string): string {
   const objectVars = new Set<string>();
+  const objectArrayVars = new Set<string>();
   const declRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*([\[{])/g;
   let m: RegExpExecArray | null;
   while ((m = declRe.exec(source))) {
     if (m[2] === "[") {
       const after = source.slice(declRe.lastIndex, declRe.lastIndex + 12);
       if (!/^\s*\{/.test(after)) continue;
+      objectArrayVars.add(m[1]);
     }
     objectVars.add(m[1]);
   }
 
+  const useStateArrayRe =
+    /\[\s*(\w+)\s*,\s*\w+\s*\]\s*=\s*useState\s*(?:<[^>]*>\s*)?\(\s*\[\s*\{/g;
+  while ((m = useStateArrayRe.exec(source))) {
+    objectArrayVars.add(m[1]);
+  }
+
   let out = source;
-  const objectArrayVars = new Set<string>();
 
   // `.map(item => item)` cuando item es objeto → mostrar campo legible, no el objeto entero.
   out = out.replace(
@@ -576,12 +612,7 @@ function fixObjectAsJsxChild(source: string): string {
     (_m, name: string) => safeJsxChildExpr(name),
   );
 
-  // Marca arrays literales de objetos: `const items = [{ ... }]`
-  // para reforzar reparaciones dentro de callbacks JSX.
-  const objectArrayDeclRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*\[\s*\{/g;
-  while ((m = objectArrayDeclRe.exec(source))) {
-    objectArrayVars.add(m[1]);
-  }
+  out = fixAllMapCallbackBareChildren(out);
 
   // Si se mapea un array de objetos y se renderiza `{item}` en JSX,
   // reemplaza por un wrapper seguro para evitar React #31.
@@ -605,17 +636,15 @@ function fixObjectAsJsxChild(source: string): string {
     }
   }
 
-  if (objectVars.size === 0) return out;
-
   for (const name of objectVars) {
     const bareChild = new RegExp(`\\{${name}\\}(?!\\.)`, "g");
     out = out.replace(bareChild, safeJsxChildExpr(name));
   }
 
-  return out;
+  return fixComponentFieldAsJsxChild(out);
 }
 
-export function repairCommonJsxSyntaxErrors(source: string): string {
+function repairCommonJsxSyntaxErrorsPass(source: string): string {
   let out = source.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
   out = out.replace(/\s+(https?:\/\/[^\s"'<>]+)(?=\s+[a-zA-Z_][\w-]*=)/g, " ");
@@ -624,6 +653,27 @@ export function repairCommonJsxSyntaxErrors(source: string): string {
   out = fixEmptyAnchors(out);
   out = fixObjectAsJsxChild(out);
   return out;
+}
+
+export function repairCommonJsxSyntaxErrors(source: string): string {
+  let out = source;
+  for (let pass = 0; pass < 4; pass++) {
+    const next = repairCommonJsxSyntaxErrorsPass(out);
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
+/** Reparación preventiva en archivos recién generados por la IA (antes de merge/preview). */
+export function repairGeneratedSourceFiles<T extends { name: string; content: string }>(
+  files: T[],
+): T[] {
+  return files.map((f) => {
+    if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
+    const content = repairCommonJsxSyntaxErrors(f.content);
+    return content === f.content ? f : { ...f, content };
+  });
 }
 
 /** Repara sintaxis JSX en todos los módulos del proyecto (p. ej. al cargar desde DB). */

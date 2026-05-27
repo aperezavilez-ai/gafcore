@@ -52,13 +52,13 @@ export function auditFunctionalFirst(
     const raw = f.content;
     const code = stripCommentsAndStrings(raw);
 
-    const buttonTags = countMatches(code, /<button\b/gi);
-    const buttonClicks = countMatches(code, /\bonClick\s*=/gi);
-    if (buttonTags > buttonClicks + 1) {
+    const nativeButtons = countMatches(code, /<button\b(?=[\s/>])/g);
+    const nativeWithClick = countMatches(code, /<button\b[^>]*\bonClick\s*=/gi);
+    if (nativeButtons >= 2 && nativeWithClick < nativeButtons - 1) {
       issues.push({
         severity: "warn",
         file: f.name,
-        message: `Hay ~${buttonTags} <button> pero pocos onClick; revisa handlers.`,
+        message: `Hay ${nativeButtons} <button> nativos pero solo ${nativeWithClick} con onClick; revisa handlers.`,
       });
     }
 
