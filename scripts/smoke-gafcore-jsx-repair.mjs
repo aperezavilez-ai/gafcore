@@ -44,4 +44,10 @@ for (const c of cases) {
   }
 }
 
-console.log("smoke-gafcore-jsx-repair: ok", cases.length, "cases");
+const arrayChild = repairCommonJsxSyntaxErrors(`const stats = [{ label: "10k" }];
+export default function App() { return <div>{stats}</div>; }`);
+if (arrayChild.includes("{stats}") && !arrayChild.includes("stats.map")) {
+  throw new Error("array as child should use .map");
+}
+
+console.log("smoke-gafcore-jsx-repair: ok", cases.length + 1, "cases");

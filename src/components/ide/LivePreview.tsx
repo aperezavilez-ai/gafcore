@@ -7,7 +7,9 @@ import {
   repairHtmlMedia,
   applyAllMediaRepairs,
   repairCommonJsxSyntaxErrors,
+  sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
+import { PREVIEW_IFRAME_JSX_GUARD } from "@/lib/preview-iframe-jsx-guard.snippet";
 
 const ESM = "https://esm.sh";
 
@@ -95,7 +97,10 @@ export function LivePreview({ files }: { files: FileItem[] }) {
       .map((f) => f.content)
       .join("\n")
       .slice(0, 4000);
-    const jsFiles = deferredFiles.filter((f) => isJsModule(f.name));
+    const sanitizedFiles = sanitizeProjectJsxFiles(
+      deferredFiles.map((f) => ({ name: f.name, content: f.content })),
+    );
+    const jsFiles = sanitizedFiles.filter((f) => isJsModule(f.name));
     const cssFiles = deferredFiles.filter((f) => isCss(f.name));
 
     // If no JS modules at all → fall back to plain HTML preview
@@ -374,10 +379,17 @@ export function LivePreview({ files }: { files: FileItem[] }) {
       /ReactDOM\\.render\\s*\\(/.test(entryRaw);
 
     const mountSrc = isMain
-      ? \`import "\${entryUrl}";\`
-      : \`
-        import * as Entry from "\${entryUrl}";
+      ? \`
         import React from "react";
+        import * as __gafJsx from "react/jsx-runtime";
+        ${PREVIEW_IFRAME_JSX_GUARD}
+        import "\${entryUrl}";
+      \`
+      : \`
+        import React from "react";
+        import * as __gafJsx from "react/jsx-runtime";
+        ${PREVIEW_IFRAME_JSX_GUARD}
+        import * as Entry from "\${entryUrl}";
         import { createRoot } from "react-dom/client";
         function pickComponent(mod) {
           if (!mod) return null;

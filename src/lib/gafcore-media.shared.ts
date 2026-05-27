@@ -559,16 +559,34 @@ function fixComponentFieldAsJsxChild(source: string): string {
 /** Parámetros de `.map` renderizados como `{item}` sin `.campo`. */
 function fixAllMapCallbackBareChildren(source: string): string {
   let out = source;
-  const mapParamRe = /\.map\s*\(\s*(?:\(\s*(\w+)\s*\)|(\w+))\s*=>/g;
   const params = new Set<string>();
+  const mapParamRe =
+    /\.map\s*\(\s*(?:function\s*)?(?:\(\s*(\w+)\s*\)|(\w+))\s*(?::[^)]*)?\s*=>/g;
   let m: RegExpExecArray | null;
   while ((m = mapParamRe.exec(source))) {
     const p = m[1] || m[2];
     if (p) params.add(p);
   }
+  const mapFnRe = /\.map\s*\(\s*function\s*\(\s*(\w+)\s*\)/g;
+  while ((m = mapFnRe.exec(source))) {
+    params.add(m[1]);
+  }
   for (const param of params) {
     const bareChild = new RegExp(`\\{${param}\\}(?!\\.)`, "g");
     out = out.replace(bareChild, safeJsxChildExpr(param));
+  }
+  return out;
+}
+
+/** `{features}` con array de objetos (sin .map) → filas de texto seguras. */
+function fixObjectArrayRenderedAsChild(source: string, arrayNames: Set<string>): string {
+  let out = source;
+  for (const name of arrayNames) {
+    const whole = new RegExp(`\\{${name}\\}(?!\\s*\\.map)`, "g");
+    out = out.replace(
+      whole,
+      `{${name}.map((__row, __i) => (typeof __row === "object" && __row != null && __row.$$typeof ? __row : (typeof __row === "string" || typeof __row === "number") ? __row : String(__row?.title ?? __row?.label ?? __row?.text ?? __row?.name ?? "")))}`,
+    );
   }
   return out;
 }
@@ -640,6 +658,8 @@ function fixObjectAsJsxChild(source: string): string {
     const bareChild = new RegExp(`\\{${name}\\}(?!\\.)`, "g");
     out = out.replace(bareChild, safeJsxChildExpr(name));
   }
+
+  out = fixObjectArrayRenderedAsChild(out, objectArrayVars);
 
   return fixComponentFieldAsJsxChild(out);
 }

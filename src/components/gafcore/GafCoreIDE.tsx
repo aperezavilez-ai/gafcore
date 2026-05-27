@@ -587,6 +587,22 @@ export function GafCoreIDE() {
   }, [loaded]);
 
   useEffect(() => {
+    const onRepairJsx = () => {
+      setFiles((prev) => {
+        const next = sanitizeProjectJsxFiles(prev);
+        const changed = next.some((f, i) => f.content !== prev[i]?.content);
+        if (changed && currentProjectId) {
+          void saveProjectFiles(next, currentProjectId);
+        }
+        return changed ? next : prev;
+      });
+      setPreviewKey((k) => k + 1);
+    };
+    window.addEventListener("gafcore:repair-project-jsx", onRepairJsx);
+    return () => window.removeEventListener("gafcore:repair-project-jsx", onRepairJsx);
+  }, [currentProjectId]);
+
+  useEffect(() => {
     if (!isAdmin && secretsOpen) setSecretsOpen(false);
   }, [isAdmin, secretsOpen]);
 

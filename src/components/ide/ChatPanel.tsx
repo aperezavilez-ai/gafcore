@@ -1126,12 +1126,17 @@ export function ChatPanel({
               );
               setLastError(null);
               onCodeGenerated?.();
+              window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
             });
             return next;
           }
           return current;
         });
         if (repairedLocally) return;
+        if (looksLikeObjectChild) {
+          onCodeGenerated?.();
+          window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
+        }
         if (looksLikeJsxGlue && !looksLikeObjectChild) {
           setLastError(msg);
           return;
@@ -1438,12 +1443,13 @@ export function ChatPanel({
     }
     const merged = sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles));
     setFiles(merged);
-    void syncFilesToDb(outFiles);
+    const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
+    void syncFilesToDb(toPersist);
     onCodeGenerated?.();
 
     try {
       const v = await callValidateSources({
-        data: outFiles.map((f) => ({ name: f.name, content: f.content })),
+        data: toPersist.map((f) => ({ name: f.name, content: f.content })),
       });
       if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
         setLastError(v.errors.map((e) => `${e.name}: ${e.message}`).join("\n"));
