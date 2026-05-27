@@ -2512,7 +2512,10 @@ export function ChatPanel({
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-border/40 bg-background px-3 pb-3 pt-2">
+      <div
+        className="shrink-0 border-t border-border/40 bg-background px-3 pt-2"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      >
         {lastError && (
           <div
             className={

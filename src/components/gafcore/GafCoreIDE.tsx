@@ -716,7 +716,7 @@ export function GafCoreIDE() {
 
   return (
     <div
-      className="gafcore-light flex h-screen flex-col overflow-hidden"
+      className="gafcore-light flex h-screen h-[100dvh] flex-col overflow-hidden"
       style={{
         fontFamily: "'Inter', system-ui, sans-serif",
         background: "#ffffff",

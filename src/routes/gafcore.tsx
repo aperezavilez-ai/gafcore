@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Check, ArrowRight, Rocket, Zap, Crown, Gift,
   Sparkles, Database, Cloud, Shield, Layers, Headphones,
-  Palette, Wand2, MousePointerClick,
+  Palette, Wand2, MousePointerClick, Menu, X,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckoutExperience } from "@/components/CheckoutExperience";
@@ -117,6 +117,8 @@ function GafCoreLanding() {
   const { theme, setTheme } = useGafcoreTheme();
   const [checkoutPriceId, setCheckoutPriceId] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const closeMobileNav = () => setMobileNavOpen(false);
 
   const resolveUserId = useCallback(async (): Promise<string | undefined> => {
     if (user?.id) return user.id;
@@ -195,15 +197,16 @@ function GafCoreLanding() {
       <DevPortBanner targetPath="/gafcore" />
       {/* Header */}
       <header className="border-b gc-border" style={{ background: "color-mix(in oklab, var(--gc-bg) 80%, transparent)", backdropFilter: "blur(10px)" }}>
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link to="/gafcore" className="flex items-center gap-2">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
+          <Link to="/gafcore" className="flex items-center gap-2 shrink-0">
             <div
               className="flex h-9 w-9 items-center justify-center rounded-lg text-white text-lg"
               style={{ background: "var(--gc-cta)", fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700 }}
             >G</div>
             <span className="text-lg font-bold" style={{ color: "var(--gc-fg)" }}>GafCore</span>
           </Link>
-          <nav className="flex flex-1 flex-wrap items-center justify-center gap-4 text-sm gc-muted md:gap-6">
+          {/* Nav inline solo en md+ */}
+          <nav className="hidden flex-1 items-center justify-center gap-4 text-sm gc-muted md:flex md:gap-6">
             <a href="#producto" className="hover:opacity-80">{t("gc.nav.product")}</a>
             <a href="#planes" className="hover:opacity-80">{t("gc.nav.pricing")}</a>
             <a href="#empresa" className="hover:opacity-80">{t("gc.nav.company")}</a>
@@ -215,7 +218,8 @@ function GafCoreLanding() {
               {t("gc.nav.contact")}
             </button>
           </nav>
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Acciones desktop */}
+          <div className="hidden items-center gap-2 sm:gap-3 md:flex">
             <LanguageSwitcher variant="compact" />
             <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
               <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }}>{t("gc.auth.login")}</Link>
@@ -224,7 +228,56 @@ function GafCoreLanding() {
               <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }}>{t("gc.auth.register")}</Link>
             </Button>
           </div>
+          {/* Acciones móvil: idioma compacto + hamburguesa */}
+          <div className="flex items-center gap-1.5 md:hidden">
+            <LanguageSwitcher variant="compact" />
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen((v) => !v)}
+              aria-label={mobileNavOpen ? "Cerrar menú" : "Abrir menú"}
+              aria-expanded={mobileNavOpen}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md gc-border border hover:opacity-80"
+              style={{ color: "var(--gc-fg)" }}
+            >
+              {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
+        {/* Panel desplegable móvil */}
+        {mobileNavOpen && (
+          <div className="border-t gc-border md:hidden" style={{ background: "var(--gc-bg)" }}>
+            <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 text-sm gc-muted">
+              <a href="#producto" onClick={closeMobileNav} className="rounded-md px-2 py-2 hover:opacity-80">
+                {t("gc.nav.product")}
+              </a>
+              <a href="#planes" onClick={closeMobileNav} className="rounded-md px-2 py-2 hover:opacity-80">
+                {t("gc.nav.pricing")}
+              </a>
+              <a href="#empresa" onClick={closeMobileNav} className="rounded-md px-2 py-2 hover:opacity-80">
+                {t("gc.nav.company")}
+              </a>
+              <button
+                type="button"
+                onClick={() => { setContactOpen(true); closeMobileNav(); }}
+                className="rounded-md bg-transparent px-2 py-2 text-left hover:opacity-80"
+              >
+                {t("gc.nav.contact")}
+              </button>
+              <div className="mt-2 flex flex-col gap-2 border-t gc-border pt-3">
+                <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
+                  <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }} onClick={closeMobileNav}>
+                    {t("gc.auth.login")}
+                  </Link>
+                </Button>
+                <Button asChild size="sm" className="gc-cta rounded-full px-4">
+                  <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }} onClick={closeMobileNav}>
+                    {t("gc.auth.register")}
+                  </Link>
+                </Button>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Hero */}
