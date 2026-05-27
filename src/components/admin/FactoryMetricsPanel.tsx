@@ -19,6 +19,11 @@ function pctBadge(value: number | null): string {
   return `${value}%`;
 }
 
+function shortDayLabel(day: string): string {
+  const d = new Date(`${day}T00:00:00`);
+  return d.toLocaleDateString(undefined, { weekday: "short" });
+}
+
 const PROFILE_FILTER_OPTIONS = [
   { id: "all", label: "Todas las plantillas" },
   ...listFactoryProfileSelectorOptions()
@@ -263,6 +268,51 @@ export function FactoryMetricsPanel() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {dashboard.profileTrend7d.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Tendencia 7 días por plantilla</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {dashboard.profileTrend7d.slice(0, 6).map((profile) => (
+                  <div key={profile.profileId} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-medium text-foreground">
+                        {profile.profileLabel}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {profile.points.reduce((acc, p) => acc + p.successRuns, 0)}/
+                        {profile.points.reduce((acc, p) => acc + p.total, 0)} OK
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {profile.points.map((p) => (
+                        <div key={`${profile.profileId}-${p.day}`} className="space-y-1">
+                          <div
+                            className={
+                              "h-8 rounded-sm " +
+                              (p.total === 0
+                                ? "bg-muted/50"
+                                : p.successRatePct >= 80
+                                  ? "bg-primary/80"
+                                  : p.successRatePct >= 50
+                                    ? "bg-amber-500/70"
+                                    : "bg-destructive/70")
+                            }
+                            title={`${p.day}: ${p.successRatePct}% (${p.successRuns}/${p.total})`}
+                          />
+                          <p className="text-center text-[9px] text-muted-foreground">
+                            {shortDayLabel(p.day)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           ) : null}

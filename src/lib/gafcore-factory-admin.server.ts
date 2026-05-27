@@ -42,6 +42,19 @@ export type FactoryProfileAggregate = {
   successRatePct: number;
 };
 
+export type FactoryProfileTrendPoint = {
+  day: string;
+  total: number;
+  successRuns: number;
+  successRatePct: number;
+};
+
+export type FactoryProfileTrend = {
+  profileId: string;
+  profileLabel: string;
+  points: FactoryProfileTrendPoint[];
+};
+
 export type FactoryAdminDashboard = {
   totalRuns: number;
   successRuns: number;
@@ -55,6 +68,7 @@ export type FactoryAdminDashboard = {
   globalAlert: string | null;
   profileFilter: string | null;
   profileBreakdown: FactoryProfileAggregate[];
+  profileTrend7d: FactoryProfileTrend[];
   recentRuns: FactoryRunListItem[];
 };
 
@@ -140,6 +154,55 @@ export async function loadFactoryAdminDashboard(
     }))
     .sort((a, b) => b.total - a.total);
 
+  const dayBuckets: string[] = [];
+  for (let i = 6; i >= 0; i -= 1) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    dayBuckets.push(d.toISOString().slice(0, 10));
+  }
+  const trendMap = new Map<
+    string,
+    {
+      profileId: string;
+      profileLabel: string;
+      points: Map<string, { total: number; successRuns: number }>;
+    }
+  >();
+  for (const run of allRuns) {
+    const day = run.createdAt.slice(0, 10);
+    if (!dayBuckets.includes(day)) continue;
+    const cur = trendMap.get(run.profileId) ?? {
+      profileId: run.profileId,
+      profileLabel: run.profileLabel,
+      points: new Map<string, { total: number; successRuns: number }>(),
+    };
+    const point = cur.points.get(day) ?? { total: 0, successRuns: 0 };
+    point.total += 1;
+    if (run.metrics.success) point.successRuns += 1;
+    cur.points.set(day, point);
+    trendMap.set(run.profileId, cur);
+  }
+  const profileTrend7d: FactoryProfileTrend[] = [...trendMap.values()]
+    .map((profile) => ({
+      profileId: profile.profileId,
+      profileLabel: profile.profileLabel,
+      points: dayBuckets.map((day) => {
+        const p = profile.points.get(day) ?? { total: 0, successRuns: 0 };
+        return {
+          day,
+          total: p.total,
+          successRuns: p.successRuns,
+          successRatePct: p.total > 0 ? Math.round((p.successRuns / p.total) * 100) : 0,
+        };
+      }),
+    }))
+    .sort((a, b) => {
+      const at = a.points.reduce((acc, p) => acc + p.total, 0);
+      const bt = b.points.reduce((acc, p) => acc + p.total, 0);
+      return bt - at;
+    });
+
   const recentRuns = (
     activeFilter ? allRuns.filter((r) => r.profileId === activeFilter) : allRuns
   ).slice(0, limit);
@@ -215,6 +278,7 @@ export async function loadFactoryAdminDashboard(
     globalAlert,
     profileFilter: activeFilter,
     profileBreakdown,
+    profileTrend7d,
     recentRuns,
   };
 }
@@ -266,6 +330,7 @@ function emptyDashboard(profileFilter: string | null = null): FactoryAdminDashbo
     globalAlert: null,
     profileFilter,
     profileBreakdown: [],
+    profileTrend7d: [],
     recentRuns: [],
   };
 }
