@@ -99,6 +99,12 @@ import {
 import { runGafcoreFactory } from "@/lib/gafcore-factory.functions";
 import { FACTORY_BUILD_PREFIX } from "@/lib/gafcore-factory.shared";
 import {
+  FACTORY_PROFILE_AUTO_ID,
+  listFactoryProfileSelectorOptions,
+} from "@/lib/gafcore-factory-templates.shared";
+
+const FACTORY_PROFILE_OPTIONS = listFactoryProfileSelectorOptions();
+import {
   WorkflowTaskStrip,
   type WorkflowMetricsUi,
   type WorkflowTaskUi,
@@ -380,6 +386,14 @@ export function ChatPanel({
       return window.localStorage.getItem("gafcore_factory_auto_deploy") === "1";
     } catch {
       return false;
+    }
+  });
+  const [factoryProfileId, setFactoryProfileId] = useState(() => {
+    if (typeof window === "undefined") return FACTORY_PROFILE_AUTO_ID;
+    try {
+      return localStorage.getItem("gafcore_factory_profile") || FACTORY_PROFILE_AUTO_ID;
+    } catch {
+      return FACTORY_PROFILE_AUTO_ID;
     }
   });
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
@@ -1909,6 +1923,9 @@ export function ChatPanel({
         })),
         runDesignCritique: true,
         autoDeploy: factoryAutoDeploy,
+        ...(factoryProfileId !== FACTORY_PROFILE_AUTO_ID
+          ? { factoryProfileId }
+          : {}),
         ...(projectName ? { projectName } : {}),
       },
     });
@@ -2624,12 +2641,28 @@ export function ChatPanel({
             </span>
           </button>
         </div>
-        {pipelineStatus || validationLabel ? (
+        {pipelineStatus || validationLabel || (factoryMode && factoryProfileId) ? (
           <p
             className="mt-1 truncate text-[10px] text-muted-foreground"
-            title={[pipelineStatus, validationLabel].filter(Boolean).join(" · ")}
+            title={[
+              factoryMode
+                ? `Fábrica · ${FACTORY_PROFILE_OPTIONS.find((o) => o.id === factoryProfileId)?.label ?? "Auto"}`
+                : null,
+              pipelineStatus,
+              validationLabel,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           >
-            {[pipelineStatus, validationLabel].filter(Boolean).join(" · ")}
+            {[
+              factoryMode
+                ? `Fábrica: ${FACTORY_PROFILE_OPTIONS.find((o) => o.id === factoryProfileId)?.label ?? "Auto"}`
+                : null,
+              pipelineStatus,
+              validationLabel,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         ) : null}
         {activeWorkflowRunId || backgroundWorkflowRunId || workflowTasks.length > 0 ? (
@@ -2979,6 +3012,40 @@ export function ChatPanel({
                       <span className="text-[10px] text-muted-foreground">OFF</span>
                     )}
                   </DropdownMenuItem>
+                  {factoryMode ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled
+                        className="text-xs text-muted-foreground focus:bg-transparent"
+                      >
+                        Plantilla fábrica
+                      </DropdownMenuItem>
+                      {FACTORY_PROFILE_OPTIONS.map((opt) => (
+                        <DropdownMenuItem
+                          key={opt.id}
+                          onSelect={() => {
+                            setFactoryProfileId(opt.id);
+                            try {
+                              localStorage.setItem("gafcore_factory_profile", opt.id);
+                            } catch {
+                              /* */
+                            }
+                            toast.message(
+                              opt.id === FACTORY_PROFILE_AUTO_ID
+                                ? "Plantilla: detección automática"
+                                : `Plantilla: ${opt.label}`,
+                            );
+                          }}
+                        >
+                          <span className="flex-1 truncate">{opt.label}</span>
+                          {factoryProfileId === opt.id ? (
+                            <span className="text-[10px] font-medium text-primary">✓</span>
+                          ) : null}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  ) : null}
                   <DropdownMenuItem
                     disabled={!factoryMode}
                     onSelect={(e) => {

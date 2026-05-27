@@ -39,6 +39,7 @@ export type ExecuteFactoryInput = {
   projectName?: string;
   instruction: string;
   files: ProjFile[];
+  factoryProfileId?: string | null;
   runDesignCritique?: boolean;
   autoDeploy?: boolean;
 };
@@ -62,7 +63,7 @@ export async function executeGafcoreFactoryRun(
     return { ok: false, error: "project_not_found" };
   }
 
-  const profile = resolveFactoryTemplateProfile(input.instruction);
+  const profile = resolveFactoryTemplateProfile(input.instruction, input.factoryProfileId);
   const withProfile = buildFactoryInstructionWithProfile(input.instruction, profile);
   const factoryInstruction = instructionIncludesFactoryPrefix(withProfile)
     ? withProfile

@@ -5,8 +5,9 @@ Flujo automatizado: **idea → plan → código → validación → build smoke 
 ## Activación
 
 1. IDE → menú **+** → **Modo Fábrica** → ON.
-2. (Opcional) **Fábrica → Publicar al terminar** → ON (requiere GitHub conectado en servidor).
-3. Escribe tu idea y pulsa **Construir**.
+2. (Opcional) **Plantilla fábrica** → Auto, Landing, Dashboard, Tienda, Starter o SaaS.
+3. (Opcional) **Fábrica → Publicar al terminar** → ON (requiere GitHub conectado en servidor).
+4. Escribe tu idea y pulsa **Construir**.
 
 ## Fases
 
@@ -34,9 +35,12 @@ Body `run`:
   "instruction": "Landing SaaS con hero y pricing",
   "files": [{ "name": "App.tsx", "content": "..." }],
   "runDesignCritique": true,
-  "autoDeploy": false
+  "autoDeploy": false,
+  "factoryProfileId": "landing"
 }
 ```
+
+`factoryProfileId` opcional: `auto` (omitir), `landing`, `dashboard`, `ecommerce`, `starter`, `saas`.
 
 Server fn: `runGafcoreFactory` · `getGafcoreFactoryStatus`.
 
@@ -69,7 +73,18 @@ npm run gafcore:smoke-factory
 
 ## Plantillas acotadas (perfiles)
 
-El orquestador detecta el tipo por texto e inyecta reglas estrictas:
+En el IDE puedes fijar la plantilla o dejar **Auto** (detección por texto + `classifyUserIntent`). El servidor recibe `factoryProfileId` y aplica `promptAddon` + secciones obligatorias.
+
+| Selector IDE | `factoryProfileId` |
+|--------------|-------------------|
+| Auto (detectar) | omitir o `auto` |
+| Landing SaaS | `landing` |
+| Dashboard | `dashboard` |
+| Tienda básica | `ecommerce` |
+| Starter funcional | `starter` |
+| SaaS genérico | `saas` |
+
+Detección automática (sin selector manual):
 
 | Perfil | Cuándo | Secciones obligatorias |
 |--------|--------|------------------------|
@@ -85,6 +100,8 @@ Si **Publicar al terminar** está ON y el deploy a GitHub/Vercel OK, el servidor
 ## Panel admin
 
 `/gafcore/admin/ops` — bloque **Métricas Modo Fábrica** (% éxito por fase, últimos runs).
+
+**Alertas de calidad:** si una fase tiene ≥3 muestras y tasa de éxito &lt;70%, aparece alerta por fase. Tasa global &lt;55% con ≥3 runs → alerta global.
 
 ## Límites
 

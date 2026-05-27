@@ -26,6 +26,7 @@ const runBodySchema = z.object({
   projectName: z.string().min(1).max(200).optional(),
   instruction: z.string().min(1).max(8000),
   files: z.array(fileSchema).max(80),
+  factoryProfileId: z.string().min(1).max(32).optional(),
   runDesignCritique: z.boolean().optional(),
   autoDeploy: z.boolean().optional(),
 });
@@ -71,6 +72,7 @@ export async function handleGafcoreFactoryRunPost(request: Request): Promise<Res
     projectName: parsed.data.projectName,
     instruction: parsed.data.instruction,
     files: parsed.data.files,
+    factoryProfileId: parsed.data.factoryProfileId,
     runDesignCritique: parsed.data.runDesignCritique,
     autoDeploy: parsed.data.autoDeploy,
   });

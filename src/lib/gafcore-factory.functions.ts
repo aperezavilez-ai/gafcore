@@ -16,6 +16,7 @@ const runSchema = z.object({
   projectName: z.string().min(1).max(200).optional(),
   instruction: z.string().min(1).max(8000),
   files: z.array(fileSchema).max(80),
+  factoryProfileId: z.string().min(1).max(32).optional(),
   runDesignCritique: z.boolean().optional(),
   autoDeploy: z.boolean().optional(),
 });
@@ -35,6 +36,7 @@ export const runGafcoreFactory = createServerFn({ method: "POST" })
       projectName: data.projectName,
       instruction: data.instruction,
       files: data.files,
+      factoryProfileId: data.factoryProfileId,
       runDesignCritique: data.runDesignCritique,
       autoDeploy: data.autoDeploy,
     });

@@ -3,6 +3,10 @@
  */
 export const GAFCORE_FACTORY_CRITIQUE_THRESHOLD = 80;
 export const GAFCORE_FACTORY_MAX_WAVES = 12;
+/** Por debajo de este % en una fase (mín. 3 muestras) se muestra alerta en admin. */
+export const GAFCORE_FACTORY_PHASE_ALERT_THRESHOLD = 70;
+export const GAFCORE_FACTORY_GLOBAL_ALERT_THRESHOLD = 55;
+export const GAFCORE_FACTORY_ALERT_MIN_SAMPLES = 3;
 
 export const GAFCORE_FACTORY_PHASES = [
   "planning",

@@ -50,12 +50,23 @@ async function main() {
   const dash = templates.resolveFactoryTemplateProfile("dashboard con tarjetas kpi");
   if (dash.id !== "dashboard") throw new Error("dashboard profile resolution failed");
 
+  const manual = templates.resolveFactoryTemplateProfile("cualquier texto", "ecommerce");
+  if (manual.id !== "ecommerce") throw new Error("manual factoryProfileId failed");
+
+  const autoId = templates.getFactoryTemplateProfileById("auto");
+  if (autoId !== null) throw new Error("auto profile should be null");
+
+  const opts = templates.listFactoryProfileSelectorOptions();
+  if (!opts.some((o) => o.id === "auto")) throw new Error("selector missing auto");
+
   console.log("gafcore:smoke-factory OK");
   console.log("  entry:", entry.entryFiles.join(", "));
   console.log("  good:", good.message);
   console.log("  bad:", bad.message);
   console.log("  profile landing:", landing.label);
   console.log("  profile dashboard:", dash.label);
+  console.log("  profile manual ecommerce:", manual.label);
+  console.log("  selector options:", opts.length);
 }
 
 main().catch((e) => {

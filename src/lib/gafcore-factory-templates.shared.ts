@@ -55,11 +55,52 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
   },
 };
 
-export function resolveFactoryTemplateProfile(instruction: string): FactoryTemplateProfile {
+/** Valor del selector IDE: detección automática por texto del prompt. */
+export const FACTORY_PROFILE_AUTO_ID = "auto";
+
+const PROFILE_BY_ID: Record<string, FactoryTemplateProfile> = {
+  auto: PROFILES.unknown,
+  landing: PROFILES.landing,
+  ecommerce: PROFILES.ecommerce,
+  dashboard: PROFILES.app,
+  starter: PROFILES.blank,
+  saas: PROFILES.unknown,
+};
+
+export function getFactoryTemplateProfileById(id: string): FactoryTemplateProfile | null {
+  if (id === FACTORY_PROFILE_AUTO_ID) return null;
+  return PROFILE_BY_ID[id] ?? null;
+}
+
+export function resolveFactoryTemplateProfile(
+  instruction: string,
+  profileId?: string | null,
+): FactoryTemplateProfile {
+  const manual = profileId && profileId !== FACTORY_PROFILE_AUTO_ID
+    ? getFactoryTemplateProfileById(profileId)
+    : null;
+  if (manual) return manual;
+
   const intent = classifyUserIntent(instruction, { mode: "build" });
   const hint =
     intent.projectType !== "unknown" ? intent.projectType : inferProfileFromText(instruction);
   return PROFILES[hint] ?? PROFILES.unknown;
+}
+
+/** Opciones para el menú del IDE (sin duplicar `saas` y `unknown`). */
+export function listFactoryProfileSelectorOptions(): Array<{
+  id: string;
+  label: string;
+  description: string;
+}> {
+  return [
+    { id: FACTORY_PROFILE_AUTO_ID, label: "Auto (detectar)", description: "Según tu prompt" },
+    { id: "landing", label: PROFILES.landing.label, description: PROFILES.landing.requiredSections.join(" · ") },
+    { id: "dashboard", label: PROFILES.app.label, description: PROFILES.app.requiredSections.join(" · ") },
+    { id: "ecommerce", label: PROFILES.ecommerce.label, description: PROFILES.ecommerce.requiredSections.join(" · ") },
+    { id: "starter", label: PROFILES.blank.label, description: PROFILES.blank.requiredSections.join(" · ") },
+    { id: "saas", label: PROFILES.unknown.label, description: PROFILES.unknown.requiredSections.join(" · ") },
+  ];
 }
 
 function inferProfileFromText(text: string): ProjectTypeHint {

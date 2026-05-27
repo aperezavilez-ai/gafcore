@@ -7,7 +7,7 @@ import type { FactoryAdminDashboard } from "@/lib/gafcore-factory-admin.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Factory, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Factory, Loader2, RefreshCw } from "lucide-react";
 
 function pctBadge(value: number | null): string {
   if (value === null) return "—";
@@ -75,6 +75,30 @@ export function FactoryMetricsPanel() {
         </Card>
       ) : dashboard ? (
         <>
+          {dashboard.globalAlert || dashboard.phaseAlerts.length > 0 ? (
+            <Card className="border-destructive/40 bg-destructive/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  Alertas de calidad
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {dashboard.globalAlert ? (
+                  <p className="text-foreground">{dashboard.globalAlert}</p>
+                ) : null}
+                {dashboard.phaseAlerts.map((a) => (
+                  <p key={a.phase} className="text-muted-foreground">
+                    <Badge variant="destructive" className="mr-2">
+                      {a.phase} {a.ratePct}%
+                    </Badge>
+                    {a.message}
+                  </p>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
@@ -135,11 +159,17 @@ export function FactoryMetricsPanel() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {dashboard.phaseAggregates.map((p) => (
-                  <Badge key={p.phase} variant={p.ratePct >= 80 ? "default" : "secondary"}>
-                    {p.phase}: {p.ok}/{p.total} ({p.ratePct}%)
-                  </Badge>
-                ))}
+                {dashboard.phaseAggregates.map((p) => {
+                  const alert = dashboard.phaseAlerts.some((a) => a.phase === p.phase);
+                  return (
+                    <Badge
+                      key={p.phase}
+                      variant={alert ? "destructive" : p.ratePct >= 80 ? "default" : "secondary"}
+                    >
+                      {p.phase}: {p.ok}/{p.total} ({p.ratePct}%)
+                    </Badge>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

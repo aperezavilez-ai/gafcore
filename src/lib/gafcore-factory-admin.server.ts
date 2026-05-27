@@ -3,6 +3,11 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { FactoryRunMetrics } from "@/lib/gafcore-factory-metrics.server";
+import {
+  GAFCORE_FACTORY_ALERT_MIN_SAMPLES,
+  GAFCORE_FACTORY_GLOBAL_ALERT_THRESHOLD,
+  GAFCORE_FACTORY_PHASE_ALERT_THRESHOLD,
+} from "@/lib/gafcore-factory.shared";
 
 export type FactoryRunListItem = {
   pipelineRunId: string;
@@ -20,6 +25,13 @@ export type FactoryPhaseAggregate = {
   ratePct: number;
 };
 
+export type FactoryPhaseAlert = {
+  phase: string;
+  ratePct: number;
+  total: number;
+  message: string;
+};
+
 export type FactoryAdminDashboard = {
   totalRuns: number;
   successRuns: number;
@@ -29,6 +41,8 @@ export type FactoryAdminDashboard = {
   deployAttempted: number;
   deployOkRatePct: number | null;
   phaseAggregates: FactoryPhaseAggregate[];
+  phaseAlerts: FactoryPhaseAlert[];
+  globalAlert: string | null;
   recentRuns: FactoryRunListItem[];
 };
 
@@ -107,15 +121,34 @@ export async function loadFactoryAdminDashboard(limit = 40): Promise<FactoryAdmi
     }))
     .sort((a, b) => b.total - a.total);
 
+  const successRatePct = totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : 0;
+
+  const phaseAlerts: FactoryPhaseAlert[] = phaseAggregates
+    .filter((p) => p.total >= GAFCORE_FACTORY_ALERT_MIN_SAMPLES && p.ratePct < GAFCORE_FACTORY_PHASE_ALERT_THRESHOLD)
+    .map((p) => ({
+      phase: p.phase,
+      ratePct: p.ratePct,
+      total: p.total,
+      message: `Fase «${p.phase}» solo ${p.ratePct}% OK (${p.ok}/${p.total} runs). Revisar cerebro, validación o deploy.`,
+    }));
+
+  const globalAlert =
+    totalRuns >= GAFCORE_FACTORY_ALERT_MIN_SAMPLES &&
+    successRatePct < GAFCORE_FACTORY_GLOBAL_ALERT_THRESHOLD
+      ? `Éxito global de fábrica bajo: ${successRatePct}% en los últimos ${totalRuns} runs.`
+      : null;
+
   return {
     totalRuns,
     successRuns,
-    successRatePct: totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : 0,
+    successRatePct,
     avgValidationScore: scoreCount > 0 ? Math.round(scoreSum / scoreCount) : null,
     buildSmokeOkRatePct: buildTotal > 0 ? Math.round((buildOk / buildTotal) * 100) : null,
     deployAttempted,
     deployOkRatePct: deployAttempted > 0 ? Math.round((deployOk / deployAttempted) * 100) : null,
     phaseAggregates,
+    phaseAlerts,
+    globalAlert,
     recentRuns,
   };
 }
@@ -130,6 +163,8 @@ function emptyDashboard(): FactoryAdminDashboard {
     deployAttempted: 0,
     deployOkRatePct: null,
     phaseAggregates: [],
+    phaseAlerts: [],
+    globalAlert: null,
     recentRuns: [],
   };
 }
