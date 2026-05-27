@@ -103,6 +103,18 @@ Si **Publicar al terminar** está ON y el deploy a GitHub/Vercel OK, el servidor
 
 **Alertas de calidad:** si una fase tiene ≥3 muestras y tasa de éxito &lt;70%, aparece alerta por fase. Tasa global &lt;55% con ≥3 runs → alerta global.
 
+## Ejecución async (Vercel)
+
+En producción (`VERCEL=1`) el run responde de inmediato con `async: true` y continúa en segundo plano vía `waitUntil`. El IDE hace polling con `getGafcoreFactoryStatus` hasta `factoryResult` en `payload_json`.
+
+- Local/dev: síncrono (sin timeout de función).
+- Forzar async en local: `GAFCORE_FACTORY_ASYNC=1`.
+- `maxDuration` SSR: ver `GAFCORE_SSR_MAX_DURATION_S` en build (`scripts/vercel-sync-ssr-assets.mjs`).
+
+## Admin: export CSV
+
+`/gafcore/admin/ops` → **CSV (vista)** o **CSV (200)** con métricas por run.
+
 ## Límites
 
 - Rate limit: `gafcore_factory_run` (8/min)

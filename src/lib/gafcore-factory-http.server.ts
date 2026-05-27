@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireGafcoreApiUser } from "@/lib/gafcore-api-auth.server";
 import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server";
 import { enforceGafcoreRateLimit, GAFCORE_CHAT_IDE_LIMIT } from "@/lib/gafcore-api-ratelimit.server";
+import { shouldUseFactoryAsyncRun } from "@/lib/gafcore-factory-async.server";
 import { executeGafcoreFactoryRun } from "@/lib/gafcore-factory-run.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getPipelineRunForUser } from "@/lib/gafcore-orchestrator.server";
@@ -29,6 +30,7 @@ const runBodySchema = z.object({
   factoryProfileId: z.string().min(1).max(32).optional(),
   runDesignCritique: z.boolean().optional(),
   autoDeploy: z.boolean().optional(),
+  asyncRun: z.boolean().optional(),
 });
 
 const statusBodySchema = z.object({
@@ -75,7 +77,12 @@ export async function handleGafcoreFactoryRunPost(request: Request): Promise<Res
     factoryProfileId: parsed.data.factoryProfileId,
     runDesignCritique: parsed.data.runDesignCritique,
     autoDeploy: parsed.data.autoDeploy,
+    asyncRun: parsed.data.asyncRun ?? shouldUseFactoryAsyncRun(),
   });
+
+  if (result.ok && "async" in result && result.async) {
+    return jsonResponse(result, 202);
+  }
 
   return jsonResponse(result, result.ok ? 200 : 422);
 }

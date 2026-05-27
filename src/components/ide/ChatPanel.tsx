@@ -96,8 +96,9 @@ import {
   runGafcoreWorkflowWave,
   syncGafcorePipelineWorkflow,
 } from "@/lib/gafcore-workflow.functions";
-import { runGafcoreFactory } from "@/lib/gafcore-factory.functions";
+import { getGafcoreFactoryStatus, runGafcoreFactory } from "@/lib/gafcore-factory.functions";
 import { FACTORY_BUILD_PREFIX } from "@/lib/gafcore-factory.shared";
+import type { FactoryRunResult } from "@/lib/gafcore-factory.shared";
 import {
   FACTORY_PROFILE_AUTO_ID,
   listFactoryProfileSelectorOptions,
@@ -1243,6 +1244,7 @@ export function ChatPanel({
   const callAdvancePipeline = useServerFn(advanceGafcorePipelineStep);
   const callFinalizePipeline = useServerFn(finalizeGafcorePipelineRun);
   const callRunFactory = useServerFn(runGafcoreFactory);
+  const callGetFactoryStatus = useServerFn(getGafcoreFactoryStatus);
 
   const usePipelineOrchestrator = Boolean(
     projectId && mode === "build" && !visualEditOn,
@@ -1888,6 +1890,55 @@ export function ChatPanel({
     }
   };
 
+  const pollFactoryUntilComplete = async (
+    pipelineRunId: string,
+    workflowRunId: string,
+    myEpoch: number,
+  ): Promise<Extract<FactoryRunResult, { ok: true }>> => {
+    const maxAttempts = 150;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (myEpoch !== requestEpochRef.current) {
+        throw new Error("CANCELLED");
+      }
+      await new Promise((r) => setTimeout(r, 2500));
+      const st = await callGetFactoryStatus({
+        data: { pipelineRunId, workflowRunId },
+      });
+      if (!st.ok) continue;
+      if (st.pipeline?.current_step) {
+        setPipelineStatus(`Fábrica: ${st.pipeline.current_step}…`);
+      }
+      if (st.workflow?.run.state) {
+        setWorkflowState(st.workflow.run.state);
+        if (st.workflow.planSummary) setWorkflowPlanSummary(st.workflow.planSummary);
+        if (st.workflow.tasks?.length) {
+          setWorkflowTasks(st.workflow.tasks as WorkflowTaskUi[]);
+        }
+      }
+      const pending = st.pipeline?.factoryAsyncPending;
+      const asyncResult = st.pipeline?.factoryResult;
+      if (asyncResult) {
+        if (!asyncResult.ok) {
+          const msg =
+            asyncResult.message ??
+            (asyncResult.error === "build_smoke_failed"
+              ? "Build smoke falló."
+              : asyncResult.error === "deploy_failed"
+                ? "Deploy fallido."
+                : "La fábrica no pudo completar el build.");
+          toast.error(msg, { duration: 9000 });
+          throw new Error(asyncResult.error ?? "FACTORY_FAILED");
+        }
+        return asyncResult;
+      }
+      if (st.pipeline && pending === false) break;
+    }
+    toast.error("La fábrica tardó demasiado. Revisa el proyecto en unos minutos.", {
+      duration: 10000,
+    });
+    throw new Error("FACTORY_TIMEOUT");
+  };
+
   const runFactoryBuild = async (
     instruction: string,
     myEpoch: number,
@@ -1912,7 +1963,7 @@ export function ChatPanel({
       await startPipelineRun(factoryInstruction);
     }
 
-    const factoryRes = await callRunFactory({
+    let factoryRes = await callRunFactory({
       data: {
         projectId,
         instruction: factoryInstruction,
@@ -1923,12 +1974,25 @@ export function ChatPanel({
         })),
         runDesignCritique: true,
         autoDeploy: factoryAutoDeploy,
+        asyncRun: import.meta.env.PROD,
         ...(factoryProfileId !== FACTORY_PROFILE_AUTO_ID
           ? { factoryProfileId }
           : {}),
         ...(projectName ? { projectName } : {}),
       },
     });
+
+    if (factoryRes.ok && "async" in factoryRes && factoryRes.async) {
+      pipelineRunIdRef.current = factoryRes.pipelineRunId;
+      setActiveWorkflowRunId(factoryRes.workflowRunId);
+      setWorkflowPlanSummary(factoryRes.planSummary);
+      toast.message(factoryRes.message, { duration: 6000 });
+      factoryRes = await pollFactoryUntilComplete(
+        factoryRes.pipelineRunId,
+        factoryRes.workflowRunId,
+        myEpoch,
+      );
+    }
 
     if (!factoryRes.ok) {
       if (factoryRes.error === "workflow_limit_reached") {

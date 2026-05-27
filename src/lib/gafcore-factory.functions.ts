@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { shouldUseFactoryAsyncRun } from "@/lib/gafcore-factory-async.server";
 import { executeGafcoreFactoryRun } from "@/lib/gafcore-factory-run.server";
+import type { FactoryRunResult } from "@/lib/gafcore-factory.shared";
 import { getPipelineRunForUser } from "@/lib/gafcore-orchestrator.server";
 import { getWorkflowSnapshot } from "@/tasks/workflow.server";
 
@@ -19,6 +21,7 @@ const runSchema = z.object({
   factoryProfileId: z.string().min(1).max(32).optional(),
   runDesignCritique: z.boolean().optional(),
   autoDeploy: z.boolean().optional(),
+  asyncRun: z.boolean().optional(),
 });
 
 /** Ejecuta el flujo completo Modo Fábrica (plan → workflow → validación → crítica). */
@@ -39,6 +42,7 @@ export const runGafcoreFactory = createServerFn({ method: "POST" })
       factoryProfileId: data.factoryProfileId,
       runDesignCritique: data.runDesignCritique,
       autoDeploy: data.autoDeploy,
+      asyncRun: data.asyncRun ?? shouldUseFactoryAsyncRun(),
     });
 
     return result;
@@ -85,6 +89,14 @@ export const getGafcoreFactoryStatus = createServerFn({ method: "POST" })
               !Array.isArray(pipeline.payload_json)
                 ? (pipeline.payload_json as Record<string, unknown>).factoryMetrics
                 : undefined,
+            factoryResult: parseFactoryAsyncResult(pipeline.payload_json),
+            factoryAsyncPending:
+              typeof pipeline.payload_json === "object" &&
+              pipeline.payload_json &&
+              !Array.isArray(pipeline.payload_json)
+                ? !(pipeline.payload_json as Record<string, unknown>).factoryAsyncResult &&
+                  Boolean((pipeline.payload_json as Record<string, unknown>).factoryProfileId)
+                : false,
           }
         : null,
       workflow: workflow
@@ -97,3 +109,12 @@ export const getGafcoreFactoryStatus = createServerFn({ method: "POST" })
         : null,
     };
   });
+
+function parseFactoryAsyncResult(payloadJson: unknown): FactoryRunResult | undefined {
+  if (!payloadJson || typeof payloadJson !== "object" || Array.isArray(payloadJson)) return undefined;
+  const raw = (payloadJson as Record<string, unknown>).factoryAsyncResult;
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as FactoryRunResult;
+  if (typeof r.ok !== "boolean") return undefined;
+  return r;
+}

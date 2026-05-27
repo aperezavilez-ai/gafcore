@@ -21,12 +21,19 @@ import { runFactoryBuildSmoke } from "@/lib/gafcore-factory-build-smoke.server";
 import { FactoryPhaseTimer, recordFactoryRunMetrics } from "@/lib/gafcore-factory-metrics.server";
 import { publishProjectOnServer } from "@/lib/github-publish.server";
 import {
+  persistFactoryAsyncResult,
+  scheduleFactoryBackground,
+} from "@/lib/gafcore-factory-async.server";
+import {
   FACTORY_BUILD_PREFIX,
   GAFCORE_FACTORY_CRITIQUE_THRESHOLD,
   GAFCORE_FACTORY_MAX_WAVES,
   type FactoryFileOut,
+  type FactoryRunOutcome,
   type FactoryRunResult,
+  type FactoryRunStarted,
 } from "@/lib/gafcore-factory.shared";
+import type { FactoryTemplateProfile } from "@/lib/gafcore-factory-templates.shared";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { planAndCreateWorkflow, runWorkflowBatch } from "@/tasks/workflow-run.server";
 import { syncPipelineWithWorkflow } from "@/tasks/workflow-pipeline-bridge.server";
@@ -42,6 +49,18 @@ export type ExecuteFactoryInput = {
   factoryProfileId?: string | null;
   runDesignCritique?: boolean;
   autoDeploy?: boolean;
+  /** En Vercel: responde al instante y continúa con waitUntil. */
+  asyncRun?: boolean;
+};
+
+type FactoryHeavyContext = {
+  input: ExecuteFactoryInput;
+  pipelineRun: NonNullable<Awaited<ReturnType<typeof createPipelineRun>>>;
+  workflowRunId: string;
+  planSummary: string;
+  profile: FactoryTemplateProfile;
+  profileMetrics: { factoryProfileId: string; factoryProfileLabel: string };
+  timer: FactoryPhaseTimer;
 };
 
 async function resolveProjectName(
@@ -56,7 +75,7 @@ async function resolveProjectName(
 
 export async function executeGafcoreFactoryRun(
   input: ExecuteFactoryInput,
-): Promise<FactoryRunResult> {
+): Promise<FactoryRunOutcome> {
   const timer = new FactoryPhaseTimer();
   const owned = await assertProjectOwned(input.sb, input.projectId, input.userId);
   if (!owned) {
@@ -136,6 +155,53 @@ export async function executeGafcoreFactoryRun(
     workflowState: "executing",
     planSummary,
   });
+
+  const heavyCtx: FactoryHeavyContext = {
+    input,
+    pipelineRun,
+    workflowRunId,
+    planSummary,
+    profile,
+    profileMetrics,
+    timer,
+  };
+
+  if (input.asyncRun) {
+    scheduleFactoryBackground(() =>
+      executeGafcoreFactoryRunHeavy(heavyCtx)
+        .then((result) => persistFactoryAsyncResult(input.sb, pipelineRun.id, input.userId, result))
+        .catch((e) => {
+          console.error("[factory] async heavy failed:", e);
+          return persistFactoryAsyncResult(input.sb, pipelineRun.id, input.userId, {
+            ok: false,
+            error: "pipeline_failed",
+            message: e instanceof Error ? e.message : String(e),
+          });
+        }),
+    );
+    const started: FactoryRunStarted = {
+      ok: true,
+      async: true,
+      pipelineRunId: pipelineRun.id,
+      workflowRunId,
+      planSummary,
+      templateProfile: {
+        id: profile.id,
+        label: profile.label,
+        slug: profile.templateSlug,
+      },
+      message: "Fábrica en curso. El IDE actualizará el progreso automáticamente.",
+    };
+    return started;
+  }
+
+  return executeGafcoreFactoryRunHeavy(heavyCtx);
+}
+
+async function executeGafcoreFactoryRunHeavy(
+  ctx: FactoryHeavyContext,
+): Promise<FactoryRunResult> {
+  const { input, pipelineRun, workflowRunId, planSummary, profile, profileMetrics, timer } = ctx;
 
   let pipelineRow = pipelineRun;
   pipelineRow = (await appendRunStep(input.sb, pipelineRow, "generate", "generating")) ?? pipelineRow;

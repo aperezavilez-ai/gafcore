@@ -34,6 +34,14 @@ export type FactoryPhaseAlert = {
   message: string;
 };
 
+export type FactoryProfileAggregate = {
+  profileId: string;
+  profileLabel: string;
+  total: number;
+  successRuns: number;
+  successRatePct: number;
+};
+
 export type FactoryAdminDashboard = {
   totalRuns: number;
   successRuns: number;
@@ -46,6 +54,7 @@ export type FactoryAdminDashboard = {
   phaseAlerts: FactoryPhaseAlert[];
   globalAlert: string | null;
   profileFilter: string | null;
+  profileBreakdown: FactoryProfileAggregate[];
   recentRuns: FactoryRunListItem[];
 };
 
@@ -93,14 +102,13 @@ export async function loadFactoryAdminDashboard(
     return emptyDashboard(activeFilter);
   }
 
-  const recentRuns: FactoryRunListItem[] = [];
+  const allRuns: FactoryRunListItem[] = [];
   for (const row of data ?? []) {
     const payload = row.payload_json as Record<string, unknown> | null;
     const raw = payload?.factoryMetrics;
     if (!isFactoryMetrics(raw)) continue;
     const { profileId, profileLabel } = resolveRunProfile(raw, payload);
-    if (activeFilter && profileId !== activeFilter) continue;
-    recentRuns.push({
+    allRuns.push({
       pipelineRunId: row.id as string,
       projectId: row.project_id as string,
       userId: row.user_id as string,
@@ -110,8 +118,31 @@ export async function loadFactoryAdminDashboard(
       profileLabel,
       metrics: raw,
     });
-    if (recentRuns.length >= limit) break;
   }
+
+  const profileMap = new Map<string, FactoryProfileAggregate>();
+  for (const run of allRuns) {
+    const cur = profileMap.get(run.profileId) ?? {
+      profileId: run.profileId,
+      profileLabel: run.profileLabel,
+      total: 0,
+      successRuns: 0,
+      successRatePct: 0,
+    };
+    cur.total += 1;
+    if (run.metrics.success) cur.successRuns += 1;
+    profileMap.set(run.profileId, cur);
+  }
+  const profileBreakdown: FactoryProfileAggregate[] = [...profileMap.values()]
+    .map((p) => ({
+      ...p,
+      successRatePct: p.total > 0 ? Math.round((p.successRuns / p.total) * 100) : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  const recentRuns = (
+    activeFilter ? allRuns.filter((r) => r.profileId === activeFilter) : allRuns
+  ).slice(0, limit);
 
   const phaseMap = new Map<string, { ok: number; total: number }>();
   let successRuns = 0;
@@ -183,8 +214,42 @@ export async function loadFactoryAdminDashboard(
     phaseAlerts,
     globalAlert,
     profileFilter: activeFilter,
+    profileBreakdown,
     recentRuns,
   };
+}
+
+export async function loadFactoryRunsForExport(exportLimit = 200): Promise<FactoryRunListItem[]> {
+  const { data, error } = await supabaseAdmin
+    .from("gafcore_pipeline_runs")
+    .select("id, project_id, user_id, state, created_at, payload_json")
+    .order("created_at", { ascending: false })
+    .limit(Math.min(exportLimit * 3, 500));
+
+  if (error) {
+    console.error("[factory-admin] export load:", error);
+    return [];
+  }
+
+  const runs: FactoryRunListItem[] = [];
+  for (const row of data ?? []) {
+    const payload = row.payload_json as Record<string, unknown> | null;
+    const raw = payload?.factoryMetrics;
+    if (!isFactoryMetrics(raw)) continue;
+    const { profileId, profileLabel } = resolveRunProfile(raw, payload);
+    runs.push({
+      pipelineRunId: row.id as string,
+      projectId: row.project_id as string,
+      userId: row.user_id as string,
+      state: row.state as string,
+      createdAt: row.created_at as string,
+      profileId,
+      profileLabel,
+      metrics: raw,
+    });
+    if (runs.length >= exportLimit) break;
+  }
+  return runs;
 }
 
 function emptyDashboard(profileFilter: string | null = null): FactoryAdminDashboard {
@@ -200,6 +265,7 @@ function emptyDashboard(profileFilter: string | null = null): FactoryAdminDashbo
     phaseAlerts: [],
     globalAlert: null,
     profileFilter,
+    profileBreakdown: [],
     recentRuns: [],
   };
 }

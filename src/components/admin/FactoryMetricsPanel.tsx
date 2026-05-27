@@ -2,13 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { getGafcoreFactoryAdminDashboard } from "@/lib/gafcore-factory-admin.functions";
+import {
+  exportGafcoreFactoryRunsCsv,
+  getGafcoreFactoryAdminDashboard,
+} from "@/lib/gafcore-factory-admin.functions";
+import { buildFactoryRunsCsv } from "@/lib/gafcore-factory-csv.shared";
 import { listFactoryProfileSelectorOptions } from "@/lib/gafcore-factory-templates.shared";
 import type { FactoryAdminDashboard } from "@/lib/gafcore-factory-admin.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, ArrowLeft, Factory, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, Factory, Loader2, RefreshCw } from "lucide-react";
 
 function pctBadge(value: number | null): string {
   if (value === null) return "—";
@@ -22,10 +26,22 @@ const PROFILE_FILTER_OPTIONS = [
     .map((o) => ({ id: o.id, label: o.label })),
 ];
 
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function FactoryMetricsPanel() {
   const load = useServerFn(getGafcoreFactoryAdminDashboard);
+  const exportCsv = useServerFn(exportGafcoreFactoryRunsCsv);
   const [dashboard, setDashboard] = useState<FactoryAdminDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [profileFilter, setProfileFilter] = useState("all");
 
   const reload = useCallback(async () => {
@@ -86,6 +102,52 @@ export function FactoryMetricsPanel() {
               <RefreshCw className="mr-2 h-4 w-4" />
             )}
             Actualizar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={exporting || !dashboard?.recentRuns.length}
+            onClick={() => {
+              if (!dashboard?.recentRuns.length) return;
+              const stamp = new Date().toISOString().slice(0, 10);
+              downloadCsv(
+                `gafcore-factory-${stamp}.csv`,
+                buildFactoryRunsCsv(dashboard.recentRuns),
+              );
+              toast.success(`CSV exportado (${dashboard.recentRuns.length} runs visibles)`);
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            CSV (vista)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={exporting}
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const res = await exportCsv({ data: { limit: 200 } });
+                if (!res.ok) {
+                  toast.error("Sin permiso para exportar.");
+                  return;
+                }
+                const stamp = new Date().toISOString().slice(0, 10);
+                downloadCsv(`gafcore-factory-full-${stamp}.csv`, res.csv);
+                toast.success(`CSV completo (${res.count} runs)`);
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Error exportando");
+              } finally {
+                setExporting(false);
+              }
+            }}
+          >
+            {exporting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            CSV (200)
           </Button>
         </div>
       </div>
@@ -180,6 +242,30 @@ export function FactoryMetricsPanel() {
               </CardContent>
             </Card>
           </div>
+
+          {dashboard.profileBreakdown.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Por plantilla (sin filtrar)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {dashboard.profileBreakdown.map((p) => (
+                    <div
+                      key={p.profileId}
+                      className="rounded-md border border-border/60 bg-muted/20 px-3 py-2"
+                    >
+                      <p className="text-xs font-medium text-foreground">{p.profileLabel}</p>
+                      <p className="text-lg font-semibold tabular-nums">{p.total} runs</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Éxito {p.successRatePct}% ({p.successRuns}/{p.total})
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader>

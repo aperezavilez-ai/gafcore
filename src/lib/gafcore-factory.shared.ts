@@ -32,6 +32,23 @@ export type FactoryFileOut = {
   content: string;
 };
 
+/** Respuesta inmediata cuando el run pesado sigue en segundo plano (Vercel). */
+export type FactoryRunStarted = {
+  ok: true;
+  async: true;
+  pipelineRunId: string;
+  workflowRunId: string;
+  planSummary: string;
+  templateProfile: {
+    id: string;
+    label: string;
+    slug: string;
+  };
+  message: string;
+};
+
+export type FactoryRunOutcome = FactoryRunResult | FactoryRunStarted;
+
 export type FactoryRunResult =
   | {
       ok: true;

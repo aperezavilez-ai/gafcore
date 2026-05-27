@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
-import { loadFactoryAdminDashboard } from "@/lib/gafcore-factory-admin.server";
+import { buildFactoryRunsCsv } from "@/lib/gafcore-factory-csv.shared";
+import { loadFactoryAdminDashboard, loadFactoryRunsForExport } from "@/lib/gafcore-factory-admin.server";
 import { listFactoryTemplateProfiles } from "@/lib/gafcore-factory-templates.shared";
 
 export const getGafcoreFactoryAdminDashboard = createServerFn({ method: "POST" })
@@ -36,4 +37,22 @@ export const listGafcoreFactoryTemplates = createServerFn({ method: "POST" })
       return { ok: false as const, error: "forbidden" as const };
     }
     return { ok: true as const, profiles: listFactoryTemplateProfiles() };
+  });
+
+export const exportGafcoreFactoryRunsCsv = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) =>
+    z.object({ limit: z.number().int().min(1).max(500).optional() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const userId = context.userId!;
+    if (!(await isGafcoreAdminUser(userId))) {
+      return { ok: false as const, error: "forbidden" as const };
+    }
+    const runs = await loadFactoryRunsForExport(data.limit ?? 200);
+    return {
+      ok: true as const,
+      csv: buildFactoryRunsCsv(runs),
+      count: runs.length,
+    };
   });
