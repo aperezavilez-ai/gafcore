@@ -2786,6 +2786,12 @@ export function ChatPanel({
                     {s}
                   </button>
                 ))}
+                <Link
+                  to="/gafcore/marketplace"
+                  className="rounded-lg border border-primary/50 bg-primary/10 px-3 py-2 text-left text-[12.5px] font-medium text-primary transition hover:bg-primary/15"
+                >
+                  Ver plantillas en Marketplace
+                </Link>
               </div>
             </div>
           ) : (
