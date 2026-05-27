@@ -20,6 +20,13 @@ export function isRemoteProjectStale(
   const totalChars = remote.reduce((n, f) => n + (f.content?.length ?? 0), 0);
   const appFile = remote.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
 
+  const nonAppChars = remote
+    .filter((f) => !/^app\.(jsx?|tsx?)$/i.test(f.name))
+    .reduce((n, f) => n + (f.content?.length ?? 0), 0);
+
+  /** Varios archivos con código real → no resetear aunque App.tsx siga siendo la plantilla. */
+  if (nonAppChars > 800) return false;
+
   if (remote.length >= 2 && totalChars > 600 && appFile && /export\s+default/.test(appFile.content)) {
     return false;
   }

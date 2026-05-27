@@ -1082,6 +1082,7 @@ export function ChatPanel({
   const previewErrorCooldownRef = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const autoFixSessionCountRef = useRef(0);
   const [autoFixActive, setAutoFixActive] = useState(false);
+  const [composerHighlight, setComposerHighlight] = useState(false);
 
   // Listen for picks + preview errors
   useEffect(() => {
@@ -3014,14 +3015,16 @@ export function ChatPanel({
         <ChatNextStepSuggestions
           steps={nextSteps}
           disabled={loading}
-          onSelect={(prompt) => {
+          onSelect={(step) => {
             if (loading) return;
-            setInput(prompt);
+            setInput(step.prompt);
+            setComposerHighlight(true);
+            window.setTimeout(() => setComposerHighlight(false), 1600);
             taRef.current?.focus();
             requestAnimationFrame(() => {
               const el = taRef.current;
               if (el) {
-                el.selectionStart = el.selectionEnd = el.value.length;
+                el.selectionStart = el.selectionEnd = step.prompt.length;
                 el.scrollTop = el.scrollHeight;
               }
             });
@@ -3053,7 +3056,13 @@ export function ChatPanel({
             ))}
           </div>
         ) : null}
-        <div className="min-w-0 max-w-full rounded-2xl border border-border bg-background shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15">
+        <div
+          className={`min-w-0 max-w-full rounded-2xl border bg-background shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 ${
+            composerHighlight
+              ? "border-primary ring-2 ring-primary/25"
+              : "border-border"
+          }`}
+        >
           <textarea
             ref={taRef}
             value={input}

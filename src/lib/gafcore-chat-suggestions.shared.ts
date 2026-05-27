@@ -3,6 +3,8 @@
  * según el proyecto, el último mensaje del usuario y el historial.
  */
 
+import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
+
 export type GafcoreChatNextStep = {
   id: string;
   label: string;
@@ -57,6 +59,13 @@ function lastMessage(
   return "";
 }
 
+function allUserMessagesText(messages: GafcoreChatSuggestionContext["messages"]): string {
+  return messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n");
+}
+
 function fileNames(files: GafcoreChatSuggestionContext["files"]): string {
   return files.map((f) => f.name).join("\n").toLowerCase();
 }
@@ -67,10 +76,26 @@ function allContent(files: GafcoreChatSuggestionContext["files"]): string {
 
 function corpus(ctx: GafcoreChatSuggestionContext): string {
   const msgs = ctx.messages
-    .slice(-8)
+    .slice(-12)
     .map((m) => m.content)
     .join("\n");
   return `${msgs}\n${allContent(ctx.files)}`.toLowerCase();
+}
+
+function isDefaultWelcomeProject(ctx: GafcoreChatSuggestionContext): boolean {
+  const app = ctx.files.find((f) => /^app\.(jsx|tsx?)$/i.test(f.name));
+  if (!app) return ctx.files.length === 0;
+  return isGafcoreDefaultTemplateApp(app.content);
+}
+
+function isErrorRecoveryContext(ctx: GafcoreChatSuggestionContext): boolean {
+  const blob = `${ctx.lastError ?? ""}\n${corpus(ctx)}`;
+  return (
+    Boolean(ctx.lastError?.trim()) ||
+    /objects are not valid|react error #31|error #31|typeerror|syntaxerror|preview-error|failed to resolve|cannot assign to property/i.test(
+      blob,
+    )
+  );
 }
 
 function pushStep(
@@ -190,6 +215,36 @@ function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNext
   return steps;
 }
 
+/** Plantilla vacía pero el chat ya describe la app → sugerencias alineadas al pedido. */
+function welcomeProjectSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  const userText = allUserMessagesText(ctx.messages);
+  const intentCtx: GafcoreChatSuggestionContext = {
+    ...ctx,
+    messages: userText ? [{ role: "user", content: userText }] : [],
+  };
+  const fromKind = projectContextSteps(intentCtx);
+  if (fromKind.length > 0) return fromKind;
+
+  return [
+    {
+      id: "welcome-build",
+      label: "Generar mi app",
+      prompt:
+        "Genera la primera versión completa de mi app según lo que pedí en el chat: pantalla principal, navegación y estilos profesionales.",
+    },
+    {
+      id: "welcome-hero",
+      label: "Hero con CTA",
+      prompt: "Crea un hero impactante con título claro, subtítulo y botón CTA principal.",
+    },
+    {
+      id: "welcome-sections",
+      label: "Secciones clave",
+      prompt: "Añade las secciones clave que faltan (beneficios, testimonios o precios) con diseño coherente.",
+    },
+  ];
+}
+
 export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
   const steps: GafcoreChatNextStep[] = [];
   const empty = ctx.messages.length === 0;
@@ -198,28 +253,48 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
   const recentUser = lastUser.toLowerCase();
   const pipeline = (ctx.pipelineStatus ?? "").toLowerCase();
   const validation = (ctx.validationLabel ?? "").toLowerCase();
+  const welcomeOnly = isDefaultWelcomeProject(ctx);
 
   if (empty && ctx.files.length === 0) {
     return STARTER_STEPS.slice(0, MAX_STEPS);
+  }
+
+  if (welcomeOnly) {
+    return welcomeProjectSteps(ctx).slice(0, MAX_STEPS);
   }
 
   if (empty && ctx.files.length > 0) {
     return projectContextSteps(ctx).slice(0, MAX_STEPS);
   }
 
-  for (const s of stepsFromAiBullets(lastAi)) {
-    pushStep(steps, s.id, s.label, s.prompt);
-  }
-
-  if (ctx.lastError?.trim()) {
-    const err = ctx.lastError.slice(0, 400);
+  if (isErrorRecoveryContext(ctx)) {
+    const err = (ctx.lastError ?? lastAi).slice(0, 500);
     pushStep(
       steps,
-      "fix-build-error",
-      "Arreglar error de build",
-      `Arregla este error de build sin romper lo que ya funciona:\n\n\`\`\`\n${err}\n\`\`\``,
+      "fix-runtime",
+      "Arreglar error preview",
+      `Arregla este error de preview sin romper lo ya construido. NUNCA renderices objetos en JSX — usa campos (.title, .label) o JSX dentro del .map:\n\n\`\`\`\n${err}\n\`\`\``,
     );
-    pushStep(steps, "explain-error", "Explicar el error", "Explica en español qué causa este error y cómo evitarlo.");
+    pushStep(
+      steps,
+      "fix-jsx-map",
+      "Corregir map JSX",
+      "Revisa todos los .map(): devuelve JSX con campos del objeto (p. ej. item.title), nunca {item} ni {item.icon} sin componente.",
+    );
+    pushStep(steps, "explain-error", "Explicar el error", "Explica en español qué causa este error y qué archivos tocar.");
+    if (!welcomeOnly) {
+      pushStep(
+        steps,
+        "continue-feature",
+        "Seguir con la app",
+        "Cuando el error esté corregido, continúa con la siguiente función que pedí en el chat.",
+      );
+    }
+    return steps.slice(0, MAX_STEPS);
+  }
+
+  for (const s of stepsFromAiBullets(lastAi)) {
+    pushStep(steps, s.id, s.label, s.prompt);
   }
 
   if (/deploy pendiente|sin publicar|publicar/i.test(pipeline)) {
@@ -258,7 +333,11 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
     );
   }
 
-  if (/diseño|design|hero|ui|ux|visual|tipograf|animac/i.test(recentUser)) {
+  const userAskedDesign =
+    /diseño|design|hero|ui|ux|visual|tipograf|animac/i.test(recentUser) &&
+    !/error|react|preview|arregl|fix/i.test(recentUser);
+
+  if (userAskedDesign) {
     pushStep(
       steps,
       "design-audit",
@@ -270,6 +349,15 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
       "design-animations",
       "Añadir animaciones",
       "Añade animaciones sutiles (hover, entrada de secciones) sin afectar rendimiento.",
+    );
+  }
+
+  if (ctx.visualEditOn) {
+    pushStep(
+      steps,
+      "visual-only",
+      "Solo ediciones visuales",
+      "Aplica solo cambios visuales (colores, tipografía, espaciado, hover). No cambies lógica, rutas ni datos.",
     );
   }
 
