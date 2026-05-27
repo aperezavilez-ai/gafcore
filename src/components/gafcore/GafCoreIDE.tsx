@@ -725,9 +725,10 @@ export function GafCoreIDE() {
     >
       {/* Top bar */}
       <header
-        className="flex h-11 shrink-0 items-center justify-between gap-1 border-b px-2 md:h-12 md:gap-2 md:px-3"
+        className="flex shrink-0 flex-col border-b"
         style={{ background: "#ffffff", borderColor: "#e5e7eb" }}
       >
+        <div className="flex h-11 items-center justify-between gap-1 border-b border-border/40 px-2 md:h-12 md:gap-2 md:px-3 md:border-b-0">
         {/* Left: logo + selector de proyecto */}
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden md:gap-1 md:flex-none">
           <div
@@ -749,7 +750,7 @@ export function GafCoreIDE() {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="ml-1 hidden max-w-[min(32vw,180px)] min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-semibold text-foreground hover:bg-muted md:flex"
+                  className="ml-1 hidden max-w-[min(32vw,180px)] min-w-0 items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-semibold text-foreground hover:bg-muted sm:flex"
                   title={user?.email ?? ideUserToolbarName(user)}
                   aria-label={`Cuenta: ${ideUserToolbarName(user)}`}
                 >
@@ -882,7 +883,64 @@ export function GafCoreIDE() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          <div className="ml-1 hidden min-w-0 items-center gap-1.5 md:flex">
+          {userShortLabel ? (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-foreground hover:bg-muted/80 sm:hidden"
+                  title={user?.email ?? ideUserToolbarName(user)}
+                  aria-label={`Cuenta: ${ideUserToolbarName(user)}`}
+                >
+                  {ideUserToolbarName(user).charAt(0).toUpperCase()}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel className="flex items-start gap-2 text-[12px] font-normal">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-bold">
+                    {ideUserToolbarName(user).charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1 leading-snug">
+                    <span className="block truncate font-medium text-foreground">
+                      {ideUserToolbarName(user)}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                      {user?.email ?? "Sesión"}
+                    </span>
+                  </span>
+                </DropdownMenuLabel>
+                <DropdownMenuItem className="text-primary" onClick={() => setCreditsModalOpen(true)}>
+                  <Gift className="mr-2 h-4 w-4" />
+                  Comprar créditos
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    navigate({ to: "/gafcore/settings/project", search: { section: "plans" } })
+                  }
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Pagos
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={async () => {
+                    const { supabase } = await import("@/integrations/supabase/client");
+                    await supabase.auth.signOut();
+                    toast.success("Sesión cerrada");
+                    navigate({
+                      to: "/gafcore/login",
+                      search: { redirect: "/gafcore/app", signedOut: true },
+                    });
+                  }}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          <div className="ml-0.5 hidden min-w-0 items-center gap-1.5 md:flex">
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
@@ -896,7 +954,7 @@ export function GafCoreIDE() {
             <>
               <Link
                 to="/gafcore/admin/ops"
-                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:flex"
+                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
                 title="Ops — diagnóstico y aprobación (admin)"
               >
                 <ShieldAlert className="h-4 w-4" />
@@ -904,7 +962,7 @@ export function GafCoreIDE() {
               <button
                 type="button"
                 onClick={() => setSecretsOpen(true)}
-                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:flex"
+                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
                 title="Secretos del proyecto (solo administración)"
               >
                 <KeyRound className="h-4 w-4" />
@@ -928,7 +986,7 @@ export function GafCoreIDE() {
                   setUsersLoading(false);
                 }
               }}
-              className="hidden h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground md:flex"
+              className="hidden h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
               title="Estadísticas de usuarios"
             >
               <Users className="h-4 w-4" />
@@ -1252,7 +1310,7 @@ export function GafCoreIDE() {
             size="sm"
             variant="ghost"
             onClick={onShare}
-            className="hidden h-8 gap-1.5 px-2.5 text-[13px] text-foreground hover:bg-muted md:inline-flex"
+            className="hidden h-8 gap-1.5 px-2.5 text-[13px] text-foreground hover:bg-muted lg:inline-flex"
           >
             <Share2 className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Compartir</span>
@@ -1306,7 +1364,7 @@ export function GafCoreIDE() {
             title="Configuración del proyecto"
             aria-label="Configuración del proyecto"
             onClick={() => navigate({ to: "/gafcore/settings/project" })}
-            className="hidden h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground md:inline-flex"
+            className="hidden h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground lg:inline-flex"
           >
             <SettingsIcon className="h-4 w-4" />
           </Button>
@@ -1324,103 +1382,174 @@ export function GafCoreIDE() {
                 search: { redirect: "/gafcore/app", signedOut: true },
               });
             }}
-            className="hidden h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive md:inline-flex"
+            className="hidden h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive lg:inline-flex"
           >
             <LogOut className="h-4 w-4" />
           </Button>
-          {/* Móvil: menú único con herramientas secundarias */}
+        </div>
+        </div>
+
+        {/* Móvil: segunda fila — herramientas visibles (scroll horizontal), no ocultas en menú */}
+        <div
+          className="flex shrink-0 items-center gap-0.5 overflow-x-auto overscroll-x-contain px-1.5 py-1 md:hidden [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+          aria-label="Herramientas del IDE"
+        >
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Historial"
+            aria-label="Historial"
+          >
+            <History className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setView("preview");
+              refreshPreview();
+              const el = mobileScrollRef.current;
+              if (el && isMobile) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
+            }}
+            className={`flex h-8 shrink-0 items-center justify-center rounded-md px-2.5 text-[12px] font-medium ${
+              view === "preview"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+            title="Preview"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setView("code");
+              const el = mobileScrollRef.current;
+              if (el && isMobile) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
+            }}
+            className={`flex h-8 shrink-0 items-center justify-center rounded-md px-2.5 text-[12px] font-medium ${
+              view === "code"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+            title="Código"
+          >
+            <Code2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setConnectorsOpen(true)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Cloud"
+            aria-label="Cloud"
+          >
+            <Cloud className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setAnalyticsOpen(true)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Analytics"
+            aria-label="Analytics"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Seguridad"
+            aria-label="Seguridad"
+          >
+            <Shield className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void onShare()}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Compartir"
+            aria-label="Compartir"
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate({ to: "/gafcore/settings/project" })}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Ajustes del proyecto"
+            aria-label="Ajustes"
+          >
+            <SettingsIcon className="h-4 w-4" />
+          </button>
+          {isAdmin ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void navigate({ to: "/gafcore/admin/ops" })}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Ops admin"
+                aria-label="Ops admin"
+              >
+                <ShieldAlert className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSecretsOpen(true)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Secretos"
+                aria-label="Secretos"
+              >
+                <KeyRound className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setUsersOpen(true);
+                  setUsersLoading(true);
+                  setUsersError(null);
+                  try {
+                    const stats = await getUserStats();
+                    setUserStats(stats);
+                  } catch {
+                    setUsersError("No se pudieron cargar las estadísticas");
+                    toast.error("No se pudieron cargar las estadísticas");
+                  } finally {
+                    setUsersLoading(false);
+                  }
+                }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Usuarios"
+                aria-label="Usuarios"
+              >
+                <Users className="h-4 w-4" />
+              </button>
+            </>
+          ) : null}
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0 md:hidden"
-                aria-label="Más herramientas"
+              <button
+                type="button"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Más opciones"
+                aria-label="Más opciones"
               >
                 <MoreHorizontal className="h-4 w-4" />
-              </Button>
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-                {ideUserToolbarName(user)}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
-                <History className="mr-2 h-4 w-4" />
-                Historial
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void onShare()}>
-                <Share2 className="mr-2 h-4 w-4" />
-                Compartir enlace
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setView("preview");
-                  refreshPreview();
-                }}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Vista previa
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setView("code")}>
-                <Code2 className="mr-2 h-4 w-4" />
-                Código
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuItem onClick={() => setCreditsModalOpen(true)}>
                 <Gift className="mr-2 h-4 w-4" />
                 Créditos
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/gafcore/settings/project" })}>
-                <SettingsIcon className="mr-2 h-4 w-4" />
-                Ajustes del proyecto
-              </DropdownMenuItem>
-              {isAdmin ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => void navigate({ to: "/gafcore/admin/ops" })}>
-                    <ShieldAlert className="mr-2 h-4 w-4" />
-                    Ops (admin)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSecretsOpen(true)}>
-                    <KeyRound className="mr-2 h-4 w-4" />
-                    Secretos
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={async () => {
-                      setUsersOpen(true);
-                      setUsersLoading(true);
-                      setUsersError(null);
-                      try {
-                        const stats = await getUserStats();
-                        setUserStats(stats);
-                      } catch {
-                        setUsersError("No se pudieron cargar las estadísticas");
-                        toast.error("No se pudieron cargar las estadísticas");
-                      } finally {
-                        setUsersLoading(false);
-                      }
-                    }}
-                  >
-                    <Users className="mr-2 h-4 w-4" />
-                    Usuarios
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-              <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={async () => {
-                  const { supabase } = await import("@/integrations/supabase/client");
-                  await supabase.auth.signOut();
-                  toast.success("Sesión cerrada");
-                  navigate({
-                    to: "/gafcore/login",
-                    search: { redirect: "/gafcore/app", signedOut: true },
-                  });
+                onClick={() => {
+                  setView("code");
+                  const el = mobileScrollRef.current;
+                  if (el) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
                 }}
               >
-                <LogOut className="mr-2 h-4 w-4" />
-                Cerrar sesión
+                <Folder className="mr-2 h-4 w-4" />
+                Archivos
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
