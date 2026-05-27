@@ -31,6 +31,14 @@ const NPM_BARE_OK = new Set([
   "react/jsx-dev-runtime",
   "vite",
   "@vitejs/plugin-react",
+  // Preview IDE resuelve vía esm.sh — no hace falta package.json en el proyecto virtual.
+  "lucide-react",
+  "clsx",
+  "tailwind-merge",
+  "class-variance-authority",
+  "framer-motion",
+  "recharts",
+  "@radix-ui/react-slot",
 ]);
 
 function normalizePath(p: string): string {

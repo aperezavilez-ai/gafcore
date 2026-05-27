@@ -533,44 +533,51 @@ function fixEmptyAnchors(source: string): string {
  * objeto") rompa toda la página. El render no será perfecto, pero el preview
  * no quedará en pantalla roja y el auto-fix con IA podrá iterar.
  */
+function safeJsxChildExpr(name: string): string {
+  return (
+    "{(" +
+    `(${name} == null) ? null :` +
+    ` (typeof ${name} === 'string' || typeof ${name} === 'number' || typeof ${name} === 'boolean') ? ${name} :` +
+    ` (${name}.$$typeof) ? ${name} :` +
+    ` Array.isArray(${name}) ? null :` +
+    ` (typeof ${name} === 'object' ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? '') : null)` +
+    ")}"
+  );
+}
+
 function fixObjectAsJsxChild(source: string): string {
-  // 1) Recolectar nombres declarados como objeto/array literal.
-  //    const X = { ... }   →  X candidato.
-  //    const X = [{ ... }] →  X candidato.
-  //    const X = func()    →  ignorado (no sabemos su tipo).
   const objectVars = new Set<string>();
   const declRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*([\[{])/g;
   let m: RegExpExecArray | null;
   while ((m = declRe.exec(source))) {
-    // Para arrays, solo cuenta si el primer elemento es un objeto literal
-    // (heurística: `const X = [{`).
     if (m[2] === "[") {
-      const after = source.slice(declRe.lastIndex, declRe.lastIndex + 10);
+      const after = source.slice(declRe.lastIndex, declRe.lastIndex + 12);
       if (!/^\s*\{/.test(after)) continue;
     }
     objectVars.add(m[1]);
   }
-  if (objectVars.size === 0) return source;
 
-  // 2) Reemplazar `>{X}<` y `>{X}\n<` y similares: solo en posición child de JSX.
-  //    Patrón: precedido por `>` (cierre de tag) + opcional whitespace + `{name}` + opcional whitespace + `<` (apertura tag).
-  return source.replace(
-    /(>[\s\n]*)\{(\w+)\}([\s\n]*<)/g,
-    (match, before: string, name: string, after: string) => {
-      if (!objectVars.has(name)) return match;
-      // Wrapper defensivo. Usamos un IIFE para no perder concisión y para
-      // que el optimizador pueda inlinear.
+  let out = source;
+
+  // `.map(item => item)` cuando item es objeto → mostrar campo legible, no el objeto entero.
+  out = out.replace(
+    /\.map\(\s*\(?(\w+)\)?\s*=>\s*\1\s*\)/g,
+    (match, name: string) => {
       const safe =
-        "{(" +
-        `(${name} == null) ? null :` +
-        ` (typeof ${name} === 'string' || typeof ${name} === 'number' || typeof ${name} === 'boolean') ? ${name} :` +
-        ` (${name}.$$typeof) ? ${name} :` +
-        ` Array.isArray(${name}) ? null :` +
-        ` (${name}.title || ${name}.label || ${name}.name || '')` +
-        ")}";
-      return before + safe + after;
+        `(typeof ${name} === 'object' && ${name} != null && !${name}.$$typeof` +
+        ` ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? '') : ${name})`;
+      return `.map((${name}) => ${safe})`;
     },
   );
+
+  if (objectVars.size === 0) return out;
+
+  for (const name of objectVars) {
+    const bareChild = new RegExp(`\\{${name}\\}(?!\\.)`, "g");
+    out = out.replace(bareChild, safeJsxChildExpr(name));
+  }
+
+  return out;
 }
 
 export function repairCommonJsxSyntaxErrors(source: string): string {

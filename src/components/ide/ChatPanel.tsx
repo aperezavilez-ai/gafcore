@@ -56,6 +56,7 @@ import {
   patchProjectFilesVisually,
   repairCommonJsxSyntaxErrors,
   repairGafcoreProjectMedia,
+  sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { CreditsOutModal } from "@/components/CreditsOutModal";
@@ -189,6 +190,12 @@ function describeGafcoreStreamFailure(message: string): string | null {
   }
   if (message === "NO_STREAM_BODY") {
     return "El asistente no devolvió contenido. Prueba de nuevo o acorta la petición.";
+  }
+  if (message === "rate_limited") {
+    return "Has enviado muchas solicitudes seguidas. Espera un minuto y vuelve a intentarlo.";
+  }
+  if (message === "project_not_found") {
+    return "No se encontró el proyecto abierto. Recarga la página o elige otro proyecto.";
   }
   return null;
 }
@@ -1065,9 +1072,14 @@ export function ChatPanel({
       const looksLikeJsxGlue =
         /SyntaxError|Unexpected token/i.test(msg) ||
         /"[^"]*"(https?:\/\/)/.test(msg);
+      const looksLikeObjectChild =
+        /Objects are not valid as a React child/i.test(msg) ||
+        /Minified React error #31/i.test(msg) ||
+        /error #31/i.test(msg);
 
-      // 1) Auto-repair LOCAL (rápido, gratis) para sintaxis JSX rota.
-      if (looksLikeJsxGlue) {
+      // 1) Auto-repair LOCAL (rápido, gratis): sintaxis rota o React #31 (objeto en JSX).
+      if (looksLikeJsxGlue || looksLikeObjectChild) {
+        let repairedLocally = false;
         setFiles((current) => {
           const next = current.map((f) => {
             if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
@@ -1076,16 +1088,24 @@ export function ChatPanel({
           });
           const changed = next.some((f, i) => f.content !== current[i]?.content);
           if (changed) {
+            repairedLocally = true;
             queueMicrotask(() => {
-              toast.success("Sintaxis JSX reparada automáticamente");
+              toast.success(
+                looksLikeObjectChild
+                  ? "Código reparado (objeto en JSX → texto seguro)"
+                  : "Sintaxis JSX reparada automáticamente",
+              );
               setLastError(null);
             });
             return next;
           }
-          queueMicrotask(() => setLastError(msg));
           return current;
         });
-        return;
+        if (repairedLocally) return;
+        if (looksLikeJsxGlue && !looksLikeObjectChild) {
+          setLastError(msg);
+          return;
+        }
       }
 
       // 2) Cualquier otro error de runtime: intentar auto-fix con IA.
@@ -1379,7 +1399,7 @@ export function ChatPanel({
     } catch {
       /* reparación local ya aplicada */
     }
-    const merged = mergeGeneratedFiles(baseFiles, outFiles);
+    const merged = sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles));
     setFiles(merged);
     void syncFilesToDb(outFiles);
     onCodeGenerated?.();
@@ -1683,6 +1703,9 @@ export function ChatPanel({
           const ej = (await res.json()) as { error?: string };
           if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
           else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
+          else if (ej?.error === "rate_limited") errCode = "rate_limited";
+          else if (ej?.error === "project_not_found") errCode = "project_not_found";
+          else if (res.status === 429) errCode = "rate_limited";
           else if (typeof ej?.error === "string") errCode = ej.error;
         } else {
           errCode = "HTML_RESPONSE";
@@ -1751,11 +1774,14 @@ export function ChatPanel({
           const ej = (await res.json()) as { error?: string; detail?: string };
           if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
           else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
+          else if (ej?.error === "rate_limited") errCode = "rate_limited";
+          else if (ej?.error === "project_not_found") errCode = "project_not_found";
           else if (ej?.error === "invalid_body")
             errCode = "Petición inválida (revisa el texto o archivos).";
           else if (ej?.error === "upstream") errCode = `UPSTREAM:${res.status}`;
           else if (ej?.error === "credits_error") errCode = "CREDITS_VERIFY_FAILED";
           else if (ej?.error === "no_stream_body") errCode = "NO_STREAM_BODY";
+          else if (res.status === 429) errCode = "rate_limited";
           else if (typeof ej?.error === "string") errCode = ej.error;
           else if (res.status === 500 && ej?.detail)
             errCode = `Error del servidor: ${String(ej.detail).slice(0, 200)}`;

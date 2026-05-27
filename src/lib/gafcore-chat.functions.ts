@@ -21,6 +21,8 @@ import {
   resolveGatewayModel,
 } from "@/lib/gafcore-ai-gateway.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
+import { enforceGafcoreChatRateLimit } from "@/lib/gafcore-api-ratelimit.server";
+import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
@@ -35,6 +37,25 @@ export const gafcoreChat = createServerFn({ method: "POST" })
   .inputValidator((input) => gafcoreChatBodySchema.parse(input))
   .handler(async ({ data, context }) => {
     const t0 = Date.now();
+    const userId = context.userId as string;
+
+    const skipCredits = await isGafcoreAdminUser(userId);
+    if (!skipCredits) {
+      const limited = await enforceGafcoreChatRateLimit(userId);
+      if (limited) {
+        const err: Error & { code?: string } = new Error("rate_limited");
+        err.code = "rate_limited";
+        throw err;
+      }
+    }
+
+    const projectAccess = await assertGafcoreProjectAccess(data.projectId, userId);
+    if (!projectAccess.ok) {
+      const err: Error & { code?: string } = new Error("project_not_found");
+      err.code = "project_not_found";
+      throw err;
+    }
+
     let gateway: ReturnType<typeof getGafcoreAiGateway>;
     try {
       gateway = getGafcoreAiGateway();
@@ -44,7 +65,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
 
     const memory = await retrieveProjectMemoryContext({
       projectId: data.projectId,
-      userId: context.userId,
+      userId,
       instruction: data.instruction,
       files: data.files as ProjFile[],
     });
@@ -59,15 +80,15 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       memory.priorityPaths,
     );
 
-    const cacheKey = `${context.userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
+    const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
     const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
     if (cached) {
-      const bal = await fetchBalance(context.userId);
+      const bal = await fetchBalance(userId);
       console.info(
         JSON.stringify({
           event: "gafcore_chat",
           cacheHit: true,
-          userId: context.userId,
+          userId,
           model,
           ms: Date.now() - t0,
           filesIn: data.files.length,
@@ -83,10 +104,9 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       };
     }
 
-    const skipCredits = await isGafcoreAdminUser(context.userId);
     let balanceAfterConsume: number | null = null;
     if (!skipCredits) {
-      const credit = await consumeAiCredits(context.userId, COST_PER_REQUEST, "gafcore_chat", {
+      const credit = await consumeAiCredits(userId, COST_PER_REQUEST, "gafcore_chat", {
         instruction_len: data.instruction.length,
         model,
         ctx_files: ctxFiles.length,
@@ -109,7 +129,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       content = completed.content || "{}";
     } catch (e: unknown) {
       if (!skipCredits) {
-        await refundAiCredits(context.userId, COST_PER_REQUEST, "gafcore_chat_refund", {
+        await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_refund", {
           error: String((e as Error)?.message ?? e),
         });
       }
@@ -132,7 +152,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
         JSON.stringify({
           event: "gafcore_chat",
           cacheHit: false,
-          userId: context.userId,
+          userId,
           model,
           ms: Date.now() - t0,
           filesIn: data.files.length,
@@ -176,7 +196,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       JSON.stringify({
         event: "gafcore_chat",
         cacheHit: false,
-        userId: context.userId,
+        userId,
         model,
         ms: Date.now() - t0,
         filesIn: data.files.length,

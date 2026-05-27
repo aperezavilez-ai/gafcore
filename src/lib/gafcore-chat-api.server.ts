@@ -3,6 +3,8 @@
  * (en Vercel el server-entry devuelve HTTPError 500 y el chat quedaba en HTML de error).
  */
 import { requireGafcoreApiUser } from "@/lib/gafcore-api-auth.server";
+import { enforceGafcoreChatRateLimit } from "@/lib/gafcore-api-ratelimit.server";
+import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server";
 import {
   gafcoreChatBodySchema,
   buildGafcoreMessages,
@@ -60,6 +62,15 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   }
   const data = parsed.data;
 
+  const skipCredits = await isGafcoreAdminUser(userId);
+  if (!skipCredits) {
+    const limited = await enforceGafcoreChatRateLimit(userId);
+    if (limited) return limited;
+  }
+
+  const projectAccess = await assertGafcoreProjectAccess(data.projectId, userId);
+  if (!projectAccess.ok) return projectAccess.response;
+
   let gateway: ReturnType<typeof getGafcoreAiGateway>;
   try {
     gateway = getGafcoreAiGateway();
@@ -100,7 +111,6 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     });
   }
 
-  const skipCredits = await isGafcoreAdminUser(userId);
   if (!skipCredits) {
     const credit = await consumeAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream", {
       instruction_len: data.instruction.length,
@@ -206,6 +216,15 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   }
   const data = parsed.data;
 
+  const skipCredits = await isGafcoreAdminUser(userId);
+  if (!skipCredits) {
+    const limited = await enforceGafcoreChatRateLimit(userId);
+    if (limited) return limited;
+  }
+
+  const projectAccess = await assertGafcoreProjectAccess(data.projectId, userId);
+  if (!projectAccess.ok) return projectAccess.response;
+
   let gateway: ReturnType<typeof getGafcoreAiGateway>;
   try {
     gateway = getGafcoreAiGateway();
@@ -246,7 +265,6 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     });
   }
 
-  const skipCredits = await isGafcoreAdminUser(userId);
   let balanceAfterConsume: number | null = null;
   if (!skipCredits) {
     const credit = await consumeAiCredits(userId, COST_PER_REQUEST, "gafcore_chat", {

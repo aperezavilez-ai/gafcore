@@ -7,6 +7,8 @@
  */
 import { z } from "zod";
 import { requireGafcoreApiUser } from "@/lib/gafcore-api-auth.server";
+import { enforceGafcoreDesignCritiqueRateLimit } from "@/lib/gafcore-api-ratelimit.server";
+import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import {
   completeChatMessage,
@@ -64,13 +66,21 @@ export async function handleGafcoreDesignCritiquePost(request: Request): Promise
   }
   const { projectId, files, screenshotDataUrl, brief } = parsed.data;
 
+  const skipCredits = await isGafcoreAdminUser(userId);
+  if (!skipCredits) {
+    const limited = await enforceGafcoreDesignCritiqueRateLimit(userId);
+    if (limited) return limited;
+  }
+
+  const projectAccess = await assertGafcoreProjectAccess(projectId, userId);
+  if (!projectAccess.ok) return projectAccess.response;
+
   try {
     getGafcoreAiGateway();
   } catch {
     return jsonResponse({ ok: false, error: "ai_not_configured" }, 500);
   }
 
-  const skipCredits = await isGafcoreAdminUser(userId);
   if (!skipCredits) {
     const credit = await consumeAiCredits(userId, CRITIQUE_CREDIT_COST, "gafcore_design_critique", {
       files: files.length,
