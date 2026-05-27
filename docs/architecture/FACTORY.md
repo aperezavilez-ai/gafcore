@@ -67,8 +67,27 @@ Consulta en Supabase o vía `getGafcoreFactoryStatus` + `pipeline.payload_json`.
 npm run gafcore:smoke-factory
 ```
 
+## Plantillas acotadas (perfiles)
+
+El orquestador detecta el tipo por texto e inyecta reglas estrictas:
+
+| Perfil | Cuándo | Secciones obligatorias |
+|--------|--------|------------------------|
+| Landing SaaS | hero, landing, pricing | hero, features, pricing/CTA, footer |
+| Dashboard | dashboard, KPI, sidebar | nav, tarjetas KPI, tabla |
+| Tienda | ecommerce, carrito | header, grid, CTA |
+| SaaS genérico | resto | hero, valor, CTA |
+
+## E2E post-deploy
+
+Si **Publicar al terminar** está ON y el deploy a GitHub/Vercel OK, el servidor hace GET a `/` y `/index.html` (HTTP 2xx).
+
+## Panel admin
+
+`/gafcore/admin/ops` — bloque **Métricas Modo Fábrica** (% éxito por fase, últimos runs).
+
 ## Límites
 
 - Rate limit: `gafcore_factory_run` (8/min)
-- Sin E2E Playwright del sitio desplegado (futuro)
+- E2E = HTTP básico, no Playwright en navegador
 - Proyectos muy grandes: dividir en varios prompts

@@ -62,6 +62,11 @@ export type FactoryRunResult =
         message: string;
         siteHost?: string;
       };
+      templateProfile?: {
+        id: string;
+        label: string;
+        slug: string;
+      };
       reply: string;
     }
   | {

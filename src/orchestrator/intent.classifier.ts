@@ -40,7 +40,10 @@ export function classifyUserIntent(
   } else if (LANDING.test(text)) {
     projectType = "landing";
     confidence = Math.max(confidence, 0.68);
-  } else if (/\b(app|aplicación|dashboard|panel)\b/i.test(text)) {
+  } else if (/\b(dashboard|panel de control|métricas|kpi|sidebar)\b/i.test(text)) {
+    projectType = "app";
+    confidence = Math.max(confidence, 0.72);
+  } else if (/\b(app|aplicación|panel)\b/i.test(text)) {
     projectType = "app";
     confidence = Math.max(confidence, 0.6);
   } else if (/\b(desde cero|vacío|blank|nuevo proyecto)\b/i.test(text)) {

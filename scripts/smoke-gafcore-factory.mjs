@@ -17,6 +17,9 @@ async function main() {
   const smoke = await import(
     pathToFileURL(resolve(root, "src/lib/gafcore-factory-build-smoke.server.ts")).href
   );
+  const templates = await import(
+    pathToFileURL(resolve(root, "src/lib/gafcore-factory-templates.shared.ts")).href
+  );
 
   if (!shared.FACTORY_BUILD_PREFIX.includes("fábrica")) {
     throw new Error("FACTORY_BUILD_PREFIX missing");
@@ -42,10 +45,17 @@ async function main() {
   const good = await smoke.runFactoryBuildSmoke(okFiles);
   if (!good.ok) throw new Error(`expected build smoke ok: ${good.message}`);
 
+  const landing = templates.resolveFactoryTemplateProfile("crea una landing con hero y pricing");
+  if (landing.id !== "landing") throw new Error("landing profile resolution failed");
+  const dash = templates.resolveFactoryTemplateProfile("dashboard con tarjetas kpi");
+  if (dash.id !== "dashboard") throw new Error("dashboard profile resolution failed");
+
   console.log("gafcore:smoke-factory OK");
   console.log("  entry:", entry.entryFiles.join(", "));
   console.log("  good:", good.message);
   console.log("  bad:", bad.message);
+  console.log("  profile landing:", landing.label);
+  console.log("  profile dashboard:", dash.label);
 }
 
 main().catch((e) => {

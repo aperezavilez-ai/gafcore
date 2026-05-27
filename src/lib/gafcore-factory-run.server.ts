@@ -3,12 +3,17 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyUserIntent } from "@/orchestrator/intent.classifier";
-import { selectTemplateSlug } from "@/orchestrator/template.selector";
+import {
+  buildFactoryInstructionWithProfile,
+  resolveFactoryTemplateProfile,
+} from "@/lib/gafcore-factory-templates.shared";
+import { verifyFactoryDeploySite } from "@/lib/gafcore-factory-deploy-verify.server";
 import { pipelineIsSuccess } from "@/orchestrator/gafcore-build-pipeline.shared";
 import {
   assertProjectOwned,
   appendRunStep,
   createPipelineRun,
+  updatePipelineRun,
 } from "@/lib/gafcore-orchestrator.server";
 import { finalizePipelineValidation } from "@/lib/gafcore-orchestrator-pipeline.server";
 import { performDesignCritique } from "@/lib/gafcore-design-critique-run.server";
@@ -57,12 +62,14 @@ export async function executeGafcoreFactoryRun(
     return { ok: false, error: "project_not_found" };
   }
 
-  const factoryInstruction = instructionIncludesFactoryPrefix(input.instruction)
-    ? input.instruction
-    : `${FACTORY_BUILD_PREFIX}${input.instruction}`;
+  const profile = resolveFactoryTemplateProfile(input.instruction);
+  const withProfile = buildFactoryInstructionWithProfile(input.instruction, profile);
+  const factoryInstruction = instructionIncludesFactoryPrefix(withProfile)
+    ? withProfile
+    : `${FACTORY_BUILD_PREFIX}${withProfile}`;
 
   const intent = classifyUserIntent(factoryInstruction, { mode: "build" });
-  const suggestedTemplateSlug = selectTemplateSlug(intent);
+  const suggestedTemplateSlug = profile.templateSlug;
 
   const pipelineRun = await createPipelineRun(input.sb, {
     projectId: input.projectId,
@@ -76,6 +83,14 @@ export async function executeGafcoreFactoryRun(
     timer.mark("planning", false, "pipeline_failed");
     return { ok: false, error: "pipeline_failed", message: "No se pudo iniciar el pipeline." };
   }
+
+  await updatePipelineRun(input.sb, pipelineRun.id, input.userId, {
+    payload_json: {
+      suggestedTemplateSlug,
+      factoryProfileId: profile.id,
+      factoryProfileLabel: profile.label,
+    },
+  });
 
   let workflowRunId: string;
   let planSummary: string;
@@ -288,6 +303,15 @@ export async function executeGafcoreFactoryRun(
     deployMeta.message = deploy.message;
     deployMeta.siteHost = deploy.siteHost;
     timer.mark("deploy", deploy.ok, deploy.message.slice(0, 120));
+    if (deploy.ok && deploy.siteHost) {
+      const e2e = await verifyFactoryDeploySite(deploy.siteHost);
+      timer.mark("deploy_e2e", e2e.ok, e2e.message.slice(0, 120));
+      deployMeta.message = `${deploy.message} · ${e2e.message}`;
+      if (!e2e.ok) {
+        deployMeta.ok = false;
+        success = false;
+      }
+    }
     if (!deploy.ok) {
       success = false;
     }
@@ -354,6 +378,11 @@ export async function executeGafcoreFactoryRun(
     },
     critique: critiqueMeta,
     deploy: deployMeta.attempted ? deployMeta : undefined,
+    templateProfile: {
+      id: profile.id,
+      label: profile.label,
+      slug: profile.templateSlug,
+    },
     reply,
   };
 }

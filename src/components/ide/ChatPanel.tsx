@@ -1958,6 +1958,9 @@ export function ChatPanel({
       toast.success(`Sitio publicado: ${factoryRes.deploy.siteHost}`, { duration: 8000 });
     }
 
+    if (factoryRes.templateProfile) {
+      toast.message(`Plantilla fábrica: ${factoryRes.templateProfile.label}`, { duration: 4000 });
+    }
     appendMessageDeduped("ai", factoryRes.reply);
     scrollChatToBottomSoon("auto");
 
