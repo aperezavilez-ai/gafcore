@@ -2056,7 +2056,9 @@ export function ChatPanel({
     let patchFiles = factoryRes.files.map((p) => ({
       name: p.name,
       language: p.language,
-      content: p.content,
+      content: /\.(jsx|tsx|js|ts)$/i.test(p.name)
+        ? repairCommonJsxSyntaxErrors(p.content)
+        : p.content,
     }));
 
     if (patchFiles.length > 0 && effectiveBuild) {

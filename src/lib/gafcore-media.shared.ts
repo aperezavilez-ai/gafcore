@@ -558,6 +558,7 @@ function fixObjectAsJsxChild(source: string): string {
   }
 
   let out = source;
+  const objectArrayVars = new Set<string>();
 
   // `.map(item => item)` cuando item es objeto → mostrar campo legible, no el objeto entero.
   out = out.replace(
@@ -569,6 +570,35 @@ function fixObjectAsJsxChild(source: string): string {
       return `.map((${name}) => ${safe})`;
     },
   );
+
+  // Marca arrays literales de objetos: `const items = [{ ... }]`
+  // para reforzar reparaciones dentro de callbacks JSX.
+  const objectArrayDeclRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*\[\s*\{/g;
+  while ((m = objectArrayDeclRe.exec(source))) {
+    objectArrayVars.add(m[1]);
+  }
+
+  // Si se mapea un array de objetos y se renderiza `{item}` en JSX,
+  // reemplaza por un wrapper seguro para evitar React #31.
+  //
+  // Ejemplo:
+  //   features.map((feature) => <li>{feature}</li>)
+  // → features.map((feature) => <li>{(...safe...)}</li>)
+  for (const listName of objectArrayVars) {
+    const mapParamRe = new RegExp(
+      `${listName}\\.map\\(\\s*\\(?\\s*(\\w+)\\s*\\)?\\s*=>`,
+      "g",
+    );
+    const callbackParams = new Set<string>();
+    let mapMatch: RegExpExecArray | null;
+    while ((mapMatch = mapParamRe.exec(out))) {
+      callbackParams.add(mapMatch[1]);
+    }
+    for (const param of callbackParams) {
+      const bareChild = new RegExp(`\\{${param}\\}(?!\\.)`, "g");
+      out = out.replace(bareChild, safeJsxChildExpr(param));
+    }
+  }
 
   if (objectVars.size === 0) return out;
 
