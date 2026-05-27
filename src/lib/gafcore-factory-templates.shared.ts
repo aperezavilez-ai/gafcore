@@ -19,7 +19,7 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
     templateSlug: "landing-premium",
     requiredSections: ["hero", "features", "pricing o CTA", "footer"],
     promptAddon:
-      "[plantilla: landing] Incluye hero con titular claro, subtítulo, CTA primario, bloque de 3 features con iconos lucide, sección pricing (3 planes) o CTA final, footer con enlaces. Mobile-first, tokens semánticos (bg-background, text-foreground).",
+      "[plantilla: landing premium] Incluye hero con titular claro, subtítulo, CTA primario, bloque de 3 features con iconos lucide, sección pricing (3 planes) o CTA final, footer con enlaces. Debe verse premium: composición visual, contraste alto, jerarquía tipográfica, tarjetas con profundidad suave, micro-interacciones hover/focus y ritmo de espaciado consistente. Mobile-first, tokens semánticos (bg-background, text-foreground). Evita imágenes stock genéricas y placeholders.",
   },
   ecommerce: {
     id: "ecommerce",
@@ -27,7 +27,7 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
     templateSlug: "tienda-basica",
     requiredSections: ["header", "grid productos", "carrito o CTA compra"],
     promptAddon:
-      "[plantilla: ecommerce] Catálogo con grid de productos (imagen, nombre, precio), header con logo y carrito, filtros simples, estados hover. Sin checkout real — mock funcional con localStorage.",
+      "[plantilla: ecommerce premium] Catálogo con grid de productos (imagen, nombre, precio), header con logo y carrito, filtros simples, estados hover/focus. Diseño de marca moderno (no look de demo), tarjetas de producto con buena jerarquía visual y CTA claros. Sin checkout real — mock funcional con localStorage. Evita placeholders genéricos.",
   },
   app: {
     id: "dashboard",
@@ -35,7 +35,7 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
     templateSlug: "blank-vite",
     requiredSections: ["sidebar o nav", "tarjetas KPI", "tabla o lista"],
     promptAddon:
-      "[plantilla: dashboard] Panel con sidebar, 3-4 tarjetas KPI, tabla o lista de items, barra superior con título y acción. Diseño denso pero legible; dark/light coherente.",
+      "[plantilla: dashboard premium] Panel con sidebar, 3-4 tarjetas KPI, tabla o lista de items, barra superior con título y acción. Debe parecer producto SaaS real: jerarquía, densidad legible, spacing consistente, estados interactivos y dark/light coherente.",
   },
   blank: {
     id: "starter",
@@ -43,7 +43,7 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
     templateSlug: "blank-vite",
     requiredSections: ["App.tsx", "estructura mínima usable"],
     promptAddon:
-      "[plantilla: starter] App mínima funcional con una pantalla clara y navegación básica si aplica.",
+      "[plantilla: starter premium] App funcional con una pantalla clara y navegación básica si aplica. Aunque sea mínima, debe mantener acabado visual profesional (tipografía, spacing, contraste y estados UI).",
   },
   unknown: {
     id: "saas",
@@ -51,9 +51,12 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
     templateSlug: "landing-premium",
     requiredSections: ["hero", "valor", "CTA"],
     promptAddon:
-      "[plantilla: saas] Landing profesional B2B: hero, propuesta de valor, 3 beneficios, CTA y footer.",
+      "[plantilla: saas premium] Landing profesional B2B: hero, propuesta de valor, 3 beneficios, CTA y footer. Evita aspecto genérico; usa layout editorial limpio, copy escaneable y secciones con ritmo visual premium.",
   },
 };
+
+const PREMIUM_UI_GUARDRAILS =
+  "Guardrails premium obligatorios: NO renderizar placeholders genéricos ni imágenes stock aleatorias por defecto; NO dejar cards planas sin estados; incluir hover/focus visibles en CTA; tipografía y spacing consistentes; evitar bloques vacíos de relleno.";
 
 /** Valor del selector IDE: detección automática por texto del prompt. */
 export const FACTORY_PROFILE_AUTO_ID = "auto";
@@ -115,7 +118,7 @@ export function buildFactoryInstructionWithProfile(
   profile: FactoryTemplateProfile,
 ): string {
   const sections = profile.requiredSections.join(", ");
-  return `${profile.promptAddon} Secciones obligatorias: ${sections}. ${baseInstruction}`;
+  return `${profile.promptAddon} Secciones obligatorias: ${sections}. ${PREMIUM_UI_GUARDRAILS} ${baseInstruction}`;
 }
 
 export function listFactoryTemplateProfiles(): FactoryTemplateProfile[] {

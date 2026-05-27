@@ -317,7 +317,8 @@ async function executeGafcoreFactoryRunHeavy(
       userId: input.userId,
       projectId: input.projectId,
       files: outputFiles,
-      brief: "Modo fábrica: prioriza correcciones visuales de alto impacto.",
+      brief:
+        "Modo fábrica premium: elimina look genérico, sube jerarquía visual, mejora spacing/typography/contraste/estados hover-focus y evita placeholders o imágenes stock aleatorias.",
     });
     if (critiqueRes.ok) {
       critiqueMeta = {

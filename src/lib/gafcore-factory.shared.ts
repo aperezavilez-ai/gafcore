@@ -1,7 +1,7 @@
 /**
  * Modo Fábrica GafCore — idea → plan → código → validación → build smoke → diseño → (opcional) deploy.
  */
-export const GAFCORE_FACTORY_CRITIQUE_THRESHOLD = 80;
+export const GAFCORE_FACTORY_CRITIQUE_THRESHOLD = 90;
 export const GAFCORE_FACTORY_MAX_WAVES = 12;
 /** Por debajo de este % en una fase (mín. 3 muestras) se muestra alerta en admin. */
 export const GAFCORE_FACTORY_PHASE_ALERT_THRESHOLD = 70;
@@ -23,8 +23,10 @@ export const GAFCORE_FACTORY_PHASES = [
 export type GafcoreFactoryPhase = (typeof GAFCORE_FACTORY_PHASES)[number];
 
 export const FACTORY_BUILD_PREFIX =
-  "[modo fábrica GafCore] Objetivo: entregar software funcional listo para preview y publicación. " +
-  "Plan coherente, UI profesional con tokens semánticos, JSX válido (sin objetos como hijos React), iconos lucide reales. ";
+  "[modo fábrica GafCore] Objetivo: entregar software funcional listo para preview y publicación con calidad visual premium. " +
+  "Plan coherente, UI profesional con tokens semánticos, JSX válido (sin objetos como hijos React), iconos lucide reales, " +
+  "jerarquía tipográfica clara, spacing consistente (8px grid), estados hover/focus, contraste correcto y mobile-first real. " +
+  "Evita look genérico tipo placeholder/PowerPoint: NO usar imágenes de stock genéricas por defecto, NO hero vacío, NO bloques planos sin profundidad.";
 
 export type FactoryFileOut = {
   name: string;
