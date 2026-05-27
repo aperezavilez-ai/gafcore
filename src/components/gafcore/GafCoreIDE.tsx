@@ -191,6 +191,27 @@ export function GafCoreIDE() {
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Al activar layout móvil o al cambiar tamaño/orientación, garantiza que el
+  // scroll esté alineado al pane actual (evita posiciones intermedias en iOS).
+  useEffect(() => {
+    if (!isMobile) return;
+    const realign = () => {
+      const el = mobileScrollRef.current;
+      if (!el) return;
+      const idx = mobilePane === "workspace" ? 1 : 0;
+      el.scrollTo({ left: idx * el.clientWidth, behavior: "auto" });
+    };
+    // Espera 1 frame a que el flex calcule clientWidth correcto.
+    const raf = requestAnimationFrame(realign);
+    window.addEventListener("resize", realign);
+    window.addEventListener("orientationchange", realign);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", realign);
+      window.removeEventListener("orientationchange", realign);
+    };
+  }, [isMobile, mobilePane]);
   /** ID del proyecto activo (sincronizado con `setCurrentProjectId` en userSupabase). */
   const [currentProjectId, setCurrentProjectIdState] = useState<string | null>(null);
   const [userProjects, setUserProjects] = useState<ProjectRow[]>([]);
@@ -921,7 +942,7 @@ export function GafCoreIDE() {
               title="Estadísticas de usuarios"
             >
               <Users className="h-4 w-4" />
-              <span>Usuarios</span>
+              <span className="hidden sm:inline">Usuarios</span>
             </button>
           )}
           <DropdownMenu
@@ -1425,11 +1446,11 @@ export function GafCoreIDE() {
                   const idx = Math.round(target.scrollLeft / target.clientWidth);
                   setMobilePane(idx === 0 ? "chat" : "workspace");
                 }}
-                className="relative flex w-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="relative flex w-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [scroll-snap-stop:always]"
               >
                 {/* Pane 1: Chat — width fijo en 100% del scroll container */}
                 <div
-                  className="relative h-full min-w-0 shrink-0 snap-start snap-always overflow-hidden"
+                  className="relative h-full min-w-0 shrink-0 snap-start overflow-hidden [scroll-snap-stop:always]"
                   style={{ width: "100%", flex: "0 0 100%" }}
                 >
                   <ChatPanel
@@ -1452,7 +1473,7 @@ export function GafCoreIDE() {
                 </div>
                 {/* Pane 2: Workspace */}
                 <div
-                  className="relative h-full min-w-0 shrink-0 snap-start snap-always overflow-hidden bg-muted/30"
+                  className="relative h-full min-w-0 shrink-0 snap-start overflow-hidden bg-muted/30 [scroll-snap-stop:always]"
                   style={{ width: "100%", flex: "0 0 100%" }}
                 >
                   <div className="flex h-full flex-col">
