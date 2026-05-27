@@ -549,11 +549,37 @@ function safeJsxChildExpr(name: string): string {
 
 /** `{feature.icon}` como texto → `<feature.icon />` (componente Lucide en objeto). */
 function fixComponentFieldAsJsxChild(source: string): string {
-  return source.replace(
+  let out = source.replace(
     /\{(\w+)\.(icon|Icon)\}(?!\s*[/.\w])/g,
     (_m, obj: string, prop: string) =>
       `{typeof ${obj}.${prop} === "function" ? <${obj}.${prop} className="h-5 w-5 shrink-0" aria-hidden /> : null}`,
   );
+  out = out.replace(
+    /\{(\w+)\.([A-Z][\w]*)\}(?!\s*[/.\w])/g,
+    (_m, obj: string, prop: string) =>
+      `{typeof ${obj}.${prop} === "function" ? <${obj}.${prop} className="h-5 w-5 shrink-0" aria-hidden /> : (${obj}.${prop} ?? null)}`,
+  );
+  return out;
+}
+
+/** `{Sparkles}` importado de lucide → `<Sparkles />` (función como hijo = React #31). */
+function fixBareLucideComponentInJsx(source: string): string {
+  const names = new Set<string>();
+  const importRe = /import\s*\{([^}]+)\}\s*from\s*["']lucide-react["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = importRe.exec(source))) {
+    for (const part of m[1].split(",")) {
+      const bits = part.trim().split(/\s+as\s+/i);
+      const sym = (bits[1] || bits[0]).trim();
+      if (sym && /^[A-Z]/.test(sym)) names.add(sym);
+    }
+  }
+  let out = source;
+  for (const name of names) {
+    const bare = new RegExp(`\\{${name}\\}(?!\\.)`, "g");
+    out = out.replace(bare, `<${name} className="h-5 w-5 shrink-0" aria-hidden />`);
+  }
+  return out;
 }
 
 /** Parámetros de `.map` renderizados como `{item}` sin `.campo`. */
@@ -661,7 +687,8 @@ function fixObjectAsJsxChild(source: string): string {
 
   out = fixObjectArrayRenderedAsChild(out, objectArrayVars);
 
-  return fixComponentFieldAsJsxChild(out);
+  out = fixComponentFieldAsJsxChild(out);
+  return fixBareLucideComponentInJsx(out);
 }
 
 /**

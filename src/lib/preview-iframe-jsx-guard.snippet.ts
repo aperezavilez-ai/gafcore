@@ -6,7 +6,13 @@ export const PREVIEW_IFRAME_JSX_GUARD = `
 function __gafcoreCoerceChild(v) {
   if (v == null || typeof v === "boolean") return v;
   if (typeof v === "string" || typeof v === "number") return v;
-  if (typeof v === "function") return null;
+  if (typeof v === "function") {
+    try {
+      return React.createElement(v, { className: "h-5 w-5 shrink-0", "aria-hidden": true });
+    } catch (_) {
+      return null;
+    }
+  }
   if (Array.isArray(v)) {
     var out = [];
     for (var i = 0; i < v.length; i++) {
@@ -60,3 +66,19 @@ function __gafcoreInstallJsxGuard(React, JSX) {
 }
 __gafcoreInstallJsxGuard(React, __gafJsx);
 `;
+
+/** Nombre del módulo virtual que parchea jsx/jsxs para todo el preview. */
+export const PREVIEW_JSX_RUNTIME_SHIM_NAME = "__gafcore_jsx_shim.js";
+
+/** Shim ESM: todos los imports de react/jsx-runtime deben apuntar aquí. */
+export function buildPreviewJsxRuntimeShimCode(reactEsmBase: string): string {
+  const base = reactEsmBase.replace(/\/$/, "");
+  return `
+import React from "${base}";
+import * as __gafJsx from "${base}/jsx-runtime";
+${PREVIEW_IFRAME_JSX_GUARD}
+export const jsx = __gafJsx.jsx;
+export const jsxs = __gafJsx.jsxs;
+export const Fragment = __gafJsx.Fragment;
+`.trim();
+}

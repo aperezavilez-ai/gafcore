@@ -9,7 +9,11 @@ import {
   repairCommonJsxSyntaxErrors,
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
-import { PREVIEW_IFRAME_JSX_GUARD } from "@/lib/preview-iframe-jsx-guard.snippet";
+import {
+  PREVIEW_IFRAME_JSX_GUARD,
+  PREVIEW_JSX_RUNTIME_SHIM_NAME,
+  buildPreviewJsxRuntimeShimCode,
+} from "@/lib/preview-iframe-jsx-guard.snippet";
 
 const ESM = "https://esm.sh";
 
@@ -73,6 +77,9 @@ function rewriteImports(
     if (/\.css($|\?)/i.test(spec)) {
       return `${lead}${quote}data:text/javascript,${quote}`;
     }
+    if (spec === "react/jsx-runtime" || spec === "react/jsx-dev-runtime") {
+      return `${lead}${quote}app:${PREVIEW_JSX_RUNTIME_SHIM_NAME}${quote}`;
+    }
     if (spec.startsWith(".") || spec.startsWith("/")) {
       const resolved = resolveRelative(ownName, spec);
       // CSS side-effect import
@@ -103,7 +110,11 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     const sanitizedFiles = sanitizeProjectJsxFiles(
       deferredFiles.map((f) => ({ name: f.name, content: f.content })),
     );
-    const jsFiles = sanitizedFiles.filter((f) => isJsModule(f.name));
+    const jsxShim: FileItem = {
+      name: PREVIEW_JSX_RUNTIME_SHIM_NAME,
+      content: buildPreviewJsxRuntimeShimCode(REACT_DEPS.react),
+    };
+    const jsFiles = [jsxShim, ...sanitizedFiles.filter((f) => isJsModule(f.name))];
     const cssFiles = deferredFiles.filter((f) => isCss(f.name));
 
     // If no JS modules at all → fall back to plain HTML preview

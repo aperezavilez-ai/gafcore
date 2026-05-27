@@ -1173,7 +1173,20 @@ export function ChatPanel({
           return current;
         });
         if (repairedLocally) return;
-        if (looksLikeJsxGlue && !looksLikeObjectChild) {
+        if (looksLikeObjectChild) {
+          setFiles((current) => {
+            const next = sanitizeProjectJsxFiles(current);
+            const changed = next.some((f, i) => f.content !== current[i]?.content);
+            if (changed) return next;
+            return next.map((f) => ({ ...f }));
+          });
+          queueMicrotask(() => {
+            onCodeGenerated?.();
+            toast.message("Recargando preview con protección anti-error #31…", { duration: 4000 });
+          });
+          return;
+        }
+        if (looksLikeJsxGlue) {
           setLastError(msg);
           return;
         }

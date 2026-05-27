@@ -30,6 +30,15 @@ export default function App() {
     mustInclude: ["<it.icon"],
   },
   {
+    name: "bare lucide component",
+    in: `import { Sparkles } from "lucide-react";
+export default function App() {
+  return <div>{Sparkles}</div>;
+}`,
+    mustNotInclude: ["{Sparkles}"],
+    mustInclude: ["<Sparkles"],
+  },
+  {
     name: "fake element type hash",
     in: `const x = { type: "#", props: { children: "Hola" } };
 export default function App() { return <div>{x}</div>; }`,
