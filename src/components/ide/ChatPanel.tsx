@@ -2640,8 +2640,8 @@ export function ChatPanel({
             rows={isMobile ? 2 : 3}
             className="box-border block w-full max-w-full min-w-0 resize-none border-0 bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground placeholder:text-foreground/55 focus:outline-none min-h-[52px] max-h-[200px] overflow-y-auto sm:min-h-[64px] sm:max-h-[320px] sm:px-3.5 sm:pt-3"
           />
-          <div className="flex items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5 px-2 pb-2 md:flex-row md:items-center md:justify-between md:gap-2">
+            <div className="flex min-w-0 items-center gap-1 overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] md:flex-1 md:overflow-visible md:gap-1.5">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -2838,7 +2838,7 @@ export function ChatPanel({
                 <Link
                   to="/gafcore/settings/project"
                   search={{ section: "marketplace" }}
-                  className="inline-flex h-7 max-w-[11rem] items-center gap-1 truncate rounded-full border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10"
+                  className="hidden h-7 max-w-[11rem] items-center gap-1 truncate rounded-full border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10 sm:inline-flex"
                   title={`Plugins IA activos: ${aiPluginNames.join(", ")}`}
                 >
                   <Sparkles className="h-3 w-3 shrink-0 text-primary" />
@@ -2865,7 +2865,7 @@ export function ChatPanel({
                 }}
                 disabled={mode === "chat"}
                 className={
-                  "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 " +
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:px-2.5 " +
                   (deepModel
                     ? "border-primary bg-primary/10 text-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.2)] ring-1 ring-primary"
                     : "border-border bg-background text-foreground hover:bg-muted")
@@ -2875,10 +2875,11 @@ export function ChatPanel({
                     ? "Modelo profundo solo en modo Construir"
                     : "Activa el modelo más capaz (más lento/caro). También puedes escribir [modo profundo] al inicio del mensaje."
                 }
+                aria-label={deepModel ? "Modelo profundo activado" : "Activar modelo profundo"}
               >
-                <Brain className="h-3 w-3" />
-                Profundo
-                {deepModel && <span className="ml-0.5 text-[10px]">ON</span>}
+                <Brain className="h-3 w-3 shrink-0" />
+                <span className="hidden sm:inline">Profundo</span>
+                {deepModel && <span className="text-[10px] font-semibold sm:ml-0.5">ON</span>}
               </button>
               <button
                 type="button"
@@ -2894,26 +2895,27 @@ export function ChatPanel({
                   });
                 }}
                 className={
-                  "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition " +
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-[12px] font-medium transition sm:px-2.5 " +
                   (visualEditOn
                     ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.25)] ring-1 ring-primary"
                     : "border-border bg-background text-foreground hover:bg-muted")
                 }
                 title="Activar/Desactivar ediciones visuales"
+                aria-label={visualEditOn ? "Ediciones visuales activadas" : "Activar ediciones visuales"}
               >
-                <Pencil className="h-3 w-3" />
-                Ediciones visuales
-                {visualEditOn && <span className="ml-1 text-[10px]">ON</span>}
+                <Pencil className="h-3 w-3 shrink-0" />
+                <span className="hidden sm:inline">Ediciones visuales</span>
+                {visualEditOn && <span className="text-[10px] font-semibold sm:ml-1">ON</span>}
               </button>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex w-full shrink-0 items-center justify-end gap-1 md:w-auto">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     className={
-                      "inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition " +
+                      "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[12px] font-medium transition sm:h-7 " +
                       (mode === "chat"
                         ? "border-blue-500 bg-blue-500 text-white shadow-[0_0_0_3px_rgb(59_130_246/0.25)]"
                         : "border-primary bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.25)]")
@@ -2921,7 +2923,7 @@ export function ChatPanel({
                     title="Modo de respuesta"
                   >
                     {mode === "build" ? "Construir" : "Chatear"}
-                    <ChevronDown className="h-3 w-3" />
+                    <ChevronDown className="h-3 w-3 shrink-0" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" side="top" className="w-44">
@@ -2950,7 +2952,7 @@ export function ChatPanel({
                 onClick={toggleMic}
                 title={recording ? "Detener dictado" : "Dictado por voz"}
                 className={
-                  "flex h-7 w-7 items-center justify-center rounded-full transition " +
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition sm:h-7 sm:w-7 " +
                   (recording
                     ? "bg-red-500/15 text-red-500 animate-pulse"
                     : "text-foreground/75 hover:bg-muted hover:text-foreground")
@@ -2975,8 +2977,9 @@ export function ChatPanel({
                   send();
                 }}
                 disabled={!loading && !input.trim()}
-                className="h-7 w-7 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-40"
+                className="h-9 w-9 shrink-0 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-40 sm:h-7 sm:w-7"
                 title={loading ? "Detener / descartar respuesta pendiente" : "Enviar"}
+                aria-label={loading ? "Detener" : "Enviar"}
               >
                 {loading ? (
                   <Square className="h-3 w-3 fill-current" />
