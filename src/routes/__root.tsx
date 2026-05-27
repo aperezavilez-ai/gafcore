@@ -49,7 +49,10 @@ export const Route = createRootRoute({
     return {
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
+      },
       { title: "GafCore — Plataforma de creación con IA" },
       { name: "description", content: "GafCore: crea apps y prototipos con chat, preview en vivo y editor integrado." },
       { name: "author", content: "GafCore" },

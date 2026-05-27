@@ -32,6 +32,7 @@ import {
   BookmarkPlus,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -284,6 +285,7 @@ export function ChatPanel({
   onOpenConnectors?: () => void;
   projectId?: string | null;
 }) {
+  const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [pendingComposerImages, setPendingComposerImages] = useState<PendingComposerImage[]>([]);
@@ -2335,17 +2337,17 @@ export function ChatPanel({
   };
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-background">
+    <div className="grid h-full min-h-0 w-full max-w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-background">
       <FixConventionDialog
         open={pinConventionOpen}
         onOpenChange={setPinConventionOpen}
         projectId={projectId}
         initialBody={pinConventionBody}
       />
-      <div className="shrink-0 border-b border-border/60 px-3 py-1.5">
-        <div className="flex items-center justify-between gap-2">
+      <div className="shrink-0 border-b border-border/60 px-2 py-1 max-md:overflow-hidden md:px-3 md:py-1.5">
+        <div className="flex min-w-0 items-center justify-between gap-1.5 overflow-hidden">
           <span
-            className="min-w-0 flex-1 truncate text-[10px] font-semibold text-foreground md:text-[11px]"
+            className="hidden min-w-0 flex-1 truncate text-[10px] font-semibold text-foreground sm:block md:text-[11px]"
             title={planDisplayLabel}
           >
             {planDisplayLabel}
@@ -2363,17 +2365,18 @@ export function ChatPanel({
           <button
             type="button"
             onClick={() => user?.id && setCreditsOut(true)}
-            className="group inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-foreground/80 transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground"
+            className="group ml-auto inline-flex max-w-[min(100%,11rem)] shrink-0 items-center gap-1 overflow-hidden rounded-full border border-border/70 bg-muted/40 px-2 py-1 text-[11px] font-medium text-foreground/80 transition hover:border-primary/50 hover:bg-primary/10 hover:text-foreground sm:max-w-none sm:gap-1.5 sm:px-2.5"
             title="Créditos de IA disponibles. Click para recargar."
           >
-            <Coins className="h-3 w-3 text-amber-400" />
+            <Coins className="h-3 w-3 shrink-0 text-amber-400" />
             {creditsLoading || subLoading ? (
               <span className="text-foreground/75">…</span>
             ) : isAdmin ? (
-              <span className="inline-flex items-center gap-1">
-                <span className="font-semibold text-foreground">Administrador</span>
-                <span className="text-foreground/75">·</span>
-                <span>Ilimitado</span>
+              <span className="inline-flex min-w-0 items-center gap-1 truncate">
+                <span className="font-semibold text-foreground max-sm:hidden">Administrador</span>
+                <span className="font-semibold text-foreground sm:hidden">Admin</span>
+                <span className="text-foreground/75 max-sm:hidden">·</span>
+                <span className="truncate">Ilimitado</span>
               </span>
             ) : isFairUseCreadorPlan || isUnlimitedDaily ? (
               <span>Ilimitado</span>
@@ -2428,7 +2431,10 @@ export function ChatPanel({
         ref={scrollContainerRef}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
       >
-        <div ref={messagesContentRef} className="px-4 py-5 pb-32">
+        <div
+          ref={messagesContentRef}
+          className={`box-border w-full max-w-full min-w-0 px-3 py-4 sm:px-4 sm:py-5 ${isMobile ? "pb-4" : "pb-32"}`}
+        >
           {empty ? (
             <div className="flex h-full flex-col items-center justify-center pt-10 text-center">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -2440,7 +2446,7 @@ export function ChatPanel({
               <p className="mt-1 max-w-[260px] text-[12.5px] text-foreground/80">
                 Describe tu idea y la IA generará el código por ti.
               </p>
-              <div className="mt-6 flex w-full max-w-[320px] flex-col gap-2">
+              <div className="mt-6 flex w-full max-w-full flex-col gap-2 sm:max-w-[320px]">
                 {SUGGESTIONS.map((s) => (
                   <button
                     key={s}
@@ -2513,8 +2519,12 @@ export function ChatPanel({
 
       {/* Composer */}
       <div
-        className="shrink-0 border-t border-border/40 bg-background px-3 pt-2"
-        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        className="z-10 w-full min-w-0 max-w-full shrink-0 border-t border-border/40 bg-background px-2 pt-2 sm:px-3"
+        style={{
+          paddingBottom: isMobile
+            ? "max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.875rem))"
+            : "max(0.75rem, env(safe-area-inset-bottom, 0px))",
+        }}
       >
         {lastError && (
           <div
@@ -2600,7 +2610,7 @@ export function ChatPanel({
             ))}
           </div>
         ) : null}
-        <div className="rounded-2xl border border-border bg-background shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15">
+        <div className="min-w-0 max-w-full rounded-2xl border border-border bg-background shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15">
           <textarea
             ref={taRef}
             value={input}
@@ -2616,13 +2626,19 @@ export function ChatPanel({
             }}
             placeholder={
               mode === "chat"
-                ? "Pide a la IA que cree o modifique algo…"
+                ? isMobile
+                  ? "Pide crear o modificar algo…"
+                  : "Pide a la IA que cree o modifique algo…"
                 : deepModel
-                  ? "Modelo profundo activo: describe el cambio con detalle…"
-                  : "Pide a la IA que cree o modifique algo… (opcional: escribe [modo profundo] al inicio o activa el interruptor)"
+                  ? isMobile
+                    ? "Modo profundo: describe el cambio…"
+                    : "Modelo profundo activo: describe el cambio con detalle…"
+                  : isMobile
+                    ? "Describe tu idea…"
+                    : "Pide a la IA que cree o modifique algo… (opcional: escribe [modo profundo] al inicio o activa el interruptor)"
             }
-            rows={3}
-            className="block w-full resize-none border-0 bg-transparent px-3.5 pt-3 text-[13px] leading-relaxed text-foreground placeholder:text-foreground/55 focus:outline-none min-h-[64px] max-h-[320px] overflow-y-auto"
+            rows={isMobile ? 2 : 3}
+            className="box-border block w-full max-w-full min-w-0 resize-none border-0 bg-transparent px-3 pt-2.5 text-[13px] leading-relaxed text-foreground placeholder:text-foreground/55 focus:outline-none min-h-[52px] max-h-[200px] overflow-y-auto sm:min-h-[64px] sm:max-h-[320px] sm:px-3.5 sm:pt-3"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">
             <div className="flex items-center gap-1.5">

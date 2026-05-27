@@ -422,6 +422,16 @@
   color: #0f172a;
 }
 
+/* IDE móvil: evita que Safari desplace toda la página y tape el composer */
+html:has(.gafcore-light),
+body:has(.gafcore-light) {
+  overflow: hidden;
+  width: 100%;
+  max-width: 100vw;
+  height: 100%;
+  max-height: 100dvh;
+}
+
 /* GafCore theme variants — scoped via .gafcore-theme-* on the root container */
 .gafcore-theme-black {
   --gc-bg: oklch(0.11 0.005 260);
