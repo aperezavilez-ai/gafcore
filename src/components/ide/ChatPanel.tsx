@@ -2865,7 +2865,7 @@ export function ChatPanel({
                 ¿Qué quieres construir hoy?
               </h2>
               <p className="mt-1 max-w-[280px] text-[12.5px] text-foreground/80">
-                Describe tu idea o elige una sugerencia debajo del chat.
+                Describe en el chat qué app o sitio quieres construir y pulsa Construir.
               </p>
               <Link
                 to="/gafcore/marketplace"

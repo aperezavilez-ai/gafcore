@@ -26,28 +26,11 @@ export type GafcoreChatSuggestionContext = {
 
 const MAX_STEPS = 4;
 
-const STARTER_STEPS: GafcoreChatNextStep[] = [
-  {
-    id: "starter-landing",
-    label: "Landing moderna",
-    prompt: "Crea una landing moderna con hero, beneficios y CTA.",
-  },
-  {
-    id: "starter-contact",
-    label: "Formulario contacto",
-    prompt: "Agrega un formulario de contacto con validación y estados de envío.",
-  },
-  {
-    id: "starter-dashboard",
-    label: "Dashboard con tarjetas",
-    prompt: "Diseña un dashboard con tarjetas KPI, gráfico simple y tabla.",
-  },
-  {
-    id: "starter-dark",
-    label: "Modo oscuro",
-    prompt: "Convierte la UI a modo oscuro usando tokens semánticos de Tailwind.",
-  },
-];
+/** Mínimo de intención en el chat antes de mostrar chips (proyecto aún no construido). */
+const MIN_USER_INTENT_CHARS = 28;
+
+const USER_INTENT_RE =
+  /\b(quiero|necesito|crea|crear|genera|generar|construye|construir|app|aplicaci[oó]n|sitio|web|landing|taxi|tienda|dashboard|plataforma|formulario|reservas|ecommerce|saas)\b/i;
 
 function lastMessage(
   messages: GafcoreChatSuggestionContext["messages"],
@@ -82,10 +65,31 @@ function corpus(ctx: GafcoreChatSuggestionContext): string {
   return `${msgs}\n${allContent(ctx.files)}`.toLowerCase();
 }
 
-function isDefaultWelcomeProject(ctx: GafcoreChatSuggestionContext): boolean {
+/** Área de trabajo aún en plantilla de bienvenida (preview «Bienvenidos a GafCore»). */
+function isWelcomeWorkspace(ctx: GafcoreChatSuggestionContext): boolean {
   const app = ctx.files.find((f) => /^app\.(jsx|tsx?)$/i.test(f.name));
   if (!app) return ctx.files.length === 0;
-  return isGafcoreDefaultTemplateApp(app.content);
+  if (isGafcoreDefaultTemplateApp(app.content)) return true;
+  const blob = allContent(ctx.files);
+  if (/Bienvenidos a GafCore/i.test(blob) && ctx.files.length <= 8) {
+    return blob.length < 4000;
+  }
+  return false;
+}
+
+/** Proyecto real ya generado en el IDE (no pantalla de bienvenida). */
+export function projectHasStarted(ctx: GafcoreChatSuggestionContext): boolean {
+  return !isWelcomeWorkspace(ctx);
+}
+
+/** El usuario ya explicó en el chat de qué va el proyecto (antes del primer build). */
+export function hasSubstantiveUserIntent(
+  messages: GafcoreChatSuggestionContext["messages"],
+): boolean {
+  const text = allUserMessagesText(messages).trim();
+  if (text.length < MIN_USER_INTENT_CHARS) return false;
+  if (/^(hola|hi|hey|buenas|ok|vale|gracias)[!.?\s]*$/i.test(text)) return false;
+  return USER_INTENT_RE.test(text) || text.length >= 72;
 }
 
 function isErrorRecoveryContext(ctx: GafcoreChatSuggestionContext): boolean {
@@ -148,11 +152,10 @@ function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
   return "generic";
 }
 
-function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+/** Pasos según el tipo de app (taxi, tienda, etc.) — requieren intención conocida. */
+function projectKindSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
   const steps: GafcoreChatNextStep[] = [];
   const kind = detectProjectKind(ctx);
-  const code = allContent(ctx.files);
-  const names = fileNames(ctx.files);
 
   if (kind === "taxi") {
     pushStep(
@@ -200,52 +203,84 @@ function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNext
     return steps;
   }
 
-  if (!/contact|contacto|form/i.test(names + code) && ctx.files.length > 0) {
+  return steps;
+}
+
+/** Enriquecimiento solo cuando el proyecto ya tiene código real generado. */
+function operationalEnrichmentSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  const steps: GafcoreChatNextStep[] = [];
+  const code = allContent(ctx.files);
+  const names = fileNames(ctx.files);
+  const kind = detectProjectKind(ctx);
+
+  if (!/useState|onClick|onSubmit|fetch\(|async\s+function/i.test(code)) {
+    pushStep(
+      steps,
+      "op-interactivity",
+      "Lógica interactiva",
+      "Conecta botones y formularios con estado real (useState), validación y feedback al usuario.",
+    );
+  }
+  if (!/loading|spinner|skeleton|isLoading/i.test(code)) {
+    pushStep(
+      steps,
+      "op-loading",
+      "Estados de carga",
+      "Añade estados de carga y vacío en listas y formularios para que la app se sienta terminada.",
+    );
+  }
+  if (!/nav|router|pathname|#\/|tabs|menu/i.test(names + code) && ctx.files.length >= 2) {
+    pushStep(
+      steps,
+      "op-navigation",
+      "Navegación completa",
+      "Implementa navegación entre pantallas o secciones con rutas claras y menú coherente.",
+    );
+  }
+  if (
+    (kind === "generic" || kind === "portfolio") &&
+    !/contact|contacto|form/i.test(names + code) &&
+    /landing|sitio web|página web|contacto/i.test(corpus(ctx))
+  ) {
     pushStep(
       steps,
       "add-contact",
       "Formulario contacto",
-      "Añade una sección de contacto con formulario accesible y feedback de envío.",
+      "Añade formulario de contacto funcional con validación y mensaje de éxito o error.",
     );
   }
-  if (!/responsive|sm:|md:|lg:/i.test(code) && ctx.files.length > 1) {
-    pushStep(steps, "responsive", "Hacer responsive", "Haz el layout totalmente responsive en móvil, tablet y desktop.");
+  if (!/responsive|sm:|md:|lg:/i.test(code)) {
+    pushStep(
+      steps,
+      "responsive",
+      "Responsive móvil",
+      "Haz el layout totalmente responsive en móvil, tablet y desktop.",
+    );
+  }
+  if (kind === "taxi" && !/911|pánico|panico|alerta/i.test(code)) {
+    pushStep(
+      steps,
+      "taxi-safety",
+      "Seguridad y alertas",
+      "Completa flujo de seguridad: botón de pánico, registro de alerta y estado del viaje activo.",
+    );
   }
 
   return steps;
 }
 
-/** Plantilla vacía pero el chat ya describe la app → sugerencias alineadas al pedido. */
-function welcomeProjectSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  const userText = allUserMessagesText(ctx.messages);
-  const intentCtx: GafcoreChatSuggestionContext = {
-    ...ctx,
-    messages: userText ? [{ role: "user", content: userText }] : [],
-  };
-  const fromKind = projectContextSteps(intentCtx);
-  if (fromKind.length > 0) return fromKind;
-
-  return [
-    {
-      id: "welcome-build",
-      label: "Generar mi app",
-      prompt:
-        "Genera la primera versión completa de mi app según lo que pedí en el chat: pantalla principal, navegación y estilos profesionales.",
-    },
-    {
-      id: "welcome-hero",
-      label: "Hero con CTA",
-      prompt: "Crea un hero impactante con título claro, subtítulo y botón CTA principal.",
-    },
-    {
-      id: "welcome-sections",
-      label: "Secciones clave",
-      prompt: "Añade las secciones clave que faltan (beneficios, testimonios o precios) con diseño coherente.",
-    },
-  ];
+function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  const steps = projectKindSteps(ctx);
+  for (const s of operationalEnrichmentSteps(ctx)) {
+    pushStep(steps, s.id, s.label, s.prompt);
+  }
+  return steps;
 }
 
 export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  /** Sin chips hasta que el preview deje de ser la plantilla de bienvenida. */
+  if (!projectHasStarted(ctx)) return [];
+
   const steps: GafcoreChatNextStep[] = [];
   const empty = ctx.messages.length === 0;
   const lastAi = lastMessage(ctx.messages, "ai");
@@ -253,19 +288,6 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
   const recentUser = lastUser.toLowerCase();
   const pipeline = (ctx.pipelineStatus ?? "").toLowerCase();
   const validation = (ctx.validationLabel ?? "").toLowerCase();
-  const welcomeOnly = isDefaultWelcomeProject(ctx);
-
-  if (empty && ctx.files.length === 0) {
-    return STARTER_STEPS.slice(0, MAX_STEPS);
-  }
-
-  if (welcomeOnly) {
-    return welcomeProjectSteps(ctx).slice(0, MAX_STEPS);
-  }
-
-  if (empty && ctx.files.length > 0) {
-    return projectContextSteps(ctx).slice(0, MAX_STEPS);
-  }
 
   if (isErrorRecoveryContext(ctx)) {
     const err = (ctx.lastError ?? lastAi).slice(0, 500);
@@ -282,15 +304,17 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
       "Revisa todos los .map(): devuelve JSX con campos del objeto (p. ej. item.title), nunca {item} ni {item.icon} sin componente.",
     );
     pushStep(steps, "explain-error", "Explicar el error", "Explica en español qué causa este error y qué archivos tocar.");
-    if (!welcomeOnly) {
-      pushStep(
-        steps,
-        "continue-feature",
-        "Seguir con la app",
-        "Cuando el error esté corregido, continúa con la siguiente función que pedí en el chat.",
-      );
-    }
+    pushStep(
+      steps,
+      "continue-feature",
+      "Seguir con la app",
+      "Cuando el error esté corregido, continúa con la siguiente función que pedí en el chat.",
+    );
     return steps.slice(0, MAX_STEPS);
+  }
+
+  if (empty && ctx.files.length > 0) {
+    return projectContextSteps(ctx).slice(0, MAX_STEPS);
   }
 
   for (const s of stepsFromAiBullets(lastAi)) {

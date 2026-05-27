@@ -9,6 +9,9 @@ const DEFAULT_APP_MARKERS = [
 export function isGafcoreDefaultTemplateApp(content: string): boolean {
   const c = content.trim();
   if (!c) return true;
+  if (/Bienvenidos a GafCore/i.test(c) && /Empieza escribiendo en el chat/i.test(c)) {
+    return true;
+  }
   return DEFAULT_APP_MARKERS.every((m) => c.includes(m));
 }
 
