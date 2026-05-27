@@ -244,6 +244,14 @@ export default {
       );
       return handleGafcoreDesignCritiquePost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/factory/run") {
+      const { handleGafcoreFactoryRunPost } = await import("./lib/gafcore-factory-http.server");
+      return handleGafcoreFactoryRunPost(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/factory/status") {
+      const { handleGafcoreFactoryStatusPost } = await import("./lib/gafcore-factory-http.server");
+      return handleGafcoreFactoryStatusPost(request);
+    }
     if (request.method === "POST" && path === "/api/extensions/v1/catalog") {
       const { handleExtensionsCatalogPost } = await import("./lib/gafcore-extensions-http.server");
       return handleExtensionsCatalogPost(request);

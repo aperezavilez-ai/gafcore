@@ -21,6 +21,7 @@ import {
   History,
   Info,
   GitFork,
+  Factory,
   Plug,
   Image as ImageIcon,
   Folder,
@@ -94,6 +95,8 @@ import {
   runGafcoreWorkflowWave,
   syncGafcorePipelineWorkflow,
 } from "@/lib/gafcore-workflow.functions";
+import { runGafcoreFactory } from "@/lib/gafcore-factory.functions";
+import { FACTORY_BUILD_PREFIX } from "@/lib/gafcore-factory.shared";
 import {
   WorkflowTaskStrip,
   type WorkflowMetricsUi,
@@ -356,6 +359,14 @@ export function ChatPanel({
     if (typeof window === "undefined") return false;
     try {
       return window.localStorage.getItem("gafcore_multi_agent_bg") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [factoryMode, setFactoryMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("gafcore_factory_mode") === "1";
     } catch {
       return false;
     }
@@ -1206,6 +1217,7 @@ export function ChatPanel({
   const callStartPipeline = useServerFn(startGafcorePipelineRun);
   const callAdvancePipeline = useServerFn(advanceGafcorePipelineStep);
   const callFinalizePipeline = useServerFn(finalizeGafcorePipelineRun);
+  const callRunFactory = useServerFn(runGafcoreFactory);
 
   const usePipelineOrchestrator = Boolean(
     projectId && mode === "build" && !visualEditOn,
@@ -1851,6 +1863,163 @@ export function ChatPanel({
     }
   };
 
+  const runFactoryBuild = async (
+    instruction: string,
+    myEpoch: number,
+    userLabel: string,
+    effectiveBuild: boolean,
+    visualEditOn: boolean,
+  ): Promise<{ reply: string; files: Array<{ name: string; language?: string; content: string }> }> => {
+    if (!projectId) throw new Error("project_required");
+
+    const factoryInstruction = instruction.includes("[modo fábrica")
+      ? instruction
+      : `${FACTORY_BUILD_PREFIX}${instruction}`;
+
+    setPipelineStatus("Fábrica: planificando y generando…");
+    setActiveWorkflowRunId(null);
+    setWorkflowTasks([]);
+    setWorkflowPlanSummary(null);
+    setWorkflowState("executing");
+    setWorkflowMetrics(null);
+
+    if (usePipelineOrchestrator) {
+      await startPipelineRun(factoryInstruction);
+    }
+
+    const factoryRes = await callRunFactory({
+      data: {
+        projectId,
+        instruction: factoryInstruction,
+        files: files.map((f) => ({
+          name: f.name,
+          language: f.language,
+          content: f.content,
+        })),
+        runDesignCritique: true,
+      },
+    });
+
+    if (!factoryRes.ok) {
+      if (factoryRes.error === "workflow_limit_reached") {
+        toast.error(
+          `Límite de workflows activos (${factoryRes.active ?? 0}/${factoryRes.max ?? 2})`,
+          { duration: 8000 },
+        );
+        throw new Error("WORKFLOW_LIMIT_REACHED");
+      }
+      const msg =
+        factoryRes.message ??
+        (factoryRes.error === "plan_failed"
+          ? "No se pudo planificar el proyecto."
+          : "La fábrica no pudo completar el build.");
+      toast.error(msg, { duration: 9000 });
+      throw new Error(factoryRes.error ?? "FACTORY_FAILED");
+    }
+
+    if (myEpoch !== requestEpochRef.current) {
+      return { reply: "Cancelado.", files: [] };
+    }
+
+    if (factoryRes.pipelineRunId) {
+      pipelineRunIdRef.current = factoryRes.pipelineRunId;
+    }
+
+    setWorkflowPlanSummary(factoryRes.planSummary);
+    setWorkflowState(factoryRes.workflowState);
+    setPipelineStatus(
+      factoryRes.phase === "completed"
+        ? `Fábrica: listo · validación ${factoryRes.validation.overallScore}/100`
+        : `Fábrica: ${factoryRes.workflowState}`,
+    );
+
+    appendMessageDeduped("ai", factoryRes.reply);
+    scrollChatToBottomSoon("auto");
+
+    if (factoryRes.pipelineRunId) {
+      await syncWorkflowToPipeline(
+        factoryRes.workflowRunId,
+        factoryRes.workflowState,
+        factoryRes.planSummary,
+      );
+    }
+
+    let patchFiles = factoryRes.files.map((p) => ({
+      name: p.name,
+      language: p.language,
+      content: p.content,
+    }));
+
+    if (patchFiles.length > 0 && effectiveBuild) {
+      const { merged } = await applyGenerationFiles(files, patchFiles, instruction, userLabel, {
+        runFunctionalAudit: effectiveBuild && !visualEditOn,
+        snapshotLabel: `fábrica: ${userLabel.slice(0, 40)}`,
+      });
+      setFiles(merged);
+      onCodeGenerated?.();
+      patchFiles = merged.map((f) => ({
+        name: f.name,
+        language: f.language,
+        content: f.content,
+      }));
+    }
+
+    const followup = factoryRes.critique?.followupInstruction?.trim();
+    if (
+      followup &&
+      effectiveBuild &&
+      !visualEditOn &&
+      myEpoch === requestEpochRef.current &&
+      factoryRes.validation.success
+    ) {
+      setPipelineStatus("Fábrica: mejorando diseño…");
+      appendMessageDeduped(
+        "ai",
+        `**Fábrica · diseño:** puntuación ${factoryRes.critique?.score ?? "—"}/100. Aplicando mejoras automáticas…`,
+      );
+      const tok = await getAuthAccessToken();
+      if (tok) {
+        const designResult = await requestGafcoreGeneration(
+          tok,
+          [{ role: "user", content: instruction }, { role: "assistant", content: factoryRes.reply }],
+          followup,
+          patchFiles.length ? patchFiles : files,
+          undefined,
+          myEpoch,
+          userLabel,
+        );
+        if (myEpoch === requestEpochRef.current && designResult.files?.length) {
+          const { merged } = await applyGenerationFiles(
+            patchFiles.length ? mergeGeneratedFiles(files, patchFiles) : files,
+            designResult.files,
+            followup,
+            userLabel,
+            { runFunctionalAudit: true, snapshotLabel: "fábrica: diseño" },
+          );
+          setFiles(merged);
+          onCodeGenerated?.();
+          appendMessageDeduped(
+            "ai",
+            sanitizeUserFacingAiText(designResult.reply || "Mejoras de diseño aplicadas."),
+          );
+          patchFiles = merged.map((f) => ({
+            name: f.name,
+            language: f.language,
+            content: f.content,
+          }));
+        }
+      }
+      setPipelineStatus("Fábrica: completado");
+    }
+
+    pipelineRunIdRef.current = null;
+
+    return {
+      reply: factoryRes.reply,
+      files: patchFiles,
+    };
+  };
+
   const runMultiAgentWorkflow = async (
     instruction: string,
     myEpoch: number,
@@ -2160,7 +2329,15 @@ export function ChatPanel({
         files: Array<{ name: string; language?: string; content: string }>;
       };
 
-      if (effectiveBuild && multiAgentMode && projectId) {
+      if (effectiveBuild && factoryMode && projectId) {
+        result = await runFactoryBuild(
+          instruction,
+          myEpoch,
+          raw,
+          effectiveBuild,
+          visualEditOn,
+        );
+      } else if (effectiveBuild && multiAgentMode && projectId) {
         result = await runMultiAgentWorkflow(
           instruction,
           myEpoch,
@@ -2742,6 +2919,46 @@ export function ChatPanel({
                   <DropdownMenuItem
                     onSelect={(e) => {
                       e.preventDefault();
+                      setFactoryMode((v) => {
+                        const next = !v;
+                        try {
+                          window.localStorage.setItem("gafcore_factory_mode", next ? "1" : "0");
+                          if (next) {
+                            window.localStorage.setItem("gafcore_multi_agent", "1");
+                            window.localStorage.setItem("gafcore_multi_agent_bg", "0");
+                          }
+                        } catch {
+                          /* */
+                        }
+                        if (next) {
+                          setMultiAgentMode(true);
+                          setMultiAgentBg(false);
+                        }
+                        toast.message(
+                          next
+                            ? "Modo Fábrica: plan → código → validación → diseño (un solo envío)."
+                            : "Modo Fábrica desactivado.",
+                        );
+                        return next;
+                      });
+                    }}
+                  >
+                    <Factory className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Modo Fábrica</span>
+                    {factoryMode ? (
+                      <span className="text-[10px] font-medium text-primary">ON</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">OFF</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={factoryMode}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      if (factoryMode) {
+                        toast.message("Desactiva Modo Fábrica para usar solo Multiagente.");
+                        return;
+                      }
                       setMultiAgentMode((v) => {
                         const next = !v;
                         try {
