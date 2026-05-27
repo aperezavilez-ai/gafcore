@@ -70,6 +70,9 @@ function rewriteImports(
     if (/^https?:\/\//.test(spec)) {
       return `${lead}${quote}${spec}${quote}`;
     }
+    if (/\.css($|\?)/i.test(spec)) {
+      return `${lead}${quote}data:text/javascript,${quote}`;
+    }
     if (spec.startsWith(".") || spec.startsWith("/")) {
       const resolved = resolveRelative(ownName, spec);
       // CSS side-effect import
@@ -240,13 +243,22 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     return Babel.transform(repairJsxGlue(code), { filename, presets, sourceMaps: "inline" }).code;
   }
 
+  function neutralizeCssModuleSpecifiers(code) {
+    return code
+      .replace(/import\\s+["'][^"']*\\.css[^"']*["']\\s*;?/g, "")
+      .replace(/import\\s+(\\w+)\\s+from\\s+["'][^"']*\\.css[^"']*["']\\s*;?/g, "const $1 = {};")
+      .replace(/from\\s+["'][^"']*\\.css[^"']*["']/g, 'from "data:text/javascript,"')
+      .replace(/import\\s*\\(\\s*["'][^"']*\\.css[^"']*["']\\s*\\)/g, 'import("data:text/javascript,")');
+  }
+
   function rewriteAppSpecifiers(code) {
     // After Babel, "app:Foo.jsx" specifiers may have been preserved (Babel keeps strings as-is).
-    return code.replace(/(["'])app:([^"']+)\\1/g, function(_, q, name){
+    const withAppUrls = code.replace(/(["'])app:([^"']+)\\1/g, function(_, q, name){
       const url = blobMap[name];
       if (!url) return q + "app:" + name + q;
       return q + url + q;
     });
+    return neutralizeCssModuleSpecifiers(withAppUrls);
   }
 
   function decodeReactMinified(text) {
@@ -311,11 +323,17 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     }
     return decodeReactMinified(raw);
   }
+  var __gafLastPreviewErr = "";
+  var __gafLastPreviewErrAt = 0;
   function showError(e) {
     // El Error Boundary ya muestra UI amigable dentro del #root.
     // Aquí solo emitimos al parent para que el auto-fix se entere.
     // El div __err queda como fallback escondido por si el boundary nunca monta.
     var msg = fmt(e);
+    var now = Date.now();
+    if (msg === __gafLastPreviewErr && now - __gafLastPreviewErrAt < 4000) return;
+    __gafLastPreviewErr = msg;
+    __gafLastPreviewErrAt = now;
     try {
       parent && parent.postMessage({ type: 'preview-error', message: msg }, '*');
     } catch (_) {}

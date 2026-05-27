@@ -193,11 +193,20 @@ export function GafCoreIDE() {
   const [deploying, setDeploying] = useState(false);
   const [view, setView] = useState<View>("preview");
   const [previewKey, setPreviewKey] = useState(0);
+  const previewRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [projectName, setProjectName] = useState(readCachedProjectName);
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
   const workspacePanelRef = useRef<ImperativePanelHandle>(null);
+
+  const schedulePreviewRefresh = useCallback(() => {
+    if (previewRefreshTimerRef.current) clearTimeout(previewRefreshTimerRef.current);
+    previewRefreshTimerRef.current = setTimeout(() => {
+      setPreviewKey((k) => k + 1);
+      previewRefreshTimerRef.current = null;
+    }, 500);
+  }, []);
 
   const openWorkspacePanel = useCallback(() => {
     if (isMobile) {
@@ -210,6 +219,12 @@ export function GafCoreIDE() {
     }
     workspacePanelRef.current?.expand();
   }, [isMobile]);
+
+  const onPreviewCodeGenerated = useCallback(() => {
+    setView("preview");
+    schedulePreviewRefresh();
+    openWorkspacePanel();
+  }, [schedulePreviewRefresh, openWorkspacePanel]);
 
   const closeWorkspacePanel = useCallback(() => {
     if (isMobile) {
@@ -596,11 +611,11 @@ export function GafCoreIDE() {
         }
         return changed ? next : prev;
       });
-      setPreviewKey((k) => k + 1);
+      schedulePreviewRefresh();
     };
     window.addEventListener("gafcore:repair-project-jsx", onRepairJsx);
     return () => window.removeEventListener("gafcore:repair-project-jsx", onRepairJsx);
-  }, [currentProjectId]);
+  }, [currentProjectId, schedulePreviewRefresh]);
 
   useEffect(() => {
     if (!isAdmin && secretsOpen) setSecretsOpen(false);
@@ -1611,11 +1626,7 @@ export function GafCoreIDE() {
                 setFiles={setFiles}
                 projectId={currentProjectId}
                 projectName={projectName}
-                onCodeGenerated={() => {
-                  setView("preview");
-                  setPreviewKey((k) => k + 1);
-                  openWorkspacePanel();
-                }}
+                onCodeGenerated={onPreviewCodeGenerated}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenHistory={() => setHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
@@ -1722,11 +1733,7 @@ export function GafCoreIDE() {
                     setFiles={setFiles}
                     projectId={currentProjectId}
                     projectName={projectName}
-                    onCodeGenerated={() => {
-                      setView("preview");
-                      setPreviewKey((k) => k + 1);
-                      openWorkspacePanel();
-                    }}
+                    onCodeGenerated={onPreviewCodeGenerated}
                     onOpenSettings={() => setSettingsOpen(true)}
                     onOpenHistory={() => setHistoryOpen(true)}
                     onOpenConnectors={() => setConnectorsOpen(true)}

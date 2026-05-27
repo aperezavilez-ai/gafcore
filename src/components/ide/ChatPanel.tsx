@@ -62,6 +62,7 @@ import {
   repairCommonJsxSyntaxErrors,
   repairGeneratedSourceFiles,
   repairGafcoreProjectMedia,
+  neutralizeCssImportsInSource,
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
@@ -1078,6 +1079,8 @@ export function ChatPanel({
   // Evita loops: solo bloquea reintentos si el MISMO error ya fue intentado y falló.
   const autoFixInFlightRef = useRef(false);
   const autoFixAttemptedErrorsRef = useRef<Set<string>>(new Set());
+  const previewErrorCooldownRef = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
+  const autoFixSessionCountRef = useRef(0);
   const [autoFixActive, setAutoFixActive] = useState(false);
 
   // Listen for picks + preview errors
@@ -1096,6 +1099,16 @@ export function ChatPanel({
       if (data.type !== "preview-error") return;
 
       const msg = String(data.message || "Error desconocido");
+      const now = Date.now();
+      if (
+        msg === previewErrorCooldownRef.current.msg &&
+        now - previewErrorCooldownRef.current.at < 5000
+      ) {
+        return;
+      }
+      previewErrorCooldownRef.current = { msg, at: now };
+
+      const errKey = msg.slice(0, 120);
       const looksLikeJsxGlue =
         /SyntaxError|Unexpected token/i.test(msg) ||
         /"[^"]*"(https?:\/\/)/.test(msg);
@@ -1103,6 +1116,33 @@ export function ChatPanel({
         /Objects are not valid as a React child/i.test(msg) ||
         /Minified React error #31/i.test(msg) ||
         /error #31/i.test(msg);
+      const looksLikeCssModule =
+        /Failed to resolve module specifier/i.test(msg) && /\.css/i.test(msg);
+
+      if (looksLikeCssModule) {
+        let repairedCss = false;
+        setFiles((current) => {
+          const next = sanitizeProjectJsxFiles(
+            current.map((f) => {
+              if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
+              const content = neutralizeCssImportsInSource(repairCommonJsxSyntaxErrors(f.content));
+              return content !== f.content ? { ...f, content } : f;
+            }),
+          );
+          repairedCss = next.some((f, i) => f.content !== current[i]?.content);
+          return repairedCss ? next : current;
+        });
+        autoFixAttemptedErrorsRef.current.add(errKey);
+        setLastError(repairedCss ? null : msg);
+        if (repairedCss) {
+          queueMicrotask(() => {
+            toast.success("Import CSS ajustado para el preview");
+            window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
+            onCodeGenerated?.();
+          });
+        }
+        return;
+      }
 
       // 1) Auto-repair LOCAL (rápido, gratis): sintaxis rota o React #31 (objeto en JSX).
       if (looksLikeJsxGlue || looksLikeObjectChild) {
@@ -1133,26 +1173,21 @@ export function ChatPanel({
           return current;
         });
         if (repairedLocally) return;
-        if (looksLikeObjectChild) {
-          onCodeGenerated?.();
-          window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
-        }
         if (looksLikeJsxGlue && !looksLikeObjectChild) {
           setLastError(msg);
           return;
         }
       }
 
-      // 2) Cualquier otro error de runtime: intentar auto-fix con IA.
+      // 2) Cualquier otro error de runtime: intentar auto-fix con IA (máx. 1 por sesión).
       setLastError(msg);
 
-      // Clave estable para deduplicar (primeros 120 chars del mensaje).
-      const errKey = msg.slice(0, 120);
       const alreadyTried = autoFixAttemptedErrorsRef.current.has(errKey);
       const canAutoFix =
         !autoFixInFlightRef.current &&
         !sendInFlightRef.current &&
         !alreadyTried &&
+        autoFixSessionCountRef.current < 1 &&
         Boolean(projectId) &&
         files.length > 0 &&
         !/No se pudo cargar:|Failed to load|404|net::ERR/i.test(msg);
@@ -1160,6 +1195,7 @@ export function ChatPanel({
       if (!canAutoFix) return;
 
       autoFixAttemptedErrorsRef.current.add(errKey);
+      autoFixSessionCountRef.current += 1;
       autoFixInFlightRef.current = true;
       setAutoFixActive(true);
       void (async () => {
@@ -1212,8 +1248,6 @@ export function ChatPanel({
             toast.dismiss(toastId);
             toast.success("Error del preview corregido automáticamente", { duration: 5000 });
             setLastError(null);
-            // Si el fix funcionó, permitimos reintentar más adelante si vuelve el mismo error.
-            autoFixAttemptedErrorsRef.current.delete(errKey);
           } else {
             toast.dismiss(toastId);
             toast.warning("No se pudo auto-corregir. Usa 'Intenta arreglarlo' o describe el cambio.", {

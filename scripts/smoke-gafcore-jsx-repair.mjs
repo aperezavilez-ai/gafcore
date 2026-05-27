@@ -1,4 +1,7 @@
-import { repairCommonJsxSyntaxErrors } from "../src/lib/gafcore-media.shared.ts";
+import {
+  neutralizeCssImportsInSource,
+  repairCommonJsxSyntaxErrors,
+} from "../src/lib/gafcore-media.shared.ts";
 
 const cases = [
   {
@@ -48,6 +51,13 @@ const arrayChild = repairCommonJsxSyntaxErrors(`const stats = [{ label: "10k" }]
 export default function App() { return <div>{stats}</div>; }`);
 if (arrayChild.includes("{stats}") && !arrayChild.includes("stats.map")) {
   throw new Error("array as child should use .map");
+}
+
+const css = neutralizeCssImportsInSource(
+  `import "./styles.css";\nimport styles from "./app.css";\nexport default function App(){return <div/>}`,
+);
+if (css.includes("./styles.css") || css.includes("./app.css")) {
+  throw new Error("css imports should be neutralized");
 }
 
 console.log("smoke-gafcore-jsx-repair: ok", cases.length + 1, "cases");

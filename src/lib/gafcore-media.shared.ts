@@ -664,11 +664,36 @@ function fixObjectAsJsxChild(source: string): string {
   return fixComponentFieldAsJsxChild(out);
 }
 
+/**
+ * En preview (blob: ESM) los imports CSS relativos rompen el runtime.
+ * El CSS del proyecto ya se inyecta en <style> del iframe.
+ */
+export function neutralizeCssImportsInSource(source: string): string {
+  let out = source;
+  out = out.replace(/^\s*import\s+["'][^"']*\.css[^"']*["']\s*;?\s*$/gm, "");
+  out = out.replace(
+    /import\s+type\s+[\s\S]*?\s+from\s+["'][^"']*\.css[^"']*["']\s*;?/g,
+    "",
+  );
+  out = out.replace(
+    /import\s+(\w+)\s+from\s+["'][^"']*\.css[^"']*["']\s*;?/g,
+    "const $1 = {};",
+  );
+  out = out.replace(
+    /import\s*\{\s*([^}]+)\s*\}\s*from\s+["'][^"']*\.css[^"']*["']\s*;?/g,
+    "const { $1 } = {};",
+  );
+  out = out.replace(/from\s+["'][^"']*\.css[^"']*["']/g, 'from "data:text/javascript,"');
+  out = out.replace(/import\s*\(\s*["'][^"']*\.css[^"']*["']\s*\)/g, 'import("data:text/javascript,")');
+  return out;
+}
+
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
   let out = source.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
   out = out.replace(/\s+(https?:\/\/[^\s"'<>]+)(?=\s+[a-zA-Z_][\w-]*=)/g, " ");
   out = out.replace(/(\w)="([^"]*)"\s+"(\s+[a-zA-Z_][\w-]*=)/g, '$1="$2"$3');
+  out = neutralizeCssImportsInSource(out);
   out = fixLucideTypeImports(out);
   out = fixEmptyAnchors(out);
   out = fixObjectAsJsxChild(out);
