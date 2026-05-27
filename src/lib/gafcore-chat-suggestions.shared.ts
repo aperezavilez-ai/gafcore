@@ -1,6 +1,6 @@
 /**
  * Sugerencias «siguiente paso» del chat IDE (estilo Lovable): chips contextuales
- * encima del compositor según historial, archivos y estado del pipeline.
+ * según el proyecto, el último mensaje del usuario y el historial.
  */
 
 export type GafcoreChatNextStep = {
@@ -62,7 +62,15 @@ function fileNames(files: GafcoreChatSuggestionContext["files"]): string {
 }
 
 function allContent(files: GafcoreChatSuggestionContext["files"]): string {
-  return files.map((f) => f.content).join("\n").toLowerCase();
+  return files.map((f) => f.content).join("\n");
+}
+
+function corpus(ctx: GafcoreChatSuggestionContext): string {
+  const msgs = ctx.messages
+    .slice(-8)
+    .map((m) => m.content)
+    .join("\n");
+  return `${msgs}\n${allContent(ctx.files)}`.toLowerCase();
 }
 
 function pushStep(
@@ -73,7 +81,113 @@ function pushStep(
 ): void {
   if (out.length >= MAX_STEPS) return;
   if (out.some((s) => s.id === id)) return;
-  out.push({ id, label, prompt });
+  const shortLabel = label.length > 36 ? `${label.slice(0, 33)}…` : label;
+  out.push({ id, label: shortLabel, prompt });
+}
+
+/** Extrae viñetas accionables del último mensaje de la IA (como Lovable). */
+function stepsFromAiBullets(aiText: string): GafcoreChatNextStep[] {
+  const out: GafcoreChatNextStep[] = [];
+  const lines = aiText.split(/\n/);
+  for (const line of lines) {
+    const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)$/);
+    if (!m) continue;
+    let text = m[1].trim();
+    if (text.length < 12 || text.length > 140) continue;
+    if (/^(listo|hecho|ok|perfecto|resumen)/i.test(text)) continue;
+    text = text.replace(/\*\*/g, "").trim();
+    const id = `ai-${out.length}-${text.slice(0, 12).replace(/\W/g, "")}`;
+    pushStep(out, id, text.slice(0, 40), text.endsWith(".") ? text : `${text}.`);
+    if (out.length >= 2) break;
+  }
+  return out;
+}
+
+type ProjectKind =
+  | "taxi"
+  | "restaurant"
+  | "ecommerce"
+  | "saas"
+  | "portfolio"
+  | "generic";
+
+function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
+  const t = corpus(ctx);
+  if (/taxi|taxidriv|conductor|pasajero|viaje activo|pedir un taxi|911|pánico|panico/i.test(t)) {
+    return "taxi";
+  }
+  if (/restaurant|menú|menu|reserva mesa|platos/i.test(t)) return "restaurant";
+  if (/checkout|carrito|producto|tienda|ecommerce|shop/i.test(t)) return "ecommerce";
+  if (/dashboard|saas|suscripción|subscription|kpi/i.test(t)) return "saas";
+  if (/portfolio|portafolio|proyectos destacados/i.test(t)) return "portfolio";
+  return "generic";
+}
+
+function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  const steps: GafcoreChatNextStep[] = [];
+  const kind = detectProjectKind(ctx);
+  const code = allContent(ctx.files);
+  const names = fileNames(ctx.files);
+
+  if (kind === "taxi") {
+    pushStep(
+      steps,
+      "taxi-911",
+      "Llamada 911 desde pánico",
+      "Activa la opción de llamar al 911 desde el botón de pánico e integra la acción con el registro de la alerta y el estado del viaje activo.",
+    );
+    pushStep(
+      steps,
+      "taxi-live-location",
+      "Ubicación en vivo",
+      "Añade compartir ubicación en vivo del viaje para pasajero y conductor con estado visible en la UI.",
+    );
+    pushStep(
+      steps,
+      "taxi-driver-panel",
+      "Panel conductor",
+      "Crea el panel del conductor: viajes disponibles, aceptar viaje, navegación simulada y estado en línea.",
+    );
+    pushStep(
+      steps,
+      "taxi-passenger-flow",
+      "Flujo pedir taxi",
+      "Completa el flujo de pedir taxi: origen, destino, estimación, confirmación y seguimiento del viaje.",
+    );
+    return steps;
+  }
+
+  if (kind === "restaurant") {
+    pushStep(steps, "rest-menu", "Carta y platos", "Mejora la carta digital con categorías, fotos y precios.");
+    pushStep(steps, "rest-reserve", "Reservar mesa", "Añade reserva de mesa con fecha, hora y confirmación.");
+    return steps;
+  }
+
+  if (kind === "ecommerce") {
+    pushStep(steps, "shop-catalog", "Catálogo productos", "Mejora el catálogo con filtros, fichas de producto y CTA comprar.");
+    pushStep(steps, "shop-cart", "Carrito checkout", "Implementa carrito y checkout con resumen de pedido.");
+    return steps;
+  }
+
+  if (kind === "saas") {
+    pushStep(steps, "saas-dashboard", "Dashboard KPIs", "Refina el dashboard con KPIs, gráfico y tabla de actividad reciente.");
+    pushStep(steps, "saas-onboarding", "Onboarding", "Añade onboarding de 3 pasos para nuevos usuarios.");
+    return steps;
+  }
+
+  if (!/contact|contacto|form/i.test(names + code) && ctx.files.length > 0) {
+    pushStep(
+      steps,
+      "add-contact",
+      "Formulario contacto",
+      "Añade una sección de contacto con formulario accesible y feedback de envío.",
+    );
+  }
+  if (!/responsive|sm:|md:|lg:/i.test(code) && ctx.files.length > 1) {
+    pushStep(steps, "responsive", "Hacer responsive", "Haz el layout totalmente responsive en móvil, tablet y desktop.");
+  }
+
+  return steps;
 }
 
 export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
@@ -81,14 +195,20 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
   const empty = ctx.messages.length === 0;
   const lastAi = lastMessage(ctx.messages, "ai");
   const lastUser = lastMessage(ctx.messages, "user");
-  const recentText = `${lastAi}\n${lastUser}`.toLowerCase();
-  const names = fileNames(ctx.files);
-  const code = allContent(ctx.files);
+  const recentUser = lastUser.toLowerCase();
   const pipeline = (ctx.pipelineStatus ?? "").toLowerCase();
   const validation = (ctx.validationLabel ?? "").toLowerCase();
 
-  if (empty) {
+  if (empty && ctx.files.length === 0) {
     return STARTER_STEPS.slice(0, MAX_STEPS);
+  }
+
+  if (empty && ctx.files.length > 0) {
+    return projectContextSteps(ctx).slice(0, MAX_STEPS);
+  }
+
+  for (const s of stepsFromAiBullets(lastAi)) {
+    pushStep(steps, s.id, s.label, s.prompt);
   }
 
   if (ctx.lastError?.trim()) {
@@ -100,7 +220,6 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
       `Arregla este error de build sin romper lo que ya funciona:\n\n\`\`\`\n${err}\n\`\`\``,
     );
     pushStep(steps, "explain-error", "Explicar el error", "Explica en español qué causa este error y cómo evitarlo.");
-    pushStep(steps, "review-app", "Revisar App.tsx", "Revisa App.tsx y corrige imports, JSX y rutas rotas.");
   }
 
   if (/deploy pendiente|sin publicar|publicar/i.test(pipeline)) {
@@ -118,15 +237,13 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
         "[modo profundo] Aplica mejoras de diseño premium: hero más impactante, tipografía, espaciado y micro-interacciones.",
       );
     }
-    pushStep(
-      steps,
-      "factory-validate",
-      "Validar calidad",
-      "Ejecuta una revisión de calidad: accesibilidad, responsive, tokens semánticos y sin placeholders.",
-    );
   }
 
-  if (/rls|row level|seguridad|supabase|política|policy|policies|permiso|realtime|auth\.|anon/i.test(recentText)) {
+  if (
+    /rls|row level|supabase|política|policy|policies|permiso|realtime|auth\.|anon/i.test(
+      `${recentUser}\n${lastAi}`.toLowerCase(),
+    )
+  ) {
     pushStep(
       steps,
       "sec-rls",
@@ -136,24 +253,12 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
     pushStep(
       steps,
       "sec-public-views",
-      "Usar vistas públicas",
+      "Vistas públicas seguras",
       "Configura vistas públicas o RPC seguras para datos que el front necesita sin abrir tablas sensibles.",
-    );
-    pushStep(
-      steps,
-      "sec-realtime",
-      "Probar permisos realtime",
-      "Comprueba permisos de Realtime y suscripciones: qué puede leer un usuario anónimo vs autenticado.",
-    );
-    pushStep(
-      steps,
-      "sec-anon",
-      "Validar acceso anónimo",
-      "Valida el acceso anónimo: rutas, lecturas y escrituras permitidas sin sesión.",
     );
   }
 
-  if (/diseño|design|crítica|critique|visual|ui|ux|hero|tipograf/i.test(recentText)) {
+  if (/diseño|design|hero|ui|ux|visual|tipograf|animac/i.test(recentUser)) {
     pushStep(
       steps,
       "design-audit",
@@ -168,37 +273,16 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
     );
   }
 
+  for (const s of projectContextSteps(ctx)) {
+    pushStep(steps, s.id, s.label, s.prompt);
+  }
+
   if (ctx.mode === "chat") {
     pushStep(
       steps,
       "chat-to-build",
       "Generar código",
       "Implementa en código lo que acabamos de acordar en el chat.",
-    );
-  }
-
-  if (ctx.factoryMode && !/completado|listo/i.test(pipeline)) {
-    pushStep(
-      steps,
-      "factory-run",
-      "Ejecutar Modo Fábrica",
-      "Ejecuta Modo Fábrica: plan, código, validación y crítica de diseño en un solo flujo.",
-    );
-  }
-
-  if (ctx.visualEditOn) {
-    pushStep(
-      steps,
-      "visual-polish",
-      "Refinar estilos UI",
-      "Refina solo estilos y layout: colores con tokens semánticos, espaciado y tipografía.",
-    );
-  } else if (ctx.files.length > 0) {
-    pushStep(
-      steps,
-      "visual-toggle",
-      "Solo ediciones visuales",
-      "Activa ediciones visuales y mejora la UI sin cambiar la lógica de negocio.",
     );
   }
 
@@ -211,79 +295,24 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
     );
   }
 
-  if (!/dark|oscuro|theme-dark|\.dark/i.test(code) && ctx.files.length > 2) {
-    pushStep(steps, "dark-mode", "Modo oscuro", "Añade modo oscuro con tokens semánticos y un toggle en el header.");
-  }
-
-  if (!/contact|contacto|form/i.test(names + code) && ctx.files.length > 1) {
-    pushStep(
-      steps,
-      "add-contact",
-      "Formulario contacto",
-      "Añade una sección de contacto con formulario accesible y feedback de envío.",
-    );
-  }
-
-  if (!/responsive|sm:|md:|lg:|mobile/i.test(code) && ctx.files.length > 2) {
-    pushStep(steps, "responsive", "Hacer responsive", "Haz el layout totalmente responsive en móvil, tablet y desktop.");
-  }
-
-  if (!/meta name|og:|seo|description/i.test(code) && ctx.files.length > 2) {
-    pushStep(steps, "seo", "Mejorar SEO", "Añade meta title, description, Open Graph y estructura semántica para SEO.");
-  }
-
-  if (ctx.multiAgentMode && ctx.files.length > 0) {
-    pushStep(
-      steps,
-      "workflow-next",
-      "Siguiente tarea workflow",
-      "Propón la siguiente tarea del workflow multiagente según el estado actual del proyecto.",
-    );
-  }
-
-  if (steps.length < MAX_STEPS) {
-    pushStep(
-      steps,
-      "improve-copy",
-      "Mejorar textos",
-      "Mejora los textos de la UI: titulares más claros, CTAs persuasivos y tono profesional.",
-    );
-  }
-  if (steps.length < MAX_STEPS) {
-    pushStep(
-      steps,
-      "add-tests",
-      "Revisar accesibilidad",
-      "Revisa accesibilidad: labels, contraste, foco de teclado y roles ARIA.",
-    );
-  }
-
   if (steps.length === 0) {
-    return FOLLOWUP_FALLBACK.slice(0, MAX_STEPS);
+    const fallback = projectContextSteps(ctx);
+    if (fallback.length > 0) return fallback.slice(0, MAX_STEPS);
+    return [
+      {
+        id: "continue-build",
+        label: "Continuar lo anterior",
+        prompt: lastUser.trim()
+          ? `Continúa con esto: ${lastUser.trim().slice(0, 200)}`
+          : "Continúa mejorando el proyecto según el último cambio que pedí.",
+      },
+      {
+        id: "fb-polish",
+        label: "Pulir detalles",
+        prompt: "Pulir detalles finales: hover states, transiciones y consistencia de botones.",
+      },
+    ].slice(0, MAX_STEPS);
   }
 
   return steps.slice(0, MAX_STEPS);
 }
-
-const FOLLOWUP_FALLBACK: GafcoreChatNextStep[] = [
-  {
-    id: "fb-responsive",
-    label: "Hacer responsive",
-    prompt: "Haz responsive el layout principal y corrige desbordes en móvil.",
-  },
-  {
-    id: "fb-design",
-    label: "Mejorar diseño",
-    prompt: "Mejora el diseño visual: jerarquía, espaciado y componentes más premium.",
-  },
-  {
-    id: "fb-dark",
-    label: "Modo oscuro",
-    prompt: "Convierte la interfaz a modo oscuro con tokens semánticos.",
-  },
-  {
-    id: "fb-polish",
-    label: "Pulir detalles",
-    prompt: "Pulir detalles finales: hover states, transiciones y consistencia de botones.",
-  },
-];

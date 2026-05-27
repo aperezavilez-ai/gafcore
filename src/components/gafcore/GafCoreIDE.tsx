@@ -32,6 +32,7 @@ import {
   type GafcoreDeployResult,
 } from "@/lib/gafcore-deploy.shared";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
+import { isRemoteProjectStale } from "@/lib/gafcore-project-stale.shared";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -433,21 +434,7 @@ export function GafCoreIDE() {
   }, [projectMenuOpen, showProjectSearch]);
 
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
-    const appFile = remote?.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
-    const isStale =
-      !remote ||
-      remote.length === 0 ||
-      !appFile ||
-      !/export\s+default/.test(appFile.content) ||
-      /Hello\s*\(/.test(appFile.content) ||
-      /GafCore listo|Pídele algo a GafCore|Editor · App\.tsx|const \[code, setCode\]/.test(
-        appFile.content,
-      ) ||
-      /Hola desde GafCore/i.test(appFile.content) ||
-      (/Proyecto listo/i.test(appFile.content) && !/useState/i.test(appFile.content)) ||
-      /Bienvenidos a GafCore/i.test(appFile.content);
-
-    if (!isStale && remote?.length) {
+    if (!isRemoteProjectStale(remote) && remote?.length) {
       const sanitized = sanitizeProjectJsxFiles(remote);
       const jsxFixed = sanitized.some((f, i) => f.content !== remote[i]?.content);
       setFiles(sanitized);
@@ -457,6 +444,13 @@ export function GafCoreIDE() {
       return;
     }
 
+    toast.warning(
+      "No había código guardado de tu proyecto (o solo la plantilla vacía). Se cargó la plantilla inicial.",
+      {
+        description: "Menú Historial → restaura una versión anterior si la tienes.",
+        duration: 12_000,
+      },
+    );
     const ok = await saveProjectFiles(initialFiles, projectId);
     setFiles(initialFiles);
     setOpenTabs([initialFiles[0].name]);

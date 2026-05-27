@@ -3016,13 +3016,15 @@ export function ChatPanel({
           disabled={loading}
           onSelect={(prompt) => {
             if (loading) return;
-            if (mode === "build") {
-              void send(prompt);
-              return;
-            }
-            setInput((v) => (v.trim() ? `${v.trim()}\n\n${prompt}` : prompt));
+            setInput(prompt);
             taRef.current?.focus();
-            toast.message("Sugerencia añadida — pulsa Enter para enviar");
+            requestAnimationFrame(() => {
+              const el = taRef.current;
+              if (el) {
+                el.selectionStart = el.selectionEnd = el.value.length;
+                el.scrollTop = el.scrollHeight;
+              }
+            });
           }}
         />
         {pendingComposerImages.length > 0 ? (
