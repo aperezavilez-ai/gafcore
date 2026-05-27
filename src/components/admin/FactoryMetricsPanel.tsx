@@ -48,6 +48,7 @@ export function FactoryMetricsPanel() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [profileFilter, setProfileFilter] = useState("all");
+  const [trendWindowDays, setTrendWindowDays] = useState<7 | 14 | 30>(7);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -56,6 +57,7 @@ export function FactoryMetricsPanel() {
         data: {
           limit: 40,
           ...(profileFilter !== "all" ? { profileFilter } : {}),
+          trendWindowDays,
         },
       });
       if (!res.ok) {
@@ -69,7 +71,7 @@ export function FactoryMetricsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [load, profileFilter]);
+  }, [load, profileFilter, trendWindowDays]);
 
   useEffect(() => {
     void reload();
@@ -99,6 +101,16 @@ export function FactoryMetricsPanel() {
                 {o.label}
               </option>
             ))}
+          </select>
+          <select
+            value={trendWindowDays}
+            onChange={(e) => setTrendWindowDays(Number(e.target.value) as 7 | 14 | 30)}
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            aria-label="Ventana de tendencia"
+          >
+            <option value={7}>7d</option>
+            <option value={14}>14d</option>
+            <option value={30}>30d</option>
           </select>
           <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
             {loading ? (
@@ -275,7 +287,9 @@ export function FactoryMetricsPanel() {
           {dashboard.profileTrend7d.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Tendencia 7 días por plantilla</CardTitle>
+                <CardTitle className="text-sm">
+                  Tendencia {dashboard.trendWindowDays} días por plantilla
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {dashboard.profileTrend7d.slice(0, 6).map((profile) => (
@@ -289,7 +303,12 @@ export function FactoryMetricsPanel() {
                         {profile.points.reduce((acc, p) => acc + p.total, 0)} OK
                       </p>
                     </div>
-                    <div className="grid grid-cols-7 gap-1">
+                    <div
+                      className="grid gap-1"
+                      style={{
+                        gridTemplateColumns: `repeat(${Math.max(profile.points.length, 1)}, minmax(0, 1fr))`,
+                      }}
+                    >
                       {profile.points.map((p) => (
                         <div key={`${profile.profileId}-${p.day}`} className="space-y-1">
                           <div

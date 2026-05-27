@@ -13,6 +13,7 @@ export const getGafcoreFactoryAdminDashboard = createServerFn({ method: "POST" }
       .object({
         limit: z.number().int().min(1).max(80).optional(),
         profileFilter: z.string().min(1).max(32).optional(),
+        trendWindowDays: z.union([z.literal(7), z.literal(14), z.literal(30)]).optional(),
       })
       .parse(input),
   )
@@ -24,6 +25,7 @@ export const getGafcoreFactoryAdminDashboard = createServerFn({ method: "POST" }
     const dashboard = await loadFactoryAdminDashboard(
       data.limit ?? 40,
       data.profileFilter ?? null,
+      data.trendWindowDays ?? 7,
     );
     return { ok: true as const, dashboard };
   });

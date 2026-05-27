@@ -67,6 +67,7 @@ export type FactoryAdminDashboard = {
   phaseAlerts: FactoryPhaseAlert[];
   globalAlert: string | null;
   profileFilter: string | null;
+  trendWindowDays: 7 | 14 | 30;
   profileBreakdown: FactoryProfileAggregate[];
   profileTrend7d: FactoryProfileTrend[];
   recentRuns: FactoryRunListItem[];
@@ -100,6 +101,7 @@ function isFactoryMetrics(v: unknown): v is FactoryRunMetrics {
 export async function loadFactoryAdminDashboard(
   limit = 40,
   profileFilter?: string | null,
+  trendWindowDays: 7 | 14 | 30 = 7,
 ): Promise<FactoryAdminDashboard> {
   const activeFilter =
     profileFilter && profileFilter !== "all" && profileFilter.length > 0
@@ -113,7 +115,7 @@ export async function loadFactoryAdminDashboard(
 
   if (error) {
     console.error("[factory-admin] load:", error);
-    return emptyDashboard(activeFilter);
+    return emptyDashboard(activeFilter, trendWindowDays);
   }
 
   const allRuns: FactoryRunListItem[] = [];
@@ -155,7 +157,7 @@ export async function loadFactoryAdminDashboard(
     .sort((a, b) => b.total - a.total);
 
   const dayBuckets: string[] = [];
-  for (let i = 6; i >= 0; i -= 1) {
+  for (let i = trendWindowDays - 1; i >= 0; i -= 1) {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     d.setDate(d.getDate() - i);
@@ -277,6 +279,7 @@ export async function loadFactoryAdminDashboard(
     phaseAlerts,
     globalAlert,
     profileFilter: activeFilter,
+    trendWindowDays,
     profileBreakdown,
     profileTrend7d,
     recentRuns,
@@ -316,7 +319,10 @@ export async function loadFactoryRunsForExport(exportLimit = 200): Promise<Facto
   return runs;
 }
 
-function emptyDashboard(profileFilter: string | null = null): FactoryAdminDashboard {
+function emptyDashboard(
+  profileFilter: string | null = null,
+  trendWindowDays: 7 | 14 | 30 = 7,
+): FactoryAdminDashboard {
   return {
     totalRuns: 0,
     successRuns: 0,
@@ -329,6 +335,7 @@ function emptyDashboard(profileFilter: string | null = null): FactoryAdminDashbo
     phaseAlerts: [],
     globalAlert: null,
     profileFilter,
+    trendWindowDays,
     profileBreakdown: [],
     profileTrend7d: [],
     recentRuns: [],
