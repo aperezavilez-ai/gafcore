@@ -52,12 +52,17 @@ async function main() {
 
   const manual = templates.resolveFactoryTemplateProfile("cualquier texto", "ecommerce");
   if (manual.id !== "ecommerce") throw new Error("manual factoryProfileId failed");
+  const restaurant = templates.resolveFactoryTemplateProfile(
+    "taqueria premium con menu, pedidos a domicilio y combos",
+  );
+  if (restaurant.id !== "restaurant") throw new Error("restaurant profile resolution failed");
 
   const autoId = templates.getFactoryTemplateProfileById("auto");
   if (autoId !== null) throw new Error("auto profile should be null");
 
   const opts = templates.listFactoryProfileSelectorOptions();
   if (!opts.some((o) => o.id === "auto")) throw new Error("selector missing auto");
+  if (!opts.some((o) => o.id === "restaurant")) throw new Error("selector missing restaurant");
 
   console.log("gafcore:smoke-factory OK");
   console.log("  entry:", entry.entryFiles.join(", "));
@@ -66,6 +71,7 @@ async function main() {
   console.log("  profile landing:", landing.label);
   console.log("  profile dashboard:", dash.label);
   console.log("  profile manual ecommerce:", manual.label);
+  console.log("  profile restaurant:", restaurant.label);
   console.log("  selector options:", opts.length);
 }
 

@@ -81,6 +81,7 @@ En el IDE puedes fijar la plantilla o dejar **Auto** (detección por texto + `cl
 | Landing SaaS | `landing` |
 | Dashboard | `dashboard` |
 | Tienda básica | `ecommerce` |
+| Restaurante premium | `restaurant` |
 | Starter funcional | `starter` |
 | SaaS genérico | `saas` |
 
@@ -91,6 +92,7 @@ Detección automática (sin selector manual):
 | Landing SaaS | hero, landing, pricing | hero, features, pricing/CTA, footer |
 | Dashboard | dashboard, KPI, sidebar | nav, tarjetas KPI, tabla |
 | Tienda | ecommerce, carrito | header, grid, CTA |
+| Restaurante | tacos/menu/pedidos/delivery | hero gastronómico, especialidades, menú/combos, CTA pedido |
 | SaaS genérico | resto | hero, valor, CTA |
 
 ## E2E post-deploy

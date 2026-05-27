@@ -55,6 +55,15 @@ const PROFILES: Record<ProjectTypeHint, FactoryTemplateProfile> = {
   },
 };
 
+const RESTAURANT_PROFILE: FactoryTemplateProfile = {
+  id: "restaurant",
+  label: "Restaurante premium",
+  templateSlug: "landing-premium",
+  requiredSections: ["hero gastronómico", "especialidades", "menú o combos", "CTA pedido"],
+  promptAddon:
+    "[plantilla: restaurante premium] Diseño gastronómico de alto nivel (no genérico): hero potente con identidad visual, cards de platillos con jerarquía clara (nombre, descripción, precio), bloque de combos/populares, CTA visible para pedir. Usa gradientes/superficies modernas, tipografía cuidada, microinteracciones, y mobile-first impecable. Evita stock genérico y placeholders.",
+};
+
 const PREMIUM_UI_GUARDRAILS =
   "Guardrails premium obligatorios: NO renderizar placeholders genéricos ni imágenes stock aleatorias por defecto; NO dejar cards planas sin estados; incluir hover/focus visibles en CTA; tipografía y spacing consistentes; evitar bloques vacíos de relleno.";
 
@@ -68,6 +77,7 @@ const PROFILE_BY_ID: Record<string, FactoryTemplateProfile> = {
   dashboard: PROFILES.app,
   starter: PROFILES.blank,
   saas: PROFILES.unknown,
+  restaurant: RESTAURANT_PROFILE,
 };
 
 export function getFactoryTemplateProfileById(id: string): FactoryTemplateProfile | null {
@@ -83,6 +93,7 @@ export function resolveFactoryTemplateProfile(
     ? getFactoryTemplateProfileById(profileId)
     : null;
   if (manual) return manual;
+  if (looksLikeRestaurant(instruction)) return RESTAURANT_PROFILE;
 
   const intent = classifyUserIntent(instruction, { mode: "build" });
   const hint =
@@ -101,16 +112,24 @@ export function listFactoryProfileSelectorOptions(): Array<{
     { id: "landing", label: PROFILES.landing.label, description: PROFILES.landing.requiredSections.join(" · ") },
     { id: "dashboard", label: PROFILES.app.label, description: PROFILES.app.requiredSections.join(" · ") },
     { id: "ecommerce", label: PROFILES.ecommerce.label, description: PROFILES.ecommerce.requiredSections.join(" · ") },
+    { id: "restaurant", label: RESTAURANT_PROFILE.label, description: RESTAURANT_PROFILE.requiredSections.join(" · ") },
     { id: "starter", label: PROFILES.blank.label, description: PROFILES.blank.requiredSections.join(" · ") },
     { id: "saas", label: PROFILES.unknown.label, description: PROFILES.unknown.requiredSections.join(" · ") },
   ];
 }
 
 function inferProfileFromText(text: string): ProjectTypeHint {
+  if (looksLikeRestaurant(text)) return "ecommerce";
   if (/\b(dashboard|panel de control|métricas|kpi|sidebar)\b/i.test(text)) return "app";
   if (/\b(tienda|e-?commerce|carrito|productos|shop)\b/i.test(text)) return "ecommerce";
   if (/\b(landing|hero|portada|pricing|precios)\b/i.test(text)) return "landing";
   return "unknown";
+}
+
+function looksLikeRestaurant(text: string): boolean {
+  return /\b(restaurante|restaurant|taquer[ií]a|taco|pizza|hamburguesa|men[uú]|platillos|domicilio|delivery|reservas)\b/i.test(
+    text,
+  );
 }
 
 export function buildFactoryInstructionWithProfile(
@@ -122,5 +141,5 @@ export function buildFactoryInstructionWithProfile(
 }
 
 export function listFactoryTemplateProfiles(): FactoryTemplateProfile[] {
-  return Object.values(PROFILES);
+  return [...Object.values(PROFILES), RESTAURANT_PROFILE];
 }
