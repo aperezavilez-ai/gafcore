@@ -1244,7 +1244,7 @@ export function GafCoreIDE() {
             className="h-8 gap-1.5 px-2.5 text-[13px] text-foreground hover:bg-muted"
           >
             <Share2 className="h-3.5 w-3.5" />
-            Compartir
+            <span className="hidden sm:inline">Compartir</span>
           </Button>
           {deployLiveStatus === "building" && (
             <span className="hidden text-xs text-amber-600 sm:inline" title="Deploy en Vercel">
@@ -1286,7 +1286,7 @@ export function GafCoreIDE() {
               ) : (
                 <Globe className="h-3.5 w-3.5" />
               )}
-              Publicar
+              <span className="hidden sm:inline">Publicar</span>
             </Button>
           </PublishDialog>
           <Button
@@ -1425,10 +1425,13 @@ export function GafCoreIDE() {
                   const idx = Math.round(target.scrollLeft / target.clientWidth);
                   setMobilePane(idx === 0 ? "chat" : "workspace");
                 }}
-                className="flex flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="relative flex w-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
-                {/* Pane 1: Chat */}
-                <div className="h-full w-screen shrink-0 snap-start snap-always">
+                {/* Pane 1: Chat — width fijo en 100% del scroll container */}
+                <div
+                  className="relative h-full min-w-0 shrink-0 snap-start snap-always overflow-hidden"
+                  style={{ width: "100%", flex: "0 0 100%" }}
+                >
                   <ChatPanel
                     files={files}
                     setFiles={setFiles}
@@ -1448,7 +1451,10 @@ export function GafCoreIDE() {
                   />
                 </div>
                 {/* Pane 2: Workspace */}
-                <div className="h-full w-screen shrink-0 snap-start snap-always bg-muted/30">
+                <div
+                  className="relative h-full min-w-0 shrink-0 snap-start snap-always overflow-hidden bg-muted/30"
+                  style={{ width: "100%", flex: "0 0 100%" }}
+                >
                   <div className="flex h-full flex-col">
                     {view === "preview" ? (
                       <div className="flex h-full flex-col gap-2 p-2">
