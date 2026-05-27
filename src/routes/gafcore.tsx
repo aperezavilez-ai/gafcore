@@ -19,6 +19,10 @@ import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { toast } from "sonner";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { GafcoreInstallApp } from "@/components/GafcoreInstallApp";
+import { ClientOnly } from "@/components/ClientOnly";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { getPublicSiteOrigin } from "@/lib/public-site-url";
+import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
 type ThemeKey = "black" | "white" | "blue" | "gray";
 const THEME_KEY = "gafcore-theme";
@@ -93,6 +97,52 @@ function planNameKey(id: string): string {
   return "gc.names.pro";
 }
 
+function gafcoreCheckoutReturnUrl(): string {
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : getPublicSiteOrigin();
+  return `${origin}/gafcore/app?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+}
+
+function GafcoreCheckoutPanel({
+  planId,
+  user,
+}: {
+  planId: string;
+  user: { id: string; email?: string };
+}) {
+  const { t } = useI18n();
+  const selected = GAFCORE_PLANS_UI.find((p) => p.id === planId);
+  if (!selected) return null;
+  const featLines = t(`gc.plan.${selected.id}.f`).split("|").filter(Boolean);
+  return (
+    <ErrorBoundary
+      fallback={(err, reset) => (
+        <div className="space-y-3 py-6 text-center text-sm">
+          <p className="font-medium text-foreground">No se pudo abrir el pago</p>
+          <p className="text-muted-foreground break-words">{err.message}</p>
+          <Button type="button" variant="outline" onClick={reset}>
+            Reintentar
+          </Button>
+        </div>
+      )}
+    >
+      <CheckoutExperience
+        brand="gafcore"
+        plan={{
+          id: selected.id,
+          name: t(planNameKey(selected.id)),
+          price: selected.price,
+          credits: selected.credits,
+          desc: t(`gc.plan.${selected.id}.desc`),
+          features: featLines,
+        }}
+        user={{ id: user.id, email: user.email }}
+        returnUrl={gafcoreCheckoutReturnUrl()}
+      />
+    </ErrorBoundary>
+  );
+}
+
 const FEATURE_ROWS = [
   { icon: Sparkles, titleKey: "gc.feat.ai.title", descKey: "gc.feat.ai.desc" },
   { icon: MousePointerClick, titleKey: "gc.feat.editor.title", descKey: "gc.feat.editor.desc" },
@@ -123,8 +173,13 @@ function GafCoreLanding() {
 
   const resolveUserId = useCallback(async (): Promise<string | undefined> => {
     if (user?.id) return user.id;
-    const { data } = await supabase.auth.getSession();
-    return data.session?.user?.id;
+    if (!isSupabaseConfigured()) return undefined;
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.user?.id;
+    } catch {
+      return undefined;
+    }
   }, [user?.id]);
 
   /** Tras verificar correo: URL con ?pick_plan=1 → tabla de planes (añadir en Supabase Auth URL redirects). */
@@ -165,7 +220,14 @@ function GafCoreLanding() {
   useEffect(() => {
     if (!planFromUrl) return;
     void (async () => {
-      const uid = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
+      let uid = user?.id;
+      if (!uid && isSupabaseConfigured()) {
+        try {
+          uid = (await supabase.auth.getSession()).data.session?.user?.id;
+        } catch {
+          return;
+        }
+      }
       if (!uid) return;
       if (planFromUrl === "free") {
         clearPlanChoicePending(uid);
@@ -195,6 +257,15 @@ function GafCoreLanding() {
 
   return (
     <div className={`gafcore-theme-${theme} gc-surface min-h-screen`}>
+      {!isSupabaseConfigured() ? (
+        <div
+          role="alert"
+          className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-xs text-destructive"
+        >
+          Configuración incompleta: faltan variables Supabase en el deploy (VITE_SUPABASE_URL y
+          VITE_SUPABASE_PUBLISHABLE_KEY). Inicia sesión y el editor no funcionarán hasta un redeploy.
+        </div>
+      ) : null}
       <DevPortBanner targetPath="/gafcore" />
       {/* Header */}
       <header className="border-b gc-border" style={{ background: "color-mix(in oklab, var(--gc-bg) 80%, transparent)", backdropFilter: "blur(10px)" }}>
@@ -594,26 +665,17 @@ function GafCoreLanding() {
               para continuar con el pago.
             </p>
           )}
-          {checkoutPriceId && user && (() => {
-            const selected = GAFCORE_PLANS_UI.find((p) => p.id === checkoutPriceId);
-            if (!selected) return null;
-            const featLines = t(`gc.plan.${selected.id}.f`).split("|").filter(Boolean);
-            return (
-              <CheckoutExperience
-                brand="gafcore"
-                plan={{
-                  id: selected.id,
-                  name: t(planNameKey(selected.id)),
-                  price: selected.price,
-                  credits: selected.credits,
-                  desc: t(`gc.plan.${selected.id}.desc`),
-                  features: featLines,
-                }}
-                user={{ id: user.id, email: user.email }}
-                returnUrl={`${window.location.origin}/gafcore/app?checkout=success&session_id={CHECKOUT_SESSION_ID}`}
-              />
-            );
-          })()}
+          {checkoutPriceId && user ? (
+            <ClientOnly
+              fallback={
+                <div className="flex min-h-[200px] items-center justify-center text-sm text-muted-foreground">
+                  Cargando checkout…
+                </div>
+              }
+            >
+              <GafcoreCheckoutPanel planId={checkoutPriceId} user={user} />
+            </ClientOnly>
+          ) : null}
         </DialogContent>
       </Dialog>
 

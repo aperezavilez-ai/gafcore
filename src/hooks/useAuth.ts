@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
+import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
 export interface AuthState {
   user: User | null;
@@ -54,25 +55,34 @@ export function initAuthOnce() {
   if (typeof window === "undefined") return Promise.resolve();
   if (authInitPromise) return authInitPromise;
 
-  authInitPromise = (async () => {
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT") {
-        lastProfileUserId = null;
-        applySession(null);
-        return;
-      }
-      applySession(session ?? null);
-    });
+  if (!isSupabaseConfigured()) {
+    console.error(
+      "[Auth] Falta VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY en el build. Revisa variables en Vercel y redeploy.",
+    );
+    applySession(null, false);
+    return Promise.resolve();
+  }
 
+  authInitPromise = (async () => {
     try {
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "SIGNED_OUT") {
+          lastProfileUserId = null;
+          applySession(null);
+          return;
+        }
+        applySession(session ?? null);
+      });
+
       const result = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
       if (result === "timeout") {
         applySession(null);
         return;
       }
       applySession(result.data.session ?? null);
-    } catch {
-      applySession(null);
+    } catch (e) {
+      console.error("[Auth] No se pudo inicializar Supabase en el cliente", e);
+      applySession(null, false);
     }
   })();
 
@@ -97,7 +107,12 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    if (!isSupabaseConfigured()) return;
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      applySession(null, false);
+    }
   }, []);
 
   return { ...state, signOut };
