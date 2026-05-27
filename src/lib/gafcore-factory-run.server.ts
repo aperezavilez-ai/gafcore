@@ -28,6 +28,7 @@ import {
   FACTORY_BUILD_PREFIX,
   GAFCORE_FACTORY_CRITIQUE_THRESHOLD,
   GAFCORE_FACTORY_MAX_WAVES,
+  GAFCORE_FACTORY_RESTAURANT_CRITIQUE_THRESHOLD,
   type FactoryFileOut,
   type FactoryRunOutcome,
   type FactoryRunResult,
@@ -310,7 +311,12 @@ async function executeGafcoreFactoryRunHeavy(
     | undefined;
 
   const runCritique = input.runDesignCritique !== false;
-  if (runCritique && success && overallScore < GAFCORE_FACTORY_CRITIQUE_THRESHOLD) {
+  const isRestaurantProfile = profile.id === "restaurant";
+  const critiqueThreshold = isRestaurantProfile
+    ? GAFCORE_FACTORY_RESTAURANT_CRITIQUE_THRESHOLD
+    : GAFCORE_FACTORY_CRITIQUE_THRESHOLD;
+  const shouldRunCritique = runCritique && success && (isRestaurantProfile || overallScore < critiqueThreshold);
+  if (shouldRunCritique) {
     pipelineRow =
       (await appendRunStep(input.sb, pipelineRow, "design_critique", "validating")) ?? pipelineRow;
     const critiqueRes = await performDesignCritique({
@@ -318,7 +324,9 @@ async function executeGafcoreFactoryRunHeavy(
       projectId: input.projectId,
       files: outputFiles,
       brief:
-        "Modo fábrica premium: elimina look genérico, sube jerarquía visual, mejora spacing/typography/contraste/estados hover-focus y evita placeholders o imágenes stock aleatorias.",
+        isRestaurantProfile
+          ? "Modo fábrica restaurante premium: eleva branding gastronómico, hero de alto impacto, tarjetas de platillos con jerarquía impecable, CTA de pedido dominante, microinteracciones y coherencia visual tipo producto top."
+          : "Modo fábrica premium: elimina look genérico, sube jerarquía visual, mejora spacing/typography/contraste/estados hover-focus y evita placeholders o imágenes stock aleatorias.",
     });
     if (critiqueRes.ok) {
       critiqueMeta = {
@@ -406,8 +414,8 @@ async function executeGafcoreFactoryRunHeavy(
 
   const reply =
     stepLines.length > 0
-      ? `**Fábrica ${batch.workflowState}** (${batch.waves} ola(s)). Validación ${overallScore}/100. ${buildSmoke.message}${deployLine}\n\n${stepLines.join("\n")}`
-      : `**Fábrica ${batch.workflowState}**. Validación ${overallScore}/100. ${buildSmoke.message}${deployLine}`;
+      ? `**Fábrica ${batch.workflowState}** (${batch.waves} ola(s)). Validación ${overallScore}/100. ${buildSmoke.message}${deployLine}${isRestaurantProfile ? "\n\nPerfil restaurante premium activo." : ""}\n\n${stepLines.join("\n")}`
+      : `**Fábrica ${batch.workflowState}**. Validación ${overallScore}/100. ${buildSmoke.message}${deployLine}${isRestaurantProfile ? "\n\nPerfil restaurante premium activo." : ""}`;
 
   await recordFactoryRunMetrics(
     input.sb,

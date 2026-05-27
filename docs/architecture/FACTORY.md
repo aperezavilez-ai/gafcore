@@ -95,6 +95,8 @@ Detección automática (sin selector manual):
 | Restaurante | tacos/menu/pedidos/delivery | hero gastronómico, especialidades, menú/combos, CTA pedido |
 | SaaS genérico | resto | hero, valor, CTA |
 
+`restaurant` activa **restaurant polish pass**: crítica visual obligatoria con umbral más alto (94) para empujar acabado premium en gastronomía.
+
 ## E2E post-deploy
 
 Si **Publicar al terminar** está ON y el deploy a GitHub/Vercel OK, el servidor hace GET a `/` y `/index.html` (HTTP 2xx).

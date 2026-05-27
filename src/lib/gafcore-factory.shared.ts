@@ -2,6 +2,7 @@
  * Modo Fábrica GafCore — idea → plan → código → validación → build smoke → diseño → (opcional) deploy.
  */
 export const GAFCORE_FACTORY_CRITIQUE_THRESHOLD = 90;
+export const GAFCORE_FACTORY_RESTAURANT_CRITIQUE_THRESHOLD = 94;
 export const GAFCORE_FACTORY_MAX_WAVES = 12;
 /** Por debajo de este % en una fase (mín. 3 muestras) se muestra alerta en admin. */
 export const GAFCORE_FACTORY_PHASE_ALERT_THRESHOLD = 70;
