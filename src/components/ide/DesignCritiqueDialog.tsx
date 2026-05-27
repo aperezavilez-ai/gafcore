@@ -5,7 +5,7 @@
  * combina con heurísticas estáticas locales y permite aplicar las mejoras en el chat.
  */
 import { useState, useCallback, type FC } from "react";
-import { Sparkles, AlertTriangle, CircleAlert, Info, Loader2 } from "lucide-react";
+import { Sparkles, AlertTriangle, CircleAlert, Info, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,8 @@ import type { FileItem } from "@/components/ide/CodeEditor";
 type Props = {
   files: FileItem[];
   projectId: string | null;
+  /** Cierra la vista previa y vuelve al chat (panel workspace). */
+  onClose?: () => void;
 };
 
 const severityIcon: Record<DesignIssueSeverity, FC<{ className?: string }>> = {
@@ -43,7 +45,7 @@ const severityColor: Record<DesignIssueSeverity, string> = {
   blocker: "text-destructive",
 };
 
-export function DesignCritiqueDialog({ files, projectId }: Props) {
+export function DesignCritiqueDialog({ files, projectId, onClose }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<DesignCritiqueResponse | null>(null);
@@ -193,6 +195,19 @@ export function DesignCritiqueDialog({ files, projectId }: Props) {
             Ver detalles
           </Button>
         </DialogTrigger>
+        {onClose ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={onClose}
+            title="Cerrar vista previa"
+            aria-label="Cerrar vista previa"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        ) : null}
       </div>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>

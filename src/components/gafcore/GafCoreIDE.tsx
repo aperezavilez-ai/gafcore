@@ -32,7 +32,12 @@ import {
   type GafcoreDeployResult,
 } from "@/lib/gafcore-deploy.shared";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 import { Toaster } from "@/components/ui/sonner";
 import {
   LayoutGrid,
@@ -191,6 +196,31 @@ export function GafCoreIDE() {
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
+  const workspacePanelRef = useRef<ImperativePanelHandle>(null);
+
+  const openWorkspacePanel = useCallback(() => {
+    if (isMobile) {
+      setMobilePane("workspace");
+      requestAnimationFrame(() => {
+        const el = mobileScrollRef.current;
+        if (el) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
+      });
+      return;
+    }
+    workspacePanelRef.current?.expand();
+  }, [isMobile]);
+
+  const closeWorkspacePanel = useCallback(() => {
+    if (isMobile) {
+      setMobilePane("chat");
+      requestAnimationFrame(() => {
+        const el = mobileScrollRef.current;
+        if (el) el.scrollTo({ left: 0, behavior: "smooth" });
+      });
+      return;
+    }
+    workspacePanelRef.current?.collapse();
+  }, [isMobile]);
 
   // Al activar layout móvil o al cambiar tamaño/orientación, garantiza que el
   // scroll esté alineado al pane actual (evita posiciones intermedias en iOS).
@@ -534,6 +564,17 @@ export function GafCoreIDE() {
   const refreshPreview = () => {
     setPreviewKey((k) => k + 1);
     toast.success("Preview recargado");
+  };
+
+  const showPreview = () => {
+    setView("preview");
+    refreshPreview();
+    openWorkspacePanel();
+  };
+
+  const showCode = () => {
+    setView("code");
+    openWorkspacePanel();
   };
 
   useEffect(() => {
@@ -1188,10 +1229,7 @@ export function GafCoreIDE() {
         <div className="hidden min-w-0 flex-1 items-center justify-center gap-2 px-1 md:flex">
           <div className="flex shrink-0 items-center gap-0.5">
             <button
-              onClick={() => {
-                setView("preview");
-                refreshPreview();
-              }}
+              onClick={showPreview}
               className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium ${
                 view === "preview"
                   ? "bg-muted text-foreground"
@@ -1202,7 +1240,7 @@ export function GafCoreIDE() {
               <Eye className="h-3.5 w-3.5" /> Preview
             </button>
             <button
-              onClick={() => setView("code")}
+              onClick={showCode}
               className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium ${
                 view === "code"
                   ? "bg-muted text-foreground"
@@ -1269,14 +1307,12 @@ export function GafCoreIDE() {
                   <span className="flex-1">Nube</span>
                   <ExternalLink className="h-3 w-3 text-muted-foreground" />
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setView("code")}>
+                <DropdownMenuItem onClick={showCode}>
                   <Code2 className="mr-2 h-4 w-4" />
                   <span className="flex-1">Código</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => {
-                    setView("code");
-                  }}
+                  onClick={showCode}
                   title="Abre la vista Código con el explorador de archivos"
                 >
                   <Folder className="mr-2 h-4 w-4" />
@@ -1405,12 +1441,7 @@ export function GafCoreIDE() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setView("preview");
-              refreshPreview();
-              const el = mobileScrollRef.current;
-              if (el && isMobile) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
-            }}
+            onClick={showPreview}
             className={`flex h-8 shrink-0 items-center justify-center rounded-md px-2.5 text-[12px] font-medium ${
               view === "preview"
                 ? "bg-muted text-foreground"
@@ -1422,11 +1453,7 @@ export function GafCoreIDE() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              setView("code");
-              const el = mobileScrollRef.current;
-              if (el && isMobile) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
-            }}
+            onClick={showCode}
             className={`flex h-8 shrink-0 items-center justify-center rounded-md px-2.5 text-[12px] font-medium ${
               view === "code"
                 ? "bg-muted text-foreground"
@@ -1541,13 +1568,7 @@ export function GafCoreIDE() {
                 <Gift className="mr-2 h-4 w-4" />
                 Créditos
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setView("code");
-                  const el = mobileScrollRef.current;
-                  if (el) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
-                }}
-              >
+              <DropdownMenuItem onClick={showCode}>
                 <Folder className="mr-2 h-4 w-4" />
                 Archivos
               </DropdownMenuItem>
@@ -1573,6 +1594,7 @@ export function GafCoreIDE() {
                 onCodeGenerated={() => {
                   setView("preview");
                   setPreviewKey((k) => k + 1);
+                  openWorkspacePanel();
                 }}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenHistory={() => setHistoryOpen(true)}
@@ -1586,12 +1608,22 @@ export function GafCoreIDE() {
             />
 
             {/* Right: Preview / Code workspace */}
-            <ResizablePanel id="workspace" minSize="45%">
+            <ResizablePanel
+              id="workspace"
+              ref={workspacePanelRef}
+              collapsible
+              collapsedSize={0}
+              minSize={45}
+            >
               <div className="flex h-full flex-col bg-muted/30">
                 {view === "preview" ? (
                   <div className="flex h-full flex-col gap-2 p-3">
                     <div className="flex shrink-0 items-center justify-end">
-                      <DesignCritiqueDialog files={files} projectId={currentProjectId ?? null} />
+                      <DesignCritiqueDialog
+                        files={files}
+                        projectId={currentProjectId ?? null}
+                        onClose={closeWorkspacePanel}
+                      />
                     </div>
                     <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
                       <LivePreview key={previewKey} files={files} />
@@ -1672,11 +1704,7 @@ export function GafCoreIDE() {
                     onCodeGenerated={() => {
                       setView("preview");
                       setPreviewKey((k) => k + 1);
-                      // Cambia automáticamente al workspace tras generar.
-                      requestAnimationFrame(() => {
-                        const el = mobileScrollRef.current;
-                        if (el) el.scrollTo({ left: el.clientWidth, behavior: "smooth" });
-                      });
+                      openWorkspacePanel();
                     }}
                     onOpenSettings={() => setSettingsOpen(true)}
                     onOpenHistory={() => setHistoryOpen(true)}
@@ -1699,7 +1727,11 @@ export function GafCoreIDE() {
                           >
                             ← Chat
                           </button>
-                          <DesignCritiqueDialog files={files} projectId={currentProjectId ?? null} />
+                          <DesignCritiqueDialog
+                            files={files}
+                            projectId={currentProjectId ?? null}
+                            onClose={closeWorkspacePanel}
+                          />
                         </div>
                         <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
                           <LivePreview key={previewKey} files={files} />
@@ -1710,10 +1742,7 @@ export function GafCoreIDE() {
                         <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              const el = mobileScrollRef.current;
-                              if (el) el.scrollTo({ left: 0, behavior: "smooth" });
-                            }}
+                            onClick={closeWorkspacePanel}
                             className="rounded-md border border-border bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
                           >
                             ← Chat
