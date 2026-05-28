@@ -86,6 +86,11 @@ import {
   shouldAutoRetryValidation,
   type ProjectValidationIssue,
 } from "@/lib/gafcore-ai-validation.shared";
+import {
+  GAFCORE_AUTOFIX_SESSION_MAX,
+  buildRuntimeAutoFixInstruction,
+  shouldAttemptAiAutofix,
+} from "@/lib/gafcore-chat-autofix.shared";
 import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
 import { listGafcoreActiveAiPlugins } from "@/lib/gafcore-extensions.functions";
 import { fetchUserExtensionInstalls } from "@/lib/gafcore-extensions-client";
@@ -627,6 +632,12 @@ export function ChatPanel({
     subActive &&
     (subscription?.price_id === "plan_creador_monthly" ||
       String(subscription?.plan_tier ?? "").toLowerCase() === "creador");
+
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const autofixDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRuntimeAutofixRef = useRef<(msg: string) => void>(() => {});
+  const runPreviewAutofixRef = useRef<(msg: string) => Promise<void>>(async () => {});
 
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
 
@@ -1217,93 +1228,15 @@ export function ChatPanel({
         }
         if (looksLikeJsxGlue) {
           setLastError(msg);
+          scheduleRuntimeAutofixRef.current(msg);
           return;
         }
       }
 
-      // 2) Cualquier otro error de runtime: intentar auto-fix con IA (máx. 1 por sesión).
       setLastError(msg);
-
-      const alreadyTried = autoFixAttemptedErrorsRef.current.has(errKey);
-      const canAutoFix =
-        !autoFixInFlightRef.current &&
-        !sendInFlightRef.current &&
-        !alreadyTried &&
-        autoFixSessionCountRef.current < 3 &&
-        Boolean(projectId) &&
-        files.length > 0 &&
-        !/No se pudo cargar:|Failed to load|404|net::ERR/i.test(msg);
-
-      if (!canAutoFix) return;
-
-      autoFixAttemptedErrorsRef.current.add(errKey);
-      autoFixSessionCountRef.current += 1;
-      autoFixInFlightRef.current = true;
-      setAutoFixActive(true);
-      void (async () => {
-        const toastId = toast.loading("Corrigiendo error del preview con IA…", {
-          duration: 90_000,
-        });
-        try {
-          const tok = await getAuthAccessToken();
-          if (!tok) {
-            toast.dismiss(toastId);
-            return;
-          }
-          const fixInstruction = [
-            "El preview del proyecto falla con este error de runtime:",
-            "",
-            "```",
-            msg.slice(0, 800),
-            "```",
-            "",
-            "Corrige el código para que el preview funcione. Reglas críticas:",
-            "- React error #31 = renderizar un objeto en JSX. NUNCA hagas `<div>{obj}</div>`",
-            "  con un objeto literal. Accede a sus campos: `<div>{obj.title}</div>`.",
-            "- Cuando mapees listas de objetos, devuelve JSX dentro del map, NO el objeto:",
-            "  `items.map(it => <Card key={it.id}>{it.label}</Card>)`.",
-            "- Los nombres de iconos de `lucide-react` deben ser válidos. Si dudas, usa",
-            "  `Sparkles`, `Zap`, `Star`, `Heart`, `StickyNote`, `Settings`, `Mail`, `Check`.",
-            "- Todo `<a>` debe tener `href` real. Todo `<button onClick>` lógica real.",
-            "- `LucideIcon`, `LucideProps`, `IconNode` solo como `type` import.",
-            "- Devuelve los archivos COMPLETOS (no parches, no fragmentos).",
-          ].join("\n");
-
-          const result = await fetchGafcoreChatComplete(
-            tok,
-            [],
-            fixInstruction,
-            files,
-            new AbortController() as unknown as AbortSignal,
-            fixInstruction,
-          );
-          if (Array.isArray(result.files) && result.files.length > 0) {
-            await applyGenerationFiles(
-              files,
-              repairGeneratedSourceFiles(result.files),
-              fixInstruction,
-              fixInstruction,
-              {
-              runFunctionalAudit: false,
-              snapshotLabel: `auto-fix preview: ${msg.slice(0, 40)}`,
-            });
-            toast.dismiss(toastId);
-            toast.success("Error del preview corregido automáticamente", { duration: 5000 });
-            setLastError(null);
-          } else {
-            toast.dismiss(toastId);
-            toast.warning("No se pudo auto-corregir. Usa 'Intenta arreglarlo' o describe el cambio.", {
-              duration: 7000,
-            });
-          }
-        } catch (e) {
-          console.warn("[gafcore-autofix-preview]", e);
-          toast.dismiss(toastId);
-        } finally {
-          autoFixInFlightRef.current = false;
-          setAutoFixActive(false);
-        }
-      })();
+      if (shouldAttemptAiAutofix(msg)) {
+        scheduleRuntimeAutofixRef.current(msg);
+      }
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -1519,6 +1452,7 @@ export function ChatPanel({
     }
     const merged = sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles));
     setFiles(merged);
+    filesRef.current = merged;
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
     void syncFilesToDb(toPersist);
     onCodeGenerated?.();
@@ -1528,7 +1462,11 @@ export function ChatPanel({
         data: toPersist.map((f) => ({ name: f.name, content: f.content })),
       });
       if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
-        setLastError(v.errors.map((e) => `${e.name}: ${e.message}`).join("\n"));
+        const sourceErr = v.errors.map((e) => `${e.name}: ${e.message}`).join("\n");
+        setLastError(sourceErr);
+        if (shouldAttemptAiAutofix(sourceErr)) {
+          scheduleRuntimeAutofixRef.current(sourceErr);
+        }
       }
     } catch {
       /* */
@@ -1542,6 +1480,7 @@ export function ChatPanel({
       if (validation.patchedFiles?.length) {
         mergedForReturn = mergeGeneratedFiles(merged, validation.patchedFiles);
         setFiles(mergedForReturn);
+        filesRef.current = mergedForReturn;
         void syncFilesToDb(
           validation.patchedFiles.map((f) => ({
             name: f.name,
@@ -1558,6 +1497,7 @@ export function ChatPanel({
           setLastError((prev) =>
             prev ? `${prev}\n\n[Validación GafCore]\n${text}` : `[Validación GafCore]\n${text}`,
           );
+          scheduleRuntimeAutofixRef.current(text);
         } else if (warnings.length > 0) {
           toast.message("Listo con avisos menores", {
             description: formatValidationForUser(warnings).slice(0, 240),
@@ -1969,6 +1909,132 @@ export function ChatPanel({
       throw err;
     }
   };
+
+  const runPreviewAutofixWithAi = useCallback(
+    async (errorMessage: string) => {
+      const msg = errorMessage.trim();
+      if (!shouldAttemptAiAutofix(msg)) return;
+      if (!projectId || filesRef.current.length === 0) return;
+      if (autoFixInFlightRef.current) return;
+      if (autoFixSessionCountRef.current >= GAFCORE_AUTOFIX_SESSION_MAX) return;
+
+      const errKey = msg.slice(0, 120);
+      const fileSig = filesRef.current.map((f) => `${f.name}:${f.content.length}`).join("|");
+      const attemptKey = `${errKey}::${fileSig}`;
+      if (autoFixAttemptedErrorsRef.current.has(attemptKey)) return;
+
+      const canSpendCredit =
+        isAdmin ||
+        isUnlimitedDaily ||
+        isFairUseCreadorPlan ||
+        balance >= COST_PER_REQUEST;
+      if (!canSpendCredit) {
+        setCreditsOut(true);
+        return;
+      }
+
+      if (sendInFlightRef.current) {
+        await new Promise((r) => setTimeout(r, 700));
+        if (sendInFlightRef.current) return;
+      }
+
+      autoFixAttemptedErrorsRef.current.add(attemptKey);
+      autoFixSessionCountRef.current += 1;
+      autoFixInFlightRef.current = true;
+      setAutoFixActive(true);
+
+      const toastId = toast.loading("Corrigiendo error del preview con IA…", { duration: 90_000 });
+      const fixInstruction = buildRuntimeAutoFixInstruction(msg);
+
+      try {
+        const tok = await getAuthAccessToken();
+        if (!tok) {
+          autoFixAttemptedErrorsRef.current.delete(attemptKey);
+          return;
+        }
+
+        const result = await fetchGafcoreChatComplete(
+          tok,
+          [],
+          fixInstruction,
+          filesRef.current,
+          new AbortController() as unknown as AbortSignal,
+          fixInstruction,
+        );
+
+        if (!Array.isArray(result.files) || result.files.length === 0) {
+          autoFixAttemptedErrorsRef.current.delete(attemptKey);
+          toast.dismiss(toastId);
+          toast.warning("No se pudo auto-corregir. Usa «Intenta arreglarlo» o describe el cambio.", {
+            duration: 7000,
+          });
+          return;
+        }
+
+        const applied = await applyGenerationFiles(
+          filesRef.current,
+          repairGeneratedSourceFiles(result.files),
+          fixInstruction,
+          fixInstruction,
+          { runFunctionalAudit: true, snapshotLabel: `auto-fix: ${msg.slice(0, 40)}` },
+        );
+        filesRef.current = applied.merged;
+
+        if (hasBlockingValidationIssues(applied.issues)) {
+          const blockText = formatValidationForUser(
+            applied.issues.filter((i) => i.severity === "error"),
+          );
+          setLastError(blockText);
+          autoFixAttemptedErrorsRef.current.delete(attemptKey);
+          scheduleRuntimeAutofixRef.current(blockText);
+          toast.dismiss(toastId);
+          toast.message("Auto-corrección parcial; reintentando validación…", { duration: 5000 });
+          return;
+        }
+
+        autoFixAttemptedErrorsRef.current.delete(attemptKey);
+        toast.dismiss(toastId);
+        toast.success("Error del preview corregido automáticamente", { duration: 5000 });
+        setLastError(applied.issues.length > 0 ? formatValidationForUser(applied.issues) : null);
+        queueMicrotask(() => {
+          window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
+          onCodeGenerated?.();
+        });
+      } catch (e) {
+        console.warn("[gafcore-autofix-preview]", e);
+        autoFixAttemptedErrorsRef.current.delete(attemptKey);
+        toast.dismiss(toastId);
+        const errMsg = String((e as Error)?.message || "");
+        if (errMsg.includes("INSUFFICIENT_CREDITS")) setCreditsOut(true);
+      } finally {
+        autoFixInFlightRef.current = false;
+        setAutoFixActive(false);
+      }
+    },
+    [
+      applyGenerationFiles,
+      balance,
+      isAdmin,
+      isFairUseCreadorPlan,
+      isUnlimitedDaily,
+      onCodeGenerated,
+      projectId,
+    ],
+  );
+
+  runPreviewAutofixRef.current = runPreviewAutofixWithAi;
+
+  const scheduleRuntimeAutofix = useCallback((msg: string) => {
+    if (!shouldAttemptAiAutofix(msg)) return;
+    if (autofixDebounceRef.current) clearTimeout(autofixDebounceRef.current);
+    const delay = sendInFlightRef.current ? 900 : 400;
+    autofixDebounceRef.current = setTimeout(() => {
+      autofixDebounceRef.current = null;
+      void runPreviewAutofixRef.current(msg);
+    }, delay);
+  }, []);
+
+  scheduleRuntimeAutofixRef.current = scheduleRuntimeAutofix;
 
   const pollFactoryUntilComplete = async (
     pipelineRunId: string,
@@ -2693,14 +2759,23 @@ export function ChatPanel({
                     : "Corrección de validación aplicada",
                 );
               } else {
-                toast.message("Aún hay errores tras el reintento automático", {
+                const blockText = formatValidationForUser(
+                  issues.filter((i) => i.severity === "error"),
+                );
+                scheduleRuntimeAutofixRef.current(blockText);
+                toast.message("Aún hay errores; la IA está corrigiendo automáticamente…", {
                   description: issues[0]?.message,
+                  duration: 8000,
                 });
               }
             }
           }
         } else if (issues.some((i) => i.severity === "error")) {
-          toast.message("Revisa validación del proyecto", {
+          const blockText = formatValidationForUser(
+            issues.filter((i) => i.severity === "error"),
+          );
+          scheduleRuntimeAutofixRef.current(blockText);
+          toast.message("Corrigiendo validación automáticamente…", {
             description: issues.find((i) => i.severity === "error")?.message,
             duration: 8000,
           });
