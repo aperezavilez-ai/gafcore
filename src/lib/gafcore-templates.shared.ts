@@ -145,6 +145,7 @@ const LANDING_APP = `import React, { useState } from "react";
 const HERO = "https://picsum.photos/seed/gafcore-paint-hero-kitchen/1280/720";
 
 export default function App() {
+  const [section, setSection] = useState<"inicio" | "contacto">("inicio");
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
 
@@ -154,21 +155,31 @@ export default function App() {
     setSent(true);
   };
 
+  const goContacto = () => {
+    setSection("contacto");
+    document.getElementById("contacto")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <span className="text-lg font-bold tracking-tight">Mi marca</span>
-        <a href="#contacto" className="rounded-full border border-white/30 px-4 py-2 text-sm hover:bg-white/10">Contacto</a>
+        <nav className="flex gap-2">
+          <button type="button" onClick={() => setSection("inicio")} className="rounded-full border border-white/30 px-4 py-2 text-sm hover:bg-white/10">Inicio</button>
+          <button type="button" onClick={goContacto} className="rounded-full border border-white/30 px-4 py-2 text-sm hover:bg-white/10">Contacto</button>
+        </nav>
       </header>
-      <section className="mx-auto grid max-w-6xl gap-10 px-6 py-10 md:grid-cols-2 md:items-center">
-        <motion.div>
+      {section === "inicio" ? (
+      <section id="inicio" className="mx-auto grid max-w-6xl gap-10 px-6 py-10 md:grid-cols-2 md:items-center">
+        <div>
           <p className="text-sm uppercase tracking-widest text-amber-400">Premium</p>
           <h1 className="mt-3 text-4xl font-black md:text-5xl">Tu landing en minutos</h1>
           <p className="mt-4 text-lg text-zinc-300">Hero, CTA y formulario funcional listos para iterar con IA.</p>
-          <a href="#contacto" className="mt-8 inline-block rounded-lg bg-amber-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-amber-400">Empezar</a>
-        </motion.div>
+          <button type="button" onClick={goContacto} className="mt-8 rounded-lg bg-amber-500 px-6 py-3 font-semibold text-zinc-950 hover:bg-amber-400">Empezar</button>
+        </div>
         <img src={HERO} alt="Hero" width={640} height={360} className="w-full rounded-2xl object-cover shadow-2xl" />
       </section>
+      ) : null}
       <section id="contacto" className="border-t border-white/10 bg-zinc-900/50 py-16">
         <form onSubmit={onSubmit} className="mx-auto flex max-w-md flex-col gap-3 px-6">
           <h2 className="text-2xl font-bold">Solicita información</h2>

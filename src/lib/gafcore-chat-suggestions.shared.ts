@@ -93,12 +93,10 @@ export function hasSubstantiveUserIntent(
 }
 
 function isErrorRecoveryContext(ctx: GafcoreChatSuggestionContext): boolean {
-  const blob = `${ctx.lastError ?? ""}\n${corpus(ctx)}`;
-  return (
-    Boolean(ctx.lastError?.trim()) ||
-    /objects are not valid|react error #31|error #31|typeerror|syntaxerror|preview-error|failed to resolve|cannot assign to property/i.test(
-      blob,
-    )
+  const err = (ctx.lastError ?? "").trim();
+  if (!err) return false;
+  return /objects are not valid|react error #31|error #31|syntaxerror|preview-error|failed to resolve|cannot assign to property|construcción fallida|unexpected token/i.test(
+    err,
   );
 }
 
@@ -138,6 +136,7 @@ type ProjectKind =
   | "ecommerce"
   | "saas"
   | "portfolio"
+  | "landing"
   | "generic";
 
 function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
@@ -145,11 +144,40 @@ function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
   if (/taxi|conductor|pasajero|viaje activo|pedir un taxi|911|pánico|panico/i.test(t)) {
     return "taxi";
   }
-  if (/restaurant|menú|menu|reserva mesa|platos/i.test(t)) return "restaurant";
-  if (/checkout|carrito|producto|tienda|ecommerce|shop/i.test(t)) return "ecommerce";
+  if (
+    /landing|tu landing|hero, cta|mi marca|formulario funcional|solicita información/i.test(t) &&
+    !/restaurant|carta de|reserva mesa|platos del día/i.test(t)
+  ) {
+    return "landing";
+  }
+  if (/restaurant|carta de|reserva mesa|platos del|menú digital|mesa disponible/i.test(t)) {
+    return "restaurant";
+  }
+  if (/checkout|carrito|producto|tienda|ecommerce|shop|catálogo/i.test(t)) return "ecommerce";
   if (/dashboard|saas|suscripción|subscription|kpi/i.test(t)) return "saas";
   if (/portfolio|portafolio|proyectos destacados/i.test(t)) return "portfolio";
   return "generic";
+}
+
+type ProjectCapabilities = {
+  hasInternalNav: boolean;
+  hasWorkingForm: boolean;
+  hasCartFlow: boolean;
+  hasResponsiveHints: boolean;
+};
+
+function inferProjectCapabilities(ctx: GafcoreChatSuggestionContext): ProjectCapabilities {
+  const code = allContent(ctx.files);
+  return {
+    hasInternalNav:
+      /#inicio|#contacto|id=["']contacto|id=["']inicio|setSection|setPage|activeSection/i.test(
+        code,
+      ) || /href=["']#[^"']+["']/.test(code),
+    hasWorkingForm:
+      /onSubmit|preventDefault\(\)|type=["']email|guardado|gracias|sent/i.test(code),
+    hasCartFlow: /carrito|cart|addToCart|añadir al carrito|total.*precio/i.test(code),
+    hasResponsiveHints: /sm:|md:|lg:|max-w-|grid-cols-/i.test(code),
+  };
 }
 
 /** Pasos según el tipo de app (taxi, tienda, etc.) — requieren intención conocida. */
@@ -279,8 +307,15 @@ function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNext
 
 function buildFunctionalRoadmapSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
   const kind = detectProjectKind(ctx);
+  const caps = inferProjectCapabilities(ctx);
   const labels =
-    kind === "restaurant"
+    kind === "landing"
+      ? {
+          a: caps.hasInternalNav ? "A) Navegación lista" : "A) Navegación interna",
+          b: caps.hasWorkingForm ? "B) Formulario listo" : "B) Formulario funcional",
+          c: caps.hasResponsiveHints ? "C) QA y publicar" : "C) Responsive + publicar",
+        }
+      : kind === "restaurant"
       ? {
           a: "A) Flujo core restaurante",
           b: "B) Reserva/pedido funcional",
@@ -305,7 +340,17 @@ function buildFunctionalRoadmapSteps(ctx: GafcoreChatSuggestionContext): Gafcore
             };
 
   const prompts =
-    kind === "restaurant"
+    kind === "landing"
+      ? {
+          a: caps.hasInternalNav
+            ? "Refina la navegación interna: botones Inicio y Contacto deben usar anclas (#inicio, #contacto) o estado React, NUNCA href a /gafcore ni rutas absolutas del IDE."
+            : "Implementa navegación interna real del sitio: secciones inicio y contacto con anclas (#inicio, #contacto) o estado React. Prohibido enlazar a gafcore.com o /gafcore/app.",
+          b: caps.hasWorkingForm
+            ? "Mejora el formulario de contacto: validación, estados loading/éxito/error y persistencia en localStorage."
+            : "Haz funcional el formulario de contacto/CTA: onSubmit con preventDefault, validación de email y feedback visible al usuario.",
+          c: "Corrige errores del preview si existen, ajusta responsive móvil/tablet/desktop y deja listo para publicar.",
+        }
+      : kind === "restaurant"
       ? {
           a: "Implementa la base funcional del restaurante: navegación real entre secciones (inicio, menú, reservas/contacto) y estado de la UI conectado.",
           b: "Construye el flujo principal del negocio: formulario de reserva o pedido con validación, loading, éxito/error y persistencia local.",

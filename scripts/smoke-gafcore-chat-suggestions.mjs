@@ -29,55 +29,17 @@ if (projectHasStarted(welcomeCtx)) {
   throw new Error("welcome workspace must not count as started project");
 }
 
-const welcomeNoIntent = getGafcoreChatNextSteps(welcomeCtx);
-if (welcomeNoIntent.length !== 0) {
+if (getGafcoreChatNextSteps(welcomeCtx).length !== 0) {
   throw new Error("welcome template must show zero suggestions");
 }
 
-const welcomeWithChat = getGafcoreChatNextSteps({
-  ...welcomeCtx,
-  messages: [{ role: "user", content: "app taxi con botón pánico y viaje en vivo" }],
-});
-if (welcomeWithChat.length !== 0) {
-  throw new Error("welcome + chat intent must still show zero suggestions until project exists");
-}
-
-const welcomeWithError = getGafcoreChatNextSteps({
-  ...welcomeCtx,
-  lastError: "Objects are not valid as a React child",
-});
-if (welcomeWithError.length !== 0) {
-  throw new Error("welcome + preview error must not show suggestion chips");
-}
-
-const security = getGafcoreChatNextSteps({
-  messages: [
-    { role: "user", content: "configura supabase" },
-    {
-      role: "ai",
-      content: "He añadido políticas RLS y revisado permisos de realtime para auth.",
-    },
-  ],
-  files: [{ name: "App.tsx", content: "export default function App(){ return <div /> }" }],
-  mode: "build",
-  factoryMode: false,
-  visualEditOn: false,
-  multiAgentMode: false,
-  factoryAutoDeploy: false,
-  lastError: null,
-  pipelineStatus: null,
-  validationLabel: null,
-});
-if (!security.some((s) => s.id === "sec-rls")) {
-  throw new Error("security context should suggest RLS step");
-}
-
-const taxi = getGafcoreChatNextSteps({
-  messages: [{ role: "user", content: "app taxi con botón pánico y viaje en vivo" }],
+const landingCtx = {
+  messages: [{ role: "user", content: "quiero una landing premium con formulario de contacto" }],
   files: [
     {
       name: "App.tsx",
-      content: 'export default function App(){return <h1>Taxi App - Tu viaje en un toque</h1>}',
+      content:
+        'export default function App(){return <main><h1>Mi marca</h1><p>Tu landing en minutos</p><a href="#contacto">Contacto</a><form onSubmit={(e)=>e.preventDefault()}><input type="email"/></form></main>}',
     },
   ],
   mode: "build",
@@ -88,12 +50,38 @@ const taxi = getGafcoreChatNextSteps({
   lastError: null,
   pipelineStatus: null,
   validationLabel: null,
-});
-if (!taxi.some((s) => s.id === "taxi-911" || s.label.includes("911"))) {
-  throw new Error("taxi project should suggest panic/911 step");
+};
+
+const landingSteps = getGafcoreChatNextSteps(landingCtx);
+if (landingSteps.length !== 3) {
+  throw new Error(`landing roadmap must have 3 steps, got ${landingSteps.length}`);
 }
-if (taxi.some((s) => s.id === "add-contact")) {
-  throw new Error("taxi project must not suggest generic contact form");
+if (!landingSteps.every((s) => /^[ABC]\)/.test(s.label))) {
+  throw new Error("roadmap labels must be A/B/C prefixed");
+}
+if (landingSteps.some((s) => /carta|reservar mesa|911/i.test(s.label))) {
+  throw new Error("landing must not get restaurant/taxi chips");
+}
+
+const errorCtx = {
+  ...landingCtx,
+  lastError: "Objects are not valid as a React child (React error #31)",
+};
+const errorSteps = getGafcoreChatNextSteps(errorCtx);
+if (!errorSteps.some((s) => s.id === "fix-runtime")) {
+  throw new Error("active preview error must show fix-runtime chip");
+}
+
+const staleErrorCtx = {
+  ...landingCtx,
+  messages: [
+    ...landingCtx.messages,
+    { role: "ai", content: "Hubo un SyntaxError antiguo en preview-error logs" },
+  ],
+  lastError: null,
+};
+if (getGafcoreChatNextSteps(staleErrorCtx).length !== 3) {
+  throw new Error("stale error text in history must not force error-recovery chips");
 }
 
 if (hasSubstantiveUserIntent([{ role: "user", content: "hola" }])) {
@@ -101,8 +89,6 @@ if (hasSubstantiveUserIntent([{ role: "user", content: "hola" }])) {
 }
 
 console.log("smoke-gafcore-chat-suggestions: ok", {
-  welcomeNoIntent: welcomeNoIntent.length,
-  security: security.length,
-  taxi: taxi.length,
+  landing: landingSteps.map((s) => s.label),
+  error: errorSteps.map((s) => s.label),
 });
-

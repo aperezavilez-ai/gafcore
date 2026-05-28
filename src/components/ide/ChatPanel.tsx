@@ -2705,6 +2705,9 @@ export function ChatPanel({
             duration: 8000,
           });
         } else if (effectiveBuild) {
+          if (!issues.some((i) => i.severity === "error")) {
+            setLastError(null);
+          }
           const publishGuide =
             "✅ Build aplicado. Revisa la vista previa y, cuando quieras, pulsa **Publicar**. " +
             "Si algo falla al publicar, te ayudo a corregir y reintentar.";

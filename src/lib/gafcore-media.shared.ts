@@ -544,7 +544,11 @@ function stripRecursiveIdeEmbeds(source: string): string {
  */
 function stripRecursiveIdeLinks(source: string): string {
   let out = source;
-  // href directo en HTML/JSX.
+  // Rutas absolutas del sitio dentro del iframe (provocan recursión o pantalla en blanco).
+  out = out.replace(/\bhref=(["'])\/(?:inicio)?\1/gi, 'href="#inicio"');
+  out = out.replace(/\bhref=(["'])\/contacto\1/gi, 'href="#contacto"');
+  out = out.replace(/\bhref=(["'])\/["']\1/gi, 'href="#inicio"');
+  // href directo al IDE GafCore.
   out = out.replace(
     /\bhref=(["'])(?:https?:\/\/[^"']*gafcore\.com\/gafcore(?:\/app)?[^"']*|\/gafcore(?:\/app)?[^"']*)\1/gi,
     'href="#"',
