@@ -538,6 +538,31 @@ function stripRecursiveIdeEmbeds(source: string): string {
 }
 
 /**
+ * Evita navegación recursiva del preview hacia el propio IDE:
+ * botones/links "Inicio" o "Contacto" a veces salen con href="/gafcore/app"
+ * o dominio gafcore.com. Eso carga GafCore dentro del iframe del proyecto.
+ */
+function stripRecursiveIdeLinks(source: string): string {
+  let out = source;
+  // href directo en HTML/JSX.
+  out = out.replace(
+    /\bhref=(["'])(?:https?:\/\/[^"']*gafcore\.com\/gafcore(?:\/app)?[^"']*|\/gafcore(?:\/app)?[^"']*)\1/gi,
+    'href="#"',
+  );
+  // Asignaciones JS tipo location.href = "/gafcore/app".
+  out = out.replace(
+    /\b(?:window\.)?location\.href\s*=\s*(["'])(?:https?:\/\/[^"']*gafcore\.com\/gafcore(?:\/app)?[^"']*|\/gafcore(?:\/app)?[^"']*)\1/gi,
+    "/* blocked recursive gafcore link */",
+  );
+  // Navegación con router push/replace a ruta del IDE dentro del proyecto generado.
+  out = out.replace(
+    /\b(?:navigate|router\.push|router\.replace)\(\s*(["'])(?:https?:\/\/[^"']*gafcore\.com\/gafcore(?:\/app)?[^"']*|\/gafcore(?:\/app)?[^"']*)\1\s*\)/gi,
+    "void 0",
+  );
+  return out;
+}
+
+/**
  * Defensa local contra "Objects are not valid as a React child" (React error #31).
  *
  * Detecta variables declaradas como objetos/arrays literales y envuelve sus
@@ -742,6 +767,7 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
   out = fixLucideTypeImports(out);
   out = fixEmptyAnchors(out);
   out = stripRecursiveIdeEmbeds(out);
+  out = stripRecursiveIdeLinks(out);
   out = fixObjectAsJsxChild(out);
   return out;
 }
