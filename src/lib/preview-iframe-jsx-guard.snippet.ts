@@ -68,6 +68,7 @@ export function buildPreviewReactShimCode(reactEsmBase: string): string {
   return `
 import ReactOriginal from "${base}";
 import { jsx as __jsxOrig, jsxs as __jsxsOrig, Fragment } from "${base}/jsx-runtime";
+export * from "${base}";
 ${PREVIEW_JSX_GUARD_HELPERS}
 var __gafcoreCe = ReactOriginal.createElement.bind(ReactOriginal);
 var React = Object.assign({}, ReactOriginal, {
@@ -77,11 +78,15 @@ var React = Object.assign({}, ReactOriginal, {
   },
 });
 export default React;
+export var createElement = React.createElement;
 export function jsx(type, props, key) {
   return __jsxOrig(type, __gafcoreSanitizeProps(props), key);
 }
 export function jsxs(type, props, key) {
   return __jsxsOrig(type, __gafcoreSanitizeProps(props), key);
+}
+export function jsxDEV(type, props, key) {
+  return __jsxOrig(type, __gafcoreSanitizeProps(props), key);
 }
 export { Fragment };
 `.trim();
