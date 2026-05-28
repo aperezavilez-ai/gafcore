@@ -34,6 +34,14 @@ import {
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
 import { isRemoteProjectStale } from "@/lib/gafcore-project-stale.shared";
 import {
+  clearPendingMarketplaceTemplate,
+  isTruthyNewProjectSearchParam,
+  queueMarketplaceTemplateProject,
+  readPendingMarketplaceTemplate,
+  shouldAutoCreatePendingMarketplaceTemplate,
+  suggestProjectNameFromTemplate,
+} from "@/lib/gafcore-marketplace-template-pending.shared";
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -296,6 +304,7 @@ export function GafCoreIDE() {
   });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveErrToastAt = useRef(0);
+  const pendingTemplateCreateRef = useRef(false);
   const [creditsModalOpen, setCreditsModalOpen] = useState(false);
 
   const openNewProjectDialog = useCallback(() => {
@@ -361,8 +370,9 @@ export function GafCoreIDE() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const tryOpenNewProject = () => {
+      if (shouldAutoCreatePendingMarketplaceTemplate()) return;
       const url = new URL(window.location.href);
-      const fromQuery = url.searchParams.get("newProject") === "1";
+      const fromQuery = isTruthyNewProjectSearchParam(url.searchParams.get("newProject"));
       const fromStorage = sessionStorage.getItem("gafcore_open_new_project") === "1";
       if (!fromQuery && !fromStorage) return;
       if (fromQuery) {
@@ -645,6 +655,56 @@ export function GafCoreIDE() {
       setLoaded(true);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!loaded || pendingTemplateCreateRef.current) return;
+    if (!shouldAutoCreatePendingMarketplaceTemplate()) return;
+    const pending = readPendingMarketplaceTemplate();
+    if (!pending) {
+      clearPendingMarketplaceTemplate();
+      return;
+    }
+
+    pendingTemplateCreateRef.current = true;
+    clearPendingMarketplaceTemplate();
+
+    void (async () => {
+      try {
+        const projectName = suggestProjectNameFromTemplate(pending.name);
+        const result = await gafcoreAuthJsonFetch<{
+          ok: boolean;
+          project?: { id: string; name: string; created_at: string };
+          files?: FileItem[];
+          error?: string;
+        }>("/api/gafcore/projects-create", {
+          name: projectName,
+          templateSlug: pending.slug,
+        });
+
+        if (!result.ok || !result.project) {
+          toast.error("No se pudo crear el proyecto con la plantilla", {
+            description: result.error ?? "Reintenta desde Nuevo proyecto.",
+          });
+          queueMarketplaceTemplateProject(pending.slug, pending.name);
+          openNewProjectDialog();
+          return;
+        }
+
+        await onProjectCreatedFromTemplate(
+          result.project,
+          (result.files ?? []) as FileItem[],
+        );
+        toast.success(`Plantilla «${pending.name}» cargada en el editor.`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Error de red";
+        toast.error("No se pudo aplicar la plantilla del marketplace", { description: msg });
+        queueMarketplaceTemplateProject(pending.slug, pending.name);
+        openNewProjectDialog();
+      } finally {
+        pendingTemplateCreateRef.current = false;
+      }
+    })();
+  }, [loaded, openNewProjectDialog]);
 
   useEffect(() => {
     if (!loaded || !getUserSupabase() || !currentProjectId) return;

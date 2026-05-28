@@ -14,6 +14,11 @@ import { ChevronDown, ChevronRight, Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { GAFCORE_DEFAULT_TEMPLATE_SLUG } from "@/lib/gafcore-templates.shared";
+import {
+  clearPendingMarketplaceTemplate,
+  readPendingMarketplaceTemplate,
+  suggestProjectNameFromTemplate,
+} from "@/lib/gafcore-marketplace-template-pending.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 
 type TemplateRow = {
@@ -72,6 +77,13 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    const pending = readPendingMarketplaceTemplate();
+    if (pending) {
+      setSlug(pending.slug);
+      setName(suggestProjectNameFromTemplate(pending.name));
+      setShowTemplates(true);
+      clearPendingMarketplaceTemplate();
+    }
     if (showTemplates) refreshTemplates();
   }, [open, showTemplates, refreshTemplates]);
 

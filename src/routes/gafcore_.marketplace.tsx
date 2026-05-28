@@ -21,6 +21,8 @@ import {
   uninstallExtension,
 } from "@/lib/gafcore-extensions-client";
 import type { CatalogListing } from "@/extensions/marketplace.server";
+import { extensionTemplateSlug } from "@/extensions/manifests.shared";
+import { queueMarketplaceTemplateProject } from "@/lib/gafcore-marketplace-template-pending.shared";
 
 const INSTALL_ERRORS: Record<string, string> = {
   extensions_disabled: "El marketplace no está activado en el servidor.",
@@ -134,6 +136,18 @@ function MarketplacePage() {
     })();
   }, [user, load]);
 
+  const openTemplateInIde = (item: CatalogListing, installSlug?: string) => {
+    const slug =
+      installSlug?.trim() ||
+      (item.kind === "template" ? extensionTemplateSlug(item.slug) : "");
+    if (!slug) return;
+    queueMarketplaceTemplateProject(slug, item.name);
+    toast.message("Abriendo el IDE con tu plantilla…", {
+      description: "Se creará un proyecto nuevo con el código de la plantilla.",
+    });
+    void navigate({ to: "/gafcore/app" });
+  };
+
   const onInstall = async (item: CatalogListing) => {
     setBusyId(item.id);
     try {
@@ -160,14 +174,11 @@ function MarketplacePage() {
         });
         return;
       }
-      toast.success("Plantilla instalada", {
-        description: "Abriendo «Nuevo proyecto» en el IDE para usarla.",
-      });
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("gafcore_open_new_project", "1");
-        window.dispatchEvent(new Event("gafcore:open-new-project"));
+      if (item.kind === "template") {
+        toast.success("Plantilla instalada");
+        openTemplateInIde(item, res.installSlug);
+        return;
       }
-      void navigate({ to: "/gafcore/app", search: { newProject: "1" } });
     } catch {
       toast.error("Error al instalar");
     } finally {
@@ -318,6 +329,17 @@ function MarketplacePage() {
                 </div>
                 {item.installed ? (
                   <div className="mt-4 flex flex-col gap-2">
+                    {item.kind === "template" ? (
+                      <Button
+                        className="w-full"
+                        size="sm"
+                        disabled={busyId === item.id}
+                        onClick={() => openTemplateInIde(item)}
+                      >
+                        <Package className="mr-2 h-4 w-4" />
+                        Crear proyecto con esta plantilla
+                      </Button>
+                    ) : null}
                     {item.kind === "agent" ? (
                       <Button
                         className="w-full"
