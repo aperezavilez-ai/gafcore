@@ -15,6 +15,7 @@ import {
 } from "@/lib/preview-iframe-jsx-guard.snippet";
 
 const ESM = "https://esm.sh";
+const REACT_PIN = "react@18.3.1,react-dom@18.3.1";
 
 // React en modo prod (single instance) para evitar incompatibilidad de $$typeof
 // entre módulos del usuario y deps transitivas. Los errores minificados los
@@ -24,7 +25,18 @@ const REACT_DEPS: Record<string, string> = {
   "react-dom": `${ESM}/react-dom@18.3.1`,
   "react-dom/client": `${ESM}/react-dom@18.3.1/client`,
   "react/jsx-runtime": `${ESM}/react@18.3.1/jsx-runtime`,
+  "react-router": `${ESM}/react-router@7.6.2?deps=${REACT_PIN}`,
+  "react-router-dom": `${ESM}/react-router-dom@7.6.2?deps=${REACT_PIN}`,
 };
+
+function esmModuleUrl(spec: string): string {
+  if (REACT_DEPS[spec]) return REACT_DEPS[spec];
+  const root = spec.split("/")[0] ?? spec;
+  if (root === "react-router" || root === "react-router-dom") {
+    return `${ESM}/${spec}?deps=${REACT_PIN}`;
+  }
+  return `${ESM}/${spec}`;
+}
 
 function isJsModule(name: string) {
   return /\.(jsx?|tsx?|mjs)$/i.test(name);
@@ -96,8 +108,7 @@ function rewriteImports(
     }
     // Bare module → esm.sh (or our map)
     if (REACT_DEPS[spec]) return `${lead}${quote}${REACT_DEPS[spec]}${quote}`;
-    // strip subpath after pkg name to keep esm.sh happy
-    return `${lead}${quote}${ESM}/${spec}${quote}`;
+    return `${lead}${quote}${esmModuleUrl(spec)}${quote}`;
   });
 }
 

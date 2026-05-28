@@ -16,7 +16,9 @@ export function isLocalRepairablePreviewError(message: string): boolean {
     /error #31/i.test(message) ||
     /Failed to resolve module specifier/i.test(message) ||
     /ReferenceError:\s*\w+\s+is not defined/i.test(message) ||
-    /\bis not defined\b/i.test(message)
+    /\bis not defined\b/i.test(message) ||
+    /Cannot read properties of null \(reading 'useRef'\)/i.test(message) ||
+    /reading 'useRef'/i.test(message)
   );
 }
 
@@ -41,6 +43,7 @@ export function buildRuntimeAutoFixInstruction(errorMessage: string): string {
     "- Navegación interna: usa #inicio/#contacto o estado React. PROHIBIDO href a gafcore.com o /gafcore/app.",
     "- Prohibido iframe o capturas del IDE GafCore dentro del proyecto.",
     "- Iconos lucide-react: import OBLIGATORIO `import { Sparkles, Star } from \"lucide-react\"` por cada icono usado en JSX.",
+    "- PROHIBIDO react-router: usa useState para cambiar vistas (cliente/admin/chat).",
     "- Formularios con onSubmit + preventDefault y feedback visible.",
     "- Devuelve archivos COMPLETOS modificados (delta), no fragmentos.",
   ].join("\n");

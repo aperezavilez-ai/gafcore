@@ -892,6 +892,62 @@ export function neutralizeCssImportsInSource(source: string): string {
   return out;
 }
 
+/**
+ * react-router en el preview del IDE suele cargar otra copia de React → useRef null.
+ * Sustituimos por stubs locales y navegación con anclas/estado.
+ */
+function neutralizeReactRouterForPreview(source: string): string {
+  if (!/react-router/i.test(source)) return source;
+
+  let out = source;
+
+  out = out.replace(
+    /import\s*\{([^}]+)\}\s*from\s*["']react-router(?:-dom)?[^"']*["']\s*;?/g,
+    (_m, members: string) => {
+      const stubs: string[] = [];
+      for (const part of members.split(",")) {
+        const p = part.trim();
+        if (!p || /^type\s+/i.test(p)) continue;
+        const m = p.match(/^(?:type\s+)?([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/);
+        if (!m) continue;
+        const sym = m[2] ?? m[1];
+        if (sym === "Link" || sym === "NavLink") {
+          stubs.push(
+            `const ${sym} = ({ to, children, className, ...rest }: any) => (` +
+              `<a href={typeof to === "string" ? to : "#"} className={typeof className === "function" ? className({ isActive: false }) : className} {...rest}>{children}</a>` +
+              `);`,
+          );
+        } else if (sym === "Outlet") {
+          stubs.push(`const Outlet = () => null;`);
+        } else if (sym === "Routes" || sym === "Route") {
+          /* JSX stubs below */
+        } else if (sym === "BrowserRouter" || sym === "RouterProvider" || sym === "MemoryRouter" || sym === "Router") {
+          stubs.push(`const ${sym} = ({ children }: any) => <>{children}</>;`);
+        } else if (sym === "useNavigate") {
+          stubs.push(`const useNavigate = () => () => {};`);
+        } else if (sym === "useLocation") {
+          stubs.push(`const useLocation = () => ({ pathname: "#" });`);
+        } else if (sym === "useParams") {
+          stubs.push(`const useParams = () => ({});`);
+        }
+      }
+      return stubs.join("\n");
+    },
+  );
+
+  out = out.replace(/^import\s+[\s\S]*?from\s+["']react-router(?:-dom)?[^"']*["']\s*;?\s*$/gm, "");
+
+  out = out.replace(
+    /<Route[^>]*\belement=\{([\s\S]*?)\}[^>]*\/?>/g,
+    (_m, el: string) => `{${el.trim()}}`,
+  );
+  out = out.replace(/<\/?(?:BrowserRouter|RouterProvider|MemoryRouter|Router|Routes)\b[^>]*>/g, "");
+  out = out.replace(/const\s+(\w+)\s*=\s*useNavigate\s*\(\s*\)\s*;/g, "const $1 = () => {};");
+  out = out.replace(/const\s+(\w+)\s*=\s*useLocation\s*\(\s*\)\s*;/g, 'const $1 = { pathname: "#" };');
+
+  return out;
+}
+
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
   let out = source.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
@@ -900,6 +956,7 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
   out = neutralizeCssImportsInSource(out);
   out = fixLucideTypeImports(out);
   out = ensureLucideImports(out);
+  out = neutralizeReactRouterForPreview(out);
   out = fixEmptyAnchors(out);
   out = stripRecursiveIdeEmbeds(out);
   out = stripRecursiveIdeLinks(out);

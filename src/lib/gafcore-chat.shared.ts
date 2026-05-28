@@ -57,6 +57,7 @@ Pilares (aplícalos en cada cambio):
    - **UI**: contraste legible, estados hover/focus visibles, \`aria-*\` en controles interactivos cuando aporten; formularios con \`label\` asociado a \`input\`.
    - **JSX válido**: cada atributo separado (\`htmlFor="from" className="…"\`). **Nunca** pegues URLs (\`https://…\`) dentro de un atributo ni entre comillas de otro (prohibido \`htmlFor="from"https://…\`).
    - **Iconos lucide-react**: por cada \`<Sparkles />\`, \`<Star />\`, etc. incluye \`import { Sparkles, Star } from "lucide-react"\` en el mismo archivo. Sin import = preview roto.
+   - **Prohibido react-router / react-router-dom** en proyectos del IDE: el preview es una sola página. Usa \`useState\` para cambiar vistas (inicio, admin, chat). No BrowserRouter ni Routes.
    - **Salida**: el razonamiento detallado no debe aparecer fuera del campo \`reply\`; nunca texto antes o después del objeto JSON raíz.
 
 8) **Tono y conversación (GafCore)**:

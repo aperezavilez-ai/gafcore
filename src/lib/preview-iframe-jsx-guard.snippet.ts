@@ -73,8 +73,9 @@ ${PREVIEW_JSX_GUARD_HELPERS}
 var __gafcoreCe = ReactOriginal.createElement.bind(ReactOriginal);
 function __gafcoreWrapType(type) {
   if (typeof type !== "function") return type;
-  // No envolver class components.
   if (type.prototype && type.prototype.render) return type;
+  var dn = type.displayName || type.name || "";
+  if (/Provider|Router|Context|Outlet|Routes|Route/i.test(dn)) return type;
   function __GafcoreSafeComponent(props) {
     var rendered = type(props);
     return __gafcoreCoerceChild(rendered);

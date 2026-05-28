@@ -27,10 +27,23 @@ export function isConversationalOnly(text: string): boolean {
 /** Pedido sustantivo de producto / UI (no solo saludo). */
 export function isSubstantiveBuildRequest(text: string): boolean {
   const t = text.trim();
-  if (t.length < 12) return false;
-  return /crea|genera|haz|añade|agrega|modifica|cambia|landing|tienda|app|p[aá]gina|dise[ñn]|imagen|vuelo|viaje|formulario|registro|base\s+de\s+datos|profesional/i.test(
+  if (t.length < 8) return false;
+  return /crea|genera|haz|hazme|monta|levanta|añade|agrega|modifica|cambia|landing|tienda|app|aplicaci[oó]n|p[aá]gina|dise[ñn]|imagen|vuelo|viaje|formulario|registro|proyecto|estudio|tatu|m[oó]dulo|sistema|dashboard|saas|web|sitio|profesional/i.test(
     t,
   );
+}
+
+/** Respuesta de la IA que solo planifica (sin código) — no debe quedarse en preview de bienvenida. */
+export function aiReplyLooksLikePlanOnly(reply: string): boolean {
+  const t = reply.trim();
+  if (t.length < 200) return false;
+  const planSignals =
+    (/\b(m[oó]dulo|fase|estructura de carpetas|arquitectura|stack|tailwind|lucide)\b/i.test(t) &&
+      /\b(components|views|hooks|admin|cliente|dashboard)\b/i.test(t)) ||
+    /\bFASE\s*\d/i.test(t) ||
+    /\b\d+\)\s/m.test(t);
+  const hasCodeFence = /```/.test(t);
+  return planSignals && !hasCodeFence;
 }
 
 export function buildConversationalInstructionPrefix(userText: string): string {

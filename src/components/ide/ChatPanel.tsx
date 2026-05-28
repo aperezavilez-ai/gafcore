@@ -127,6 +127,7 @@ import {
   buildConversationalInstructionPrefix,
   buildCreativeBuildPrefix,
   buildHeroBackgroundInstructionPrefix,
+  aiReplyLooksLikePlanOnly,
   isConversationalOnly,
   isSubstantiveBuildRequest,
   isVisualOnlyTweak,
@@ -134,6 +135,7 @@ import {
   userWantsHeroBackgroundChange,
   buildLiteralVisualChangePrefix,
 } from "@/lib/gafcore-chat-intent.shared";
+import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
 import { classifyUserIntent } from "@/orchestrator/intent.classifier";
@@ -1166,6 +1168,9 @@ export function ChatPanel({
         /error #31/i.test(msg);
       const looksLikeUndefined =
         /ReferenceError:\s*\w+\s+is not defined/i.test(msg) || /\bis not defined\b/i.test(msg);
+      const looksLikeReactHooksDup =
+        /Cannot read properties of null \(reading 'useRef'\)/i.test(msg) ||
+        /reading 'useRef'/i.test(msg);
       const looksLikeCssModule =
         /Failed to resolve module specifier/i.test(msg) && /\.css/i.test(msg);
       const looksLikeJsxShimAssign =
@@ -1205,8 +1210,8 @@ export function ChatPanel({
         return;
       }
 
-      // 1) Auto-repair LOCAL: sintaxis, React #31, iconos lucide sin import (Sparkles is not defined).
-      if (looksLikeJsxGlue || looksLikeObjectChild || looksLikeUndefined) {
+      // 1) Auto-repair LOCAL: sintaxis, React #31, iconos lucide, react-router duplicado.
+      if (looksLikeJsxGlue || looksLikeObjectChild || looksLikeUndefined || looksLikeReactHooksDup) {
         let repairedLocally = false;
         setFiles((current) => {
           const next = sanitizeProjectJsxFiles(
@@ -1221,11 +1226,13 @@ export function ChatPanel({
             repairedLocally = true;
             queueMicrotask(() => {
               toast.success(
-                looksLikeUndefined
-                  ? "Imports de iconos añadidos automáticamente"
-                  : looksLikeObjectChild
-                    ? "Código reparado (objeto en JSX → texto seguro)"
-                    : "Sintaxis JSX reparada automáticamente",
+                looksLikeReactHooksDup
+                  ? "Router/React unificado para el preview"
+                  : looksLikeUndefined
+                    ? "Imports de iconos añadidos automáticamente"
+                    : looksLikeObjectChild
+                      ? "Código reparado (objeto en JSX → texto seguro)"
+                      : "Sintaxis JSX reparada automáticamente",
               );
               setLastError(null);
               onCodeGenerated?.();
@@ -1236,7 +1243,7 @@ export function ChatPanel({
           return current;
         });
         if (repairedLocally) return;
-        if (looksLikeObjectChild || looksLikeUndefined) {
+        if (looksLikeObjectChild || looksLikeUndefined || looksLikeReactHooksDup) {
           setLastError(msg);
           scheduleRuntimeAutofixRef.current(msg);
           return;
@@ -2655,12 +2662,19 @@ export function ChatPanel({
           toast.error("No encontré App.tsx/JSX para parchear. Abre Código y confirma que existe App.tsx.", {
             duration: 10_000,
           });
-        } else if (isSubstantiveBuildRequest(raw)) {
+        } else {
+          const needsWelcomeReplace = files.some(
+            (f) => /^app\.(tsx|jsx)$/i.test(f.name) && isGafcoreDefaultTemplateApp(f.content),
+          );
           const strictInstruction =
             FUNCTIONAL_FIRST_BUILD_PREFIX +
             "[modo build estricto] Debes devolver `files` con proyecto funcional completo. " +
             "Si no hay cambios, reescribe App.tsx y main.tsx igualmente para inicializar el proyecto. " +
-            "Prohibido responder con files vacío.\n\n" +
+            (needsWelcomeReplace || aiReplyLooksLikePlanOnly(replyText)
+              ? "OBLIGATORIO: reemplaza la pantalla «Bienvenidos a GafCore» por el proyecto real pedido. " +
+                "Prohibido responder solo con un plan en texto. "
+              : "") +
+            "Prohibido react-router; usa useState para vistas. Prohibido responder con files vacío.\n\n" +
             (raw || coreText);
           const strictHistory: ChatMsg[] = [
             ...history,
@@ -2718,6 +2732,18 @@ export function ChatPanel({
           runFunctionalAudit: runFunctional,
           snapshotLabel: `auto: ${raw.slice(0, 60)}`,
         });
+
+        const appAfterBuild = merged.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
+        if (
+          appAfterBuild &&
+          isGafcoreDefaultTemplateApp(appAfterBuild.content) &&
+          isSubstantiveBuildRequest(raw)
+        ) {
+          toast.message("Reemplazando pantalla de bienvenida por tu proyecto…", { duration: 8000 });
+          scheduleRuntimeAutofixRef.current(
+            `App.tsx sigue mostrando «Bienvenidos a GafCore». Reemplázala por el proyecto pedido: ${raw.slice(0, 300)}`,
+          );
+        }
 
         if (
           runFunctional &&
