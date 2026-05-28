@@ -286,7 +286,23 @@ export async function loadExtensionTemplateFiles(
   const manifest = parseExtensionManifest(ver.manifest_json);
   if (manifest.kind !== "template") return null;
 
-  return templateFilesFromManifest(manifest as TemplateExtensionManifest);
+  const raw = templateFilesFromManifest(manifest as TemplateExtensionManifest);
+  const out: GafcoreTemplateFile[] = [];
+  const seen = new Set<string>();
+  for (const file of raw) {
+    const norm = file.name.replace(/\\/g, "/");
+    // Marketplace templates often come as src/* or public/*; normalize to IDE workspace root.
+    const normalizedName = norm
+      .replace(/^public\//i, "")
+      .replace(/^src\//i, "");
+    if (seen.has(normalizedName)) continue;
+    seen.add(normalizedName);
+    out.push({
+      ...file,
+      name: normalizedName,
+    });
+  }
+  return out;
 }
 
 export type UserExtensionInstall = {

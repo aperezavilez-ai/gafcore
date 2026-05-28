@@ -27,10 +27,27 @@ import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
 import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
-import {
-  shouldBypassGafcoreChatCache,
-  softenRoboticReply,
-} from "@/lib/gafcore-chat-intent.shared";
+import { shouldBypassGafcoreChatCache, softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
+import { classifyUserIntent } from "@/orchestrator/intent.classifier";
+import { selectTemplateSlug } from "@/orchestrator/template.selector";
+import { loadTemplateFilesBySlug } from "@/lib/gafcore-templates.server";
+
+const BUILD_INTENT_RE =
+  /\b(crea|crear|construye|construir|genera|generar|haz|hacer|monta|levanta|app|aplicaci[oó]n|sitio|web|landing|tienda|e-?commerce|dashboard|saas|proyecto)\b/i;
+
+function shouldBootstrapProjectFromTemplate(
+  instruction: string,
+  currentFiles: ProjFile[],
+  outputFiles: Array<{ name: string; language?: string; content: string }>,
+): boolean {
+  if (outputFiles.length > 0) return false;
+  const text = instruction.trim();
+  if (!text) return false;
+  if (!BUILD_INTENT_RE.test(text)) return false;
+  const appFile = currentFiles.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
+  if (!appFile) return true;
+  return /Bienvenidos a GafCore/i.test(appFile.content);
+}
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -182,6 +199,29 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       );
     } catch (e) {
       console.warn("enrichGafcoreOutputFiles:", e);
+    }
+    if (shouldBootstrapProjectFromTemplate(data.instruction, data.files as ProjFile[], safeFiles)) {
+      try {
+        const intent = classifyUserIntent(data.instruction, {
+          mode: "build",
+          visualEdit: false,
+        });
+        const templateSlug = selectTemplateSlug(intent);
+        const templateFiles = await loadTemplateFilesBySlug(templateSlug, userId);
+        if (templateFiles.length > 0) {
+          safeFiles = templateFiles;
+          console.info(
+            JSON.stringify({
+              event: "gafcore_chat_bootstrap_template",
+              userId,
+              templateSlug,
+              filesOut: safeFiles.length,
+            }),
+          );
+        }
+      } catch (e) {
+        console.warn("bootstrap_template_fallback:", e);
+      }
     }
     const reply = sanitizeUserFacingAiText(
       softenRoboticReply(
