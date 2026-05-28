@@ -508,6 +508,105 @@ function fixLucideTypeImports(source: string): string {
   return modified;
 }
 
+const JSX_NOT_LUCIDE = new Set([
+  "App",
+  "Fragment",
+  "Suspense",
+  "StrictMode",
+  "ErrorBoundary",
+  "Provider",
+  "Context",
+  "Router",
+  "Route",
+  "Link",
+  "Outlet",
+  "Navigate",
+]);
+
+function parseLucideImportLocalNames(members: string): Set<string> {
+  const names = new Set<string>();
+  for (const part of members.split(",")) {
+    const p = part.trim();
+    if (!p || /^type\s+/i.test(p)) continue;
+    const m = p.match(/^(?:type\s+)?([A-Za-z_]\w*)(?:\s+as\s+([A-Za-z_]\w*))?$/);
+    if (!m) continue;
+    names.add(m[2] ?? m[1]);
+  }
+  return names;
+}
+
+function collectJsxComponentTags(source: string): Set<string> {
+  const tags = new Set<string>();
+  const re = /<([A-Z][A-Za-z0-9]*)(?=[\s/>])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source))) {
+    const tag = m[1];
+    if (!JSX_NOT_LUCIDE.has(tag)) tags.add(tag);
+  }
+  return tags;
+}
+
+/**
+ * Si el modelo usa `<Sparkles />` sin import, lo añade desde lucide-react antes del preview.
+ */
+function ensureLucideImports(source: string): string {
+  const importRe = /import\s*\{([^}]+)\}\s*from\s*["']lucide-react["']/;
+  const existing = importRe.exec(source);
+  const imported = existing ? parseLucideImportLocalNames(existing[1]) : new Set<string>();
+
+  const toAdd: string[] = [];
+  for (const tag of collectJsxComponentTags(source)) {
+    if (imported.has(tag)) continue;
+    let resolved: string | null = null;
+    if (LUCIDE_VALID.has(tag)) resolved = tag;
+    else if (LUCIDE_SYNONYMS[tag]) resolved = LUCIDE_SYNONYMS[tag];
+    if (!resolved) continue;
+    if (resolved === tag) {
+      if (!toAdd.includes(tag)) toAdd.push(tag);
+      imported.add(tag);
+    } else {
+      const entry = `${resolved} as ${tag}`;
+      if (!toAdd.includes(entry)) toAdd.push(entry);
+      imported.add(tag);
+    }
+  }
+
+  if (toAdd.length === 0) return source;
+
+  if (existing) {
+    return source.replace(importRe, (_full, members: string) => {
+      const parts = members
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const seen = parseLucideImportLocalNames(members);
+      for (const entry of toAdd) {
+        const local = entry.includes(" as ") ? entry.split(" as ")[1]!.trim() : entry;
+        if (!seen.has(local)) {
+          parts.push(entry);
+          seen.add(local);
+        }
+      }
+      return `import { ${parts.join(", ")} } from "lucide-react"`;
+    });
+  }
+
+  const line = `import { ${toAdd.join(", ")} } from "lucide-react";\n`;
+  const reactImport = /^\s*import\s+.*from\s+["']react["']/m.exec(source);
+  if (reactImport && reactImport.index != null) {
+    const insertAt = reactImport.index + reactImport[0].length;
+    return source.slice(0, insertAt) + `\n${line.trim()}` + source.slice(insertAt);
+  }
+  return line + source;
+}
+
+/** Reparación completa de archivos devueltos por la IA (cliente + servidor). */
+export function repairGafcoreOutputFiles<T extends { name: string; content: string }>(
+  files: T[],
+): T[] {
+  return sanitizeProjectJsxFiles(repairGeneratedSourceFiles(files));
+}
+
 /** Reemplaza `href=""` o `href="#"` por `href="#section"` (evita warnings de a11y). */
 function fixEmptyAnchors(source: string): string {
   let out = source.replace(/href=""/g, 'href="#inicio"');
@@ -800,6 +899,7 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
   out = out.replace(/(\w)="([^"]*)"\s+"(\s+[a-zA-Z_][\w-]*=)/g, '$1="$2"$3');
   out = neutralizeCssImportsInSource(out);
   out = fixLucideTypeImports(out);
+  out = ensureLucideImports(out);
   out = fixEmptyAnchors(out);
   out = stripRecursiveIdeEmbeds(out);
   out = stripRecursiveIdeLinks(out);

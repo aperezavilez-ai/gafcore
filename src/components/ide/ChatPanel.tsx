@@ -1164,6 +1164,8 @@ export function ChatPanel({
         /Objects are not valid as a React child/i.test(msg) ||
         /Minified React error #31/i.test(msg) ||
         /error #31/i.test(msg);
+      const looksLikeUndefined =
+        /ReferenceError:\s*\w+\s+is not defined/i.test(msg) || /\bis not defined\b/i.test(msg);
       const looksLikeCssModule =
         /Failed to resolve module specifier/i.test(msg) && /\.css/i.test(msg);
       const looksLikeJsxShimAssign =
@@ -1203,8 +1205,8 @@ export function ChatPanel({
         return;
       }
 
-      // 1) Auto-repair LOCAL (rápido, gratis): sintaxis rota o React #31 (objeto en JSX).
-      if (looksLikeJsxGlue || looksLikeObjectChild) {
+      // 1) Auto-repair LOCAL: sintaxis, React #31, iconos lucide sin import (Sparkles is not defined).
+      if (looksLikeJsxGlue || looksLikeObjectChild || looksLikeUndefined) {
         let repairedLocally = false;
         setFiles((current) => {
           const next = sanitizeProjectJsxFiles(
@@ -1219,9 +1221,11 @@ export function ChatPanel({
             repairedLocally = true;
             queueMicrotask(() => {
               toast.success(
-                looksLikeObjectChild
-                  ? "Código reparado (objeto en JSX → texto seguro)"
-                  : "Sintaxis JSX reparada automáticamente",
+                looksLikeUndefined
+                  ? "Imports de iconos añadidos automáticamente"
+                  : looksLikeObjectChild
+                    ? "Código reparado (objeto en JSX → texto seguro)"
+                    : "Sintaxis JSX reparada automáticamente",
               );
               setLastError(null);
               onCodeGenerated?.();
@@ -1232,7 +1236,7 @@ export function ChatPanel({
           return current;
         });
         if (repairedLocally) return;
-        if (looksLikeObjectChild) {
+        if (looksLikeObjectChild || looksLikeUndefined) {
           setLastError(msg);
           scheduleRuntimeAutofixRef.current(msg);
           return;

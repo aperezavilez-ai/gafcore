@@ -14,7 +14,9 @@ export function isLocalRepairablePreviewError(message: string): boolean {
     /Objects are not valid as a React child/i.test(message) ||
     /Minified React error #31/i.test(message) ||
     /error #31/i.test(message) ||
-    /Failed to resolve module specifier/i.test(message)
+    /Failed to resolve module specifier/i.test(message) ||
+    /ReferenceError:\s*\w+\s+is not defined/i.test(message) ||
+    /\bis not defined\b/i.test(message)
   );
 }
 
@@ -38,7 +40,7 @@ export function buildRuntimeAutoFixInstruction(errorMessage: string): string {
     "- Sintaxis JSX válida: cierra paréntesis/llaves; no dejes `)}` sueltos.",
     "- Navegación interna: usa #inicio/#contacto o estado React. PROHIBIDO href a gafcore.com o /gafcore/app.",
     "- Prohibido iframe o capturas del IDE GafCore dentro del proyecto.",
-    "- Iconos lucide-react válidos (Sparkles, Star, Mail, Check, Settings).",
+    "- Iconos lucide-react: import OBLIGATORIO `import { Sparkles, Star } from \"lucide-react\"` por cada icono usado en JSX.",
     "- Formularios con onSubmit + preventDefault y feedback visible.",
     "- Devuelve archivos COMPLETOS modificados (delta), no fragmentos.",
   ].join("\n");

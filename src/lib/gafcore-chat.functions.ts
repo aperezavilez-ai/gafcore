@@ -25,7 +25,11 @@ import { enforceGafcoreChatRateLimit } from "@/lib/gafcore-api-ratelimit.server"
 import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
-import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
+import {
+  extractVisionImageParts,
+  patchProjectFilesVisually,
+  repairGafcoreOutputFiles,
+} from "@/lib/gafcore-media.shared";
 import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
 import { shouldBypassGafcoreChatCache, softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
 import { classifyUserIntent } from "@/orchestrator/intent.classifier";
@@ -186,10 +190,10 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       };
     }
 
-    let safeFiles = validateOutputFiles(parsed.files);
+    let safeFiles = repairGafcoreOutputFiles(validateOutputFiles(parsed.files));
     if (safeFiles.length === 0) {
       const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
-      if (localPatch.length > 0) safeFiles = localPatch;
+      if (localPatch.length > 0) safeFiles = repairGafcoreOutputFiles(localPatch);
     }
     try {
       safeFiles = await enrichGafcoreOutputFiles(
@@ -209,7 +213,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
         const templateSlug = selectTemplateSlug(intent);
         const templateFiles = await loadTemplateFilesBySlug(templateSlug, userId);
         if (templateFiles.length > 0) {
-          safeFiles = templateFiles;
+          safeFiles = repairGafcoreOutputFiles(templateFiles);
           console.info(
             JSON.stringify({
               event: "gafcore_chat_bootstrap_template",

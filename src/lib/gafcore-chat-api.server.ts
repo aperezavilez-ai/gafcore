@@ -31,7 +31,11 @@ import {
 import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
-import { extractVisionImageParts, patchProjectFilesVisually } from "@/lib/gafcore-media.shared";
+import {
+  extractVisionImageParts,
+  patchProjectFilesVisually,
+  repairGafcoreOutputFiles,
+} from "@/lib/gafcore-media.shared";
 import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
 import { buildAiPluginPromptAppend } from "@/extensions/ai-plugins.server";
 import { readProjectBrand } from "@/lib/gafcore-brand.functions";
@@ -143,10 +147,10 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
         if (!parsedOut.reply && !parsedOut.files) {
           console.warn("[gafcore-chat] stream-fallback non-JSON content len=" + content.length);
         }
-        let safeFiles = validateOutputFiles(parsedOut.files);
+        let safeFiles = repairGafcoreOutputFiles(validateOutputFiles(parsedOut.files));
         if (safeFiles.length === 0) {
           const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
-          if (localPatch.length > 0) safeFiles = localPatch;
+          if (localPatch.length > 0) safeFiles = repairGafcoreOutputFiles(localPatch);
         }
         try {
           safeFiles = await enrichGafcoreOutputFiles(
@@ -308,10 +312,10 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     );
   }
 
-  let safeFiles = validateOutputFiles(parsedOut.files);
+  let safeFiles = repairGafcoreOutputFiles(validateOutputFiles(parsedOut.files));
   if (safeFiles.length === 0) {
     const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
-    if (localPatch.length > 0) safeFiles = localPatch;
+    if (localPatch.length > 0) safeFiles = repairGafcoreOutputFiles(localPatch);
   }
   try {
     safeFiles = await enrichGafcoreOutputFiles(
