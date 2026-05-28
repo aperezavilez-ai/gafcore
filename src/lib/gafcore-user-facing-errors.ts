@@ -33,6 +33,21 @@ function maskProviderNames(text: string): string {
     .replace(PROVIDER_NAME_RE, "el asistente IA");
 }
 
+/**
+ * Evita promesas engañosas tipo checklist fijo "1) 2) 3)".
+ * Mantiene el mensaje útil, pero sin secuencia obligatoria ni "paso recomendado".
+ */
+function stripMisleadingStepChecklist(text: string): string {
+  let out = text;
+  out = out.replace(/siguiente\s+paso\s+recomendado\s*:?\s*/gi, "");
+  out = out.replace(/^\s*\d+[.)]\s+.*$/gm, "");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  if (/build aplicado/i.test(out) && /publicar/i.test(out)) {
+    return "Build aplicado. Revisa la vista previa y publica cuando realmente esté listo. Si falla, lo corregimos y reintentamos.";
+  }
+  return out.trim();
+}
+
 export function sanitizeUserFacingAiText(text: string): string {
   const raw = String(text ?? "");
   if (!raw.trim()) return raw;
@@ -51,5 +66,5 @@ export function sanitizeUserFacingAiText(text: string): string {
     return "El asistente IA respondió con un error. Inténtalo de nuevo en unos minutos.";
   }
   // Caso general: censurar cualquier mención a proveedor que se haya colado.
-  return maskProviderNames(raw);
+  return stripMisleadingStepChecklist(maskProviderNames(raw));
 }
