@@ -71,10 +71,24 @@ import { jsx as __jsxOrig, jsxs as __jsxsOrig, Fragment } from "${base}/jsx-runt
 export * from "${base}";
 ${PREVIEW_JSX_GUARD_HELPERS}
 var __gafcoreCe = ReactOriginal.createElement.bind(ReactOriginal);
+function __gafcoreWrapType(type) {
+  if (typeof type !== "function") return type;
+  // No envolver class components.
+  if (type.prototype && type.prototype.render) return type;
+  function __GafcoreSafeComponent(props) {
+    var rendered = type(props);
+    return __gafcoreCoerceChild(rendered);
+  }
+  try {
+    __GafcoreSafeComponent.displayName = type.displayName || type.name || "SafeComponent";
+  } catch (_) {}
+  return __GafcoreSafeComponent;
+}
 var React = Object.assign({}, ReactOriginal, {
   createElement: function(type, props) {
+    var safeType = __gafcoreWrapType(type);
     var rest = Array.prototype.slice.call(arguments, 2).map(__gafcoreCoerceChild);
-    return __gafcoreCe.apply(ReactOriginal, [type, props].concat(rest));
+    return __gafcoreCe.apply(ReactOriginal, [safeType, props].concat(rest));
   },
 });
 export default React;
