@@ -62,6 +62,7 @@ const TEXT_EXT = new Set([
 
 const MAX_FILES = 500;
 const MAX_BYTES = 900_000;
+const MAX_GITHUB_FILES = 180;
 
 export function inferLanguageFromPath(path: string): string {
   const base = path.split(/[/\\]/).pop() ?? path;
@@ -155,5 +156,114 @@ export async function fileItemsFromBrowserFileList(fileList: FileList): Promise<
       /* binario o no legible */
     }
   }
+  return out;
+}
+
+async function walkDirectoryHandle(
+  dir: FileSystemDirectoryHandle,
+  prefix: string,
+  out: FileItem[],
+): Promise<void> {
+  for await (const entry of dir.values()) {
+    if (out.length >= MAX_FILES) return;
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (shouldSkipPath(rel)) continue;
+    if (entry.kind === "directory") {
+      await walkDirectoryHandle(entry, rel, out);
+      continue;
+    }
+    const file = await entry.getFile();
+    const ext = rel.includes(".") ? (rel.split(".").pop() ?? "").toLowerCase() : "";
+    if (!TEXT_EXT.has(ext)) continue;
+    if (file.size > MAX_BYTES) continue;
+    try {
+      const content = await file.text();
+      out.push({ name: rel, language: inferLanguageFromPath(rel), content });
+    } catch {
+      // ignore unreadable file
+    }
+  }
+}
+
+export async function fileItemsFromDirectoryHandle(
+  handle: FileSystemDirectoryHandle,
+): Promise<FileItem[]> {
+  const out: FileItem[] = [];
+  await walkDirectoryHandle(handle, handle.name || "", out);
+  return out.slice(0, MAX_FILES);
+}
+
+function parseGithubRepoUrl(input: string): { owner: string; repo: string } | null {
+  try {
+    const u = new URL(input.trim());
+    if (!/github\.com$/i.test(u.hostname)) return null;
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    return { owner: parts[0]!, repo: parts[1]!.replace(/\.git$/i, "") };
+  } catch {
+    return null;
+  }
+}
+
+export async function fileItemsFromGithubRepoUrl(repoUrl: string): Promise<FileItem[]> {
+  const parsed = parseGithubRepoUrl(repoUrl);
+  if (!parsed) {
+    throw new Error("URL de GitHub inválida");
+  }
+
+  const repoRes = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`);
+  if (!repoRes.ok) {
+    throw new Error("No se pudo leer el repositorio (privado o inexistente)");
+  }
+  const repo = (await repoRes.json()) as { default_branch?: string; name?: string };
+  const branch = repo.default_branch || "main";
+
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/git/trees/${branch}?recursive=1`,
+  );
+  if (!treeRes.ok) {
+    throw new Error("No se pudo listar archivos del repositorio");
+  }
+  const tree = (await treeRes.json()) as {
+    tree?: Array<{ path: string; type: "blob" | "tree"; sha?: string; size?: number }>;
+    truncated?: boolean;
+  };
+
+  const candidates = (tree.tree ?? [])
+    .filter((n) => n.type === "blob" && !!n.sha && !!n.path)
+    .filter((n) => !shouldSkipPath(n.path))
+    .filter((n) => {
+      const ext = n.path.includes(".") ? (n.path.split(".").pop() ?? "").toLowerCase() : "";
+      return TEXT_EXT.has(ext);
+    })
+    .filter((n) => (n.size ?? 0) <= MAX_BYTES)
+    .slice(0, MAX_GITHUB_FILES);
+
+  const out: FileItem[] = [];
+  for (const node of candidates) {
+    if (!node.sha) continue;
+    const blobRes = await fetch(
+      `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/git/blobs/${node.sha}`,
+    );
+    if (!blobRes.ok) continue;
+    const blob = (await blobRes.json()) as { content?: string; encoding?: string };
+    if (!blob.content || blob.encoding !== "base64") continue;
+    const content = atob(blob.content.replace(/\n/g, ""));
+    out.push({
+      name: node.path,
+      language: inferLanguageFromPath(node.path),
+      content,
+    });
+    if (out.length >= MAX_FILES) break;
+  }
+
+  if (out.length === 0) {
+    throw new Error(
+      tree.truncated
+        ? "Repositorio muy grande o truncado por GitHub API"
+        : "No se encontraron archivos de código importables",
+    );
+  }
+
   return out;
 }

@@ -13,7 +13,12 @@ import { Label } from "@/components/ui/label";
 import { FolderOpen, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
-import { fileItemsFromBrowserFileList, suggestNameFromPaths } from "@/lib/gafcore-import-files";
+import {
+  fileItemsFromBrowserFileList,
+  fileItemsFromDirectoryHandle,
+  fileItemsFromGithubRepoUrl,
+  suggestNameFromPaths,
+} from "@/lib/gafcore-import-files";
 import type { FileItem } from "@/components/ide/CodeEditor";
 
 type Props = {
@@ -27,6 +32,7 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
   const [pendingFiles, setPendingFiles] = useState<FileItem[] | null>(null);
   const [reading, setReading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [githubUrl, setGithubUrl] = useState("");
   const folderRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
 
@@ -35,6 +41,7 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
     setName("Mi proyecto importado");
     setReading(false);
     setSubmitting(false);
+    setGithubUrl("");
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -78,6 +85,32 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
   };
 
   const pickFolder = () => {
+    if (typeof window !== "undefined" && "showDirectoryPicker" in window) {
+      void (async () => {
+        try {
+          setReading(true);
+          const handle = await (window as Window & {
+            showDirectoryPicker: () => Promise<FileSystemDirectoryHandle>;
+          }).showDirectoryPicker();
+          const items = await fileItemsFromDirectoryHandle(handle);
+          if (!items.length) {
+            toast.error("No se encontraron archivos de código en la carpeta seleccionada");
+            return;
+          }
+          setPendingFiles(items);
+          const suggested = suggestNameFromPaths(items.map((f) => f.name));
+          if (suggested) setName(suggested);
+          toast.success(`${items.length} archivo(s) listos para importar`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "";
+          if (msg && /abort|cancel/i.test(msg)) return;
+          folderRef.current?.click();
+        } finally {
+          setReading(false);
+        }
+      })();
+      return;
+    }
     window.setTimeout(() => folderRef.current?.click(), 50);
   };
 
@@ -120,6 +153,26 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
     }
   };
 
+  const importFromGithub = async () => {
+    const url = githubUrl.trim();
+    if (!url) {
+      toast.error("Pega la URL de GitHub primero");
+      return;
+    }
+    setReading(true);
+    try {
+      const items = await fileItemsFromGithubRepoUrl(url);
+      setPendingFiles(items);
+      const suggested = suggestNameFromPaths(items.map((f) => f.name));
+      if (suggested) setName(suggested);
+      toast.success(`${items.length} archivo(s) cargados desde GitHub`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo importar desde GitHub");
+    } finally {
+      setReading(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md border-border bg-background text-foreground">
@@ -149,6 +202,26 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
               placeholder="Mi app"
               disabled={submitting}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="import-github">Clonar desde GitHub (opcional)</Label>
+            <div className="flex gap-2">
+              <Input
+                id="import-github"
+                value={githubUrl}
+                onChange={(e) => setGithubUrl(e.target.value)}
+                placeholder="https://github.com/owner/repo"
+                disabled={reading || submitting}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void importFromGithub()}
+                disabled={reading || submitting}
+              >
+                {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cargar"}
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
