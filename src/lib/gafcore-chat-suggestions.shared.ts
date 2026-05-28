@@ -277,17 +277,71 @@ function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNext
   return steps;
 }
 
+function buildFunctionalRoadmapSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  const kind = detectProjectKind(ctx);
+  const labels =
+    kind === "restaurant"
+      ? {
+          a: "A) Flujo core restaurante",
+          b: "B) Reserva/pedido funcional",
+          c: "C) QA y publicar",
+        }
+      : kind === "ecommerce"
+        ? {
+            a: "A) Catálogo y carrito",
+            b: "B) Checkout funcional",
+            c: "C) QA y publicar",
+          }
+        : kind === "saas"
+          ? {
+              a: "A) Dashboard funcional",
+              b: "B) Flujo de datos real",
+              c: "C) QA y publicar",
+            }
+          : {
+              a: "A) Base funcional",
+              b: "B) Flujo principal completo",
+              c: "C) QA y publicar",
+            };
+
+  const prompts =
+    kind === "restaurant"
+      ? {
+          a: "Implementa la base funcional del restaurante: navegación real entre secciones (inicio, menú, reservas/contacto) y estado de la UI conectado.",
+          b: "Construye el flujo principal del negocio: formulario de reserva o pedido con validación, loading, éxito/error y persistencia local.",
+          c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
+        }
+      : kind === "ecommerce"
+        ? {
+            a: "Implementa catálogo + carrito funcional: añadir/quitar productos, cantidades y total en tiempo real con persistencia local.",
+            b: "Completa checkout funcional: formulario de datos, validación, estado de envío, feedback de éxito/error y resumen final.",
+            c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
+          }
+        : kind === "saas"
+          ? {
+              a: "Implementa dashboard funcional con KPIs y módulos conectados a estado real (sin tarjetas estáticas vacías).",
+              b: "Completa flujo principal del producto: alta/edición/listado o acción core con validación, loading, error y confirmación.",
+              c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
+            }
+          : {
+              a: "Construye la base funcional del proyecto: navegación real, secciones conectadas y acciones sin placeholders.",
+              b: "Completa el flujo principal end-to-end con estado, validación, manejo de error y persistencia local.",
+              c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
+            };
+
+  return [
+    { id: "roadmap-a", label: labels.a, prompt: prompts.a },
+    { id: "roadmap-b", label: labels.b, prompt: prompts.b },
+    { id: "roadmap-c", label: labels.c, prompt: prompts.c },
+  ];
+}
+
 export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
   /** Sin chips hasta que el preview deje de ser la plantilla de bienvenida. */
   if (!projectHasStarted(ctx)) return [];
 
   const steps: GafcoreChatNextStep[] = [];
-  const empty = ctx.messages.length === 0;
   const lastAi = lastMessage(ctx.messages, "ai");
-  const lastUser = lastMessage(ctx.messages, "user");
-  const recentUser = lastUser.toLowerCase();
-  const pipeline = (ctx.pipelineStatus ?? "").toLowerCase();
-  const validation = (ctx.validationLabel ?? "").toLowerCase();
 
   if (isErrorRecoveryContext(ctx)) {
     const err = (ctx.lastError ?? lastAi).slice(0, 500);
@@ -313,118 +367,5 @@ export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): Gafc
     return steps.slice(0, MAX_STEPS);
   }
 
-  if (empty && ctx.files.length > 0) {
-    return projectContextSteps(ctx).slice(0, MAX_STEPS);
-  }
-
-  for (const s of stepsFromAiBullets(lastAi)) {
-    pushStep(steps, s.id, s.label, s.prompt);
-  }
-
-  if (/deploy pendiente|sin publicar|publicar/i.test(pipeline)) {
-    pushStep(steps, "publish", "Publicar sitio", "Prepara el proyecto para publicar en web y dime qué falta.");
-  }
-
-  if (/fábrica|fabrica|factory/.test(pipeline) && /\d+\/100/.test(pipeline)) {
-    const scoreMatch = pipeline.match(/(\d+)\/100/);
-    const score = scoreMatch ? Number(scoreMatch[1]) : 100;
-    if (score < 94) {
-      pushStep(
-        steps,
-        "factory-design-polish",
-        "Pulir diseño premium",
-        "[modo profundo] Aplica mejoras de diseño premium: hero más impactante, tipografía, espaciado y micro-interacciones.",
-      );
-    }
-  }
-
-  if (
-    /rls|row level|supabase|política|policy|policies|permiso|realtime|auth\.|anon/i.test(
-      `${recentUser}\n${lastAi}`.toLowerCase(),
-    )
-  ) {
-    pushStep(
-      steps,
-      "sec-rls",
-      "Verificar seguridad RLS",
-      "Revisa las políticas RLS de Supabase: qué tablas exponen datos y propón políticas seguras.",
-    );
-    pushStep(
-      steps,
-      "sec-public-views",
-      "Vistas públicas seguras",
-      "Configura vistas públicas o RPC seguras para datos que el front necesita sin abrir tablas sensibles.",
-    );
-  }
-
-  const userAskedDesign =
-    /diseño|design|hero|ui|ux|visual|tipograf|animac/i.test(recentUser) &&
-    !/error|react|preview|arregl|fix/i.test(recentUser);
-
-  if (userAskedDesign) {
-    pushStep(
-      steps,
-      "design-audit",
-      "Auditar diseño",
-      "Audita el diseño actual: jerarquía visual, contraste, espaciado y consistencia de componentes.",
-    );
-    pushStep(
-      steps,
-      "design-animations",
-      "Añadir animaciones",
-      "Añade animaciones sutiles (hover, entrada de secciones) sin afectar rendimiento.",
-    );
-  }
-
-  if (ctx.visualEditOn) {
-    pushStep(
-      steps,
-      "visual-only",
-      "Solo ediciones visuales",
-      "Aplica solo cambios visuales (colores, tipografía, espaciado, hover). No cambies lógica, rutas ni datos.",
-    );
-  }
-
-  for (const s of projectContextSteps(ctx)) {
-    pushStep(steps, s.id, s.label, s.prompt);
-  }
-
-  if (ctx.mode === "chat") {
-    pushStep(
-      steps,
-      "chat-to-build",
-      "Generar código",
-      "Implementa en código lo que acabamos de acordar en el chat.",
-    );
-  }
-
-  if (validation && /bajo|warn|mejorar|\d{1,2}\//i.test(validation)) {
-    pushStep(
-      steps,
-      "fix-validation",
-      "Subir puntuación",
-      "Corrige los problemas de validación detectados y sube la puntuación de calidad.",
-    );
-  }
-
-  if (steps.length === 0) {
-    const fallback = projectContextSteps(ctx);
-    if (fallback.length > 0) return fallback.slice(0, MAX_STEPS);
-    return [
-      {
-        id: "continue-build",
-        label: "Continuar lo anterior",
-        prompt: lastUser.trim()
-          ? `Continúa con esto: ${lastUser.trim().slice(0, 200)}`
-          : "Continúa mejorando el proyecto según el último cambio que pedí.",
-      },
-      {
-        id: "fb-polish",
-        label: "Pulir detalles",
-        prompt: "Pulir detalles finales: hover states, transiciones y consistencia de botones.",
-      },
-    ].slice(0, MAX_STEPS);
-  }
-
-  return steps.slice(0, MAX_STEPS);
+  return buildFunctionalRoadmapSteps(ctx).slice(0, 3);
 }
