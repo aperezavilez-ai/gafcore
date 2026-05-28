@@ -130,6 +130,9 @@ import {
 } from "@/lib/gafcore-chat-intent.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
+import { classifyUserIntent } from "@/orchestrator/intent.classifier";
+import { selectTemplateSlug } from "@/orchestrator/template.selector";
+import { BUILTIN_PROJECT_TEMPLATES } from "@/lib/gafcore-templates.shared";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -137,6 +140,20 @@ type Msg = { role: "user" | "ai"; content: string; ts?: number };
 const CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
+
+function filesFromBuiltinTemplateByInstruction(
+  instruction: string,
+): Array<{ name: string; language?: string; content: string }> {
+  const intent = classifyUserIntent(instruction, { mode: "build", visualEdit: false });
+  const slug = selectTemplateSlug(intent);
+  const tpl = BUILTIN_PROJECT_TEMPLATES.find((t) => t.slug === slug);
+  if (!tpl?.files?.length) return [];
+  return tpl.files.map((f) => ({
+    name: f.name.replace(/^src\//i, "").replace(/^public\//i, ""),
+    language: f.language,
+    content: f.content,
+  }));
+}
 
 async function readSseJsonPayload(
   res: Response,
@@ -2556,16 +2573,54 @@ export function ChatPanel({
             duration: 10_000,
           });
         } else if (isSubstantiveBuildRequest(raw)) {
-          // El usuario pidió construir algo sustantivo pero el cerebro devolvió 0 archivos.
-          // Aviso claro: probablemente el prompt era demasiado largo/ambiguo o el modelo
-          // lo interpretó como confirmación.
-          toast.error(
-            "El cerebro respondió sin archivos. Intenta de nuevo con un prompt más corto y claro (ej: 'Crea la landing de X'). Si persiste, pulsa enviar otra vez.",
-            { duration: 12_000 },
+          const strictInstruction =
+            FUNCTIONAL_FIRST_BUILD_PREFIX +
+            "[modo build estricto] Debes devolver `files` con proyecto funcional completo. " +
+            "Si no hay cambios, reescribe App.tsx y main.tsx igualmente para inicializar el proyecto. " +
+            "Prohibido responder con files vacío.\n\n" +
+            (raw || coreText);
+          const strictHistory: ChatMsg[] = [
+            ...history,
+            { role: "assistant", content: replyText },
+            { role: "user", content: strictInstruction },
+          ];
+          const strictRetry = await requestGafcoreGeneration(
+            tok,
+            strictHistory,
+            strictInstruction,
+            files,
+            ac.signal,
+            myEpoch,
+            raw || coreText,
           );
-          replyText = sanitizeUserFacingAiText(
-            `${replyText}\n\nNo recibí archivos generados. Reescribe tu pedido en 1-3 frases claras y vuelve a enviar.`,
-          );
+          const strictFiles = repairGeneratedSourceFiles(strictRetry.files ?? []);
+          if (strictFiles.length > 0) {
+            filesToApply = strictFiles;
+            replyText = sanitizeUserFacingAiText(
+              strictRetry.reply ||
+                `${replyText}\n\nApliqué un reintento automático estricto y ya generé archivos.`,
+            );
+            toast.success("Proyecto generado tras reintento automático", { duration: 6000 });
+          } else {
+            const bootstrapFiles = filesFromBuiltinTemplateByInstruction(raw || coreText);
+            if (bootstrapFiles.length > 0) {
+              filesToApply = bootstrapFiles;
+              replyText = sanitizeUserFacingAiText(
+                `${replyText}\n\nInicialicé automáticamente una base funcional del proyecto para evitar bloqueo. Ahora sigue pidiendo ajustes y funciones.`,
+              );
+              toast.message("Inicialicé base del proyecto para desbloquear el build", {
+                duration: 8000,
+              });
+            } else {
+              toast.error(
+                "El cerebro respondió sin archivos. Intenta de nuevo con un prompt más corto y claro (ej: 'Crea la landing de X').",
+                { duration: 12_000 },
+              );
+              replyText = sanitizeUserFacingAiText(
+                `${replyText}\n\nNo recibí archivos generados en dos intentos automáticos.`,
+              );
+            }
+          }
         }
       }
 
@@ -2649,6 +2704,15 @@ export function ChatPanel({
             description: issues.find((i) => i.severity === "error")?.message,
             duration: 8000,
           });
+        } else if (effectiveBuild) {
+          const publishGuide =
+            "✅ Build aplicado. Siguiente paso recomendado:\n" +
+            "1) Prueba la vista previa y corrige detalles visuales/funcionales.\n" +
+            "2) Cuando quede listo, pulsa **Publicar** para llevarlo a producción.\n" +
+            "3) Si algo falla al publicar, te ayudo a corregir y reintentar.";
+          appendMessageDeduped("ai", publishGuide);
+          scrollChatToBottomSoon("auto");
+          void persistMessage("assistant", publishGuide);
         }
       }
     } catch (error: any) {
