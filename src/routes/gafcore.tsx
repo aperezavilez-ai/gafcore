@@ -19,6 +19,7 @@ import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { toast } from "sonner";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { GafcoreInstallApp } from "@/components/GafcoreInstallApp";
+import { GafcoreLogo } from "@/components/GafcoreLogo";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getPublicSiteOrigin } from "@/lib/public-site-url";
@@ -270,13 +271,7 @@ function GafCoreLanding() {
       {/* Header */}
       <header className="border-b gc-border" style={{ background: "color-mix(in oklab, var(--gc-bg) 80%, transparent)", backdropFilter: "blur(10px)" }}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
-          <Link to="/gafcore" className="flex items-center gap-2 shrink-0">
-            <div
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-white text-lg"
-              style={{ background: "var(--gc-cta)", fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700 }}
-            >G</div>
-            <span className="text-lg font-bold" style={{ color: "var(--gc-fg)" }}>GafCore</span>
-          </Link>
+          <GafcoreLogo variant="header" linkTo="/gafcore" />
           {/* Nav inline solo en md+ */}
           <nav className="hidden flex-1 items-center justify-center gap-4 text-sm gc-muted md:flex md:gap-6">
             <a href="#producto" className="hover:opacity-80">{t("gc.nav.product")}</a>
@@ -356,6 +351,9 @@ function GafCoreLanding() {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 gc-hero-glow pointer-events-none" />
         <div className="relative mx-auto max-w-5xl px-4 pt-16 pb-10 text-center sm:px-6 sm:pt-20">
+          <div className="mb-8 flex justify-center">
+            <GafcoreLogo variant="hero" linkTo="/gafcore" />
+          </div>
           <span className="gc-chip mb-6">
             <Sparkles className="h-3.5 w-3.5" /> {t("gc.hero.badge")}
           </span>

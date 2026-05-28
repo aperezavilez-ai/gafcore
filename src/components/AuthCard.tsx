@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
-import logo from "@/assets/gafsuite-logo.png";
-import { Link } from "@tanstack/react-router";
+import { GafcoreLogo } from "@/components/GafcoreLogo";
 import { Music2, ShieldCheck, Sparkles } from "lucide-react";
 
 interface AuthCardProps {
@@ -31,9 +30,7 @@ export function AuthCard({ title, subtitle, children, footer, showLogo = true, c
         <div className={compact ? "relative p-5 sm:p-6" : "relative p-6 sm:p-8"}>
           {showLogo && (
             <div className="mb-5 flex justify-center">
-              <Link to="/">
-                <img src={logo} alt="GafCore" className={compact ? "h-16 w-auto" : "h-24 w-auto"} />
-              </Link>
+              <GafcoreLogo variant={compact ? "header" : "full"} linkTo="/gafcore" />
             </div>
           )}
 

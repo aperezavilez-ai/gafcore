@@ -50,7 +50,7 @@ function shouldBootstrapProjectFromTemplate(
   if (!BUILD_INTENT_RE.test(text)) return false;
   const appFile = currentFiles.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
   if (!appFile) return true;
-  return /Bienvenidos a GafCore/i.test(appFile.content);
+  return /Bienvenidos a GafCore|gafcore-logo\.png/i.test(appFile.content);
 }
 
 export const gafcoreChat = createServerFn({ method: "POST" })

@@ -102,30 +102,30 @@ export const GAFCORE_DEFAULT_TEMPLATE_FILES: GafcoreTemplateFile[] = [
     language: "typescript",
     content: `import React from "react";
 
+const LOGO_URL = "https://gafcore.com/gafcore-logo.png";
+
 export default function App() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-violet-950 to-slate-900 px-6 py-20 text-white">
+    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-violet-950 to-slate-900 px-6 py-16 text-white">
       <section className="mx-auto flex max-w-3xl flex-col items-center text-center">
-        <span className="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-violet-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-          GafCore
-        </span>
-        <h1 className="bg-gradient-to-r from-white via-violet-200 to-violet-400 bg-clip-text text-5xl font-black leading-tight text-transparent sm:text-6xl">
-          Bienvenidos a GafCore
-        </h1>
-        <p className="mt-6 max-w-2xl text-lg text-slate-300 sm:text-xl">
+        <img
+          src={LOGO_URL}
+          alt="GafCore — Tu idea + IA = Realidad"
+          className="mb-8 h-44 w-auto max-w-full object-contain sm:h-52"
+        />
+        <p className="max-w-2xl text-lg text-slate-300 sm:text-xl">
           Diseña, construye y publica tu sitio web o app describiéndolo en lenguaje natural.
           La IA escribe el código, tú diriges la visión.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm">
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
-            🎨 Diseño profesional
+            Diseño profesional
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
-            ⚡ Build automático
+            Build automático
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-300">
-            🚀 Deploy en 1 clic
+            Deploy en 1 clic
           </span>
         </div>
         <p className="mt-12 text-sm text-slate-400">

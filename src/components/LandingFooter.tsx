@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useI18n } from "@/i18n/I18nProvider";
-import logo from "@/assets/gafsuite-logo.png";
+import { GafcoreLogo } from "@/components/GafcoreLogo";
 
 export function LandingFooter() {
   const { t } = useI18n();
@@ -20,7 +20,7 @@ export function LandingFooter() {
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           <div>
             <div className="mb-4">
-              <img src={logo} alt="GafCore" className="h-12 w-auto" />
+              <GafcoreLogo variant="full" linkTo="/gafcore" imgClassName="h-12" />
             </div>
             <p className="text-xs text-muted-foreground">{t("footer.tagline")}</p>
           </div>

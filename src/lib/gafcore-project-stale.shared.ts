@@ -1,18 +1,20 @@
 /** Detecta si los archivos del proyecto son solo la plantilla vacía de GafCore (no un proyecto real). */
 
-const DEFAULT_APP_MARKERS = [
-  "Bienvenidos a GafCore",
-  "Empieza escribiendo en el chat lo que quieres construir",
-  "Diseña, construye y publica tu sitio web o app",
-] as const;
-
 export function isGafcoreDefaultTemplateApp(content: string): boolean {
   const c = content.trim();
   if (!c) return true;
   if (/Bienvenidos a GafCore/i.test(c) && /Empieza escribiendo en el chat/i.test(c)) {
     return true;
   }
-  return DEFAULT_APP_MARKERS.every((m) => c.includes(m));
+  if (/gafcore-logo\.png/i.test(c) && /Empieza escribiendo en el chat/i.test(c)) {
+    return true;
+  }
+  const legacyMarkers = [
+    "Bienvenidos a GafCore",
+    "Empieza escribiendo en el chat lo que quieres construir",
+    "Diseña, construye y publica tu sitio web o app",
+  ] as const;
+  return legacyMarkers.every((m) => c.includes(m));
 }
 
 export function isRemoteProjectStale(

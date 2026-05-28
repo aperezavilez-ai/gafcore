@@ -8,7 +8,7 @@ import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { supabase } from "@/integrations/supabase/client";
 import { claimMasterAccess } from "@/lib/server-fns/admin.functions";
 import { AuthCard } from "@/components/AuthCard";
-import logo from "@/assets/gafsuite-logo.png";
+import { GafcoreLogo } from "@/components/GafcoreLogo";
 import { setPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { useServerFn } from "@tanstack/react-start";
 import { assertGafcoreSignupAllowed } from "@/lib/gafcore-register.functions";
@@ -153,9 +153,7 @@ function RegisterPage() {
             </Link>
           </div>
           <div className="flex justify-center mb-6">
-            <Link to="/">
-              <img src={logo} alt="GafCore" className="h-24 w-auto" />
-            </Link>
+            <GafcoreLogo variant="full" linkTo="/gafcore" />
           </div>
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/10 mx-auto mb-6">
             <svg className="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>

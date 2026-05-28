@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/hooks/useAuth";
-import logo from "@/assets/gafsuite-logo.png";
+import { GafcoreLogo } from "@/components/GafcoreLogo";
 
 export function LandingHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -30,9 +30,7 @@ export function LandingHeader() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link to="/gafcore" className="flex items-center">
-          <img src={logo} alt="GafCore" className="h-24 w-auto sm:h-28 -my-6" />
-        </Link>
+        <GafcoreLogo variant="header" linkTo="/gafcore" className="-my-4" />
 
         <nav className="hidden items-center gap-8 md:flex">
           <Link to="/gafcore" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
