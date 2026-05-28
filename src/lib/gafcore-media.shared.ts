@@ -520,6 +520,24 @@ function fixEmptyAnchors(source: string): string {
 }
 
 /**
+ * Evita "proyecto dentro de proyecto":
+ * algunos outputs del modelo incrustan un iframe al propio IDE/GafCore.
+ * Eso rompe la UX del preview y genera recursión visual.
+ */
+function stripRecursiveIdeEmbeds(source: string): string {
+  let out = source;
+  out = out.replace(
+    /<iframe\b[^>]*\bsrc=["'][^"']*(?:gafcore\.com\/gafcore\/app|\/gafcore\/app|127\.0\.0\.1:\d+\/gafcore\/app|localhost:\d+\/gafcore\/app)[^"']*["'][^>]*>[\s\S]*?<\/iframe>/gi,
+    '<div className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">Vista embebida removida automáticamente.</div>',
+  );
+  out = out.replace(
+    /<iframe\b[^>]*\bsrc=["'][^"']*(?:gafcore\.com\/gafcore|\/gafcore)(?:[^"']*)["'][^>]*\/?>/gi,
+    '<div className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">Embed de GafCore removido automáticamente.</div>',
+  );
+  return out;
+}
+
+/**
  * Defensa local contra "Objects are not valid as a React child" (React error #31).
  *
  * Detecta variables declaradas como objetos/arrays literales y envuelve sus
@@ -723,6 +741,7 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
   out = neutralizeCssImportsInSource(out);
   out = fixLucideTypeImports(out);
   out = fixEmptyAnchors(out);
+  out = stripRecursiveIdeEmbeds(out);
   out = fixObjectAsJsxChild(out);
   return out;
 }

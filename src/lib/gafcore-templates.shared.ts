@@ -406,6 +406,22 @@ const PRODUCTS: Product[] = [
   { id: "3", name: "Producto C", price: 49, img: "https://picsum.photos/seed/gafcore-paint-product-3/400/400" },
 ];
 const CART_KEY = "gafcore-shop-cart";
+const MONEY_CFG = (() => {
+  const locale =
+    typeof navigator !== "undefined" && navigator.language
+      ? navigator.language
+      : "en-US";
+  const currency = /^es-MX/i.test(locale) ? "MXN" : "USD";
+  return { locale, currency };
+})();
+
+function money(value: number): string {
+  return new Intl.NumberFormat(MONEY_CFG.locale, {
+    style: "currency",
+    currency: MONEY_CFG.currency,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
 
 export default function App() {
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -427,7 +443,7 @@ export default function App() {
     <main className="min-h-screen bg-stone-50 px-6 py-10 text-stone-900">
       <header className="mx-auto flex max-w-5xl items-center justify-between">
         <h1 className="text-2xl font-bold">Tienda demo</h1>
-        <span className="text-sm">Carrito: {count} · {total} €</span>
+        <span className="text-sm">Carrito: {count} · {money(total)}</span>
       </header>
       {msg ? <p className="mx-auto mt-4 max-w-5xl text-sm text-emerald-700">{msg}</p> : null}
       <ul className="mx-auto mt-10 grid max-w-5xl gap-6 sm:grid-cols-3">
@@ -435,7 +451,7 @@ export default function App() {
           <li key={p.id} className="rounded-xl border bg-white p-4 shadow-sm">
             <img src={p.img} alt={p.name} width={320} height={320} className="aspect-square w-full rounded-lg object-cover" />
             <h2 className="mt-3 font-semibold">{p.name}</h2>
-            <p className="text-stone-600">{p.price} €</p>
+            <p className="text-stone-600">{money(p.price)}</p>
             <button type="button" onClick={() => add(p.id)} className="mt-3 w-full rounded-lg bg-stone-900 py-2 text-sm font-medium text-white hover:bg-stone-800">
               Añadir
             </button>

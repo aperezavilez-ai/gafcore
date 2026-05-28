@@ -207,7 +207,6 @@ export function GafCoreIDE() {
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
-  const publishTriggerRef = useRef<HTMLButtonElement | null>(null);
   const workspacePanelRef = useRef<ImperativePanelHandle>(null);
 
   const schedulePreviewRefresh = useCallback(() => {
@@ -1469,7 +1468,6 @@ export function GafCoreIDE() {
             }}
           >
             <Button
-              ref={publishTriggerRef}
               size="sm"
               disabled={deploying}
               className="h-8 gap-1.5 rounded-md bg-foreground px-3 text-[13px] font-medium text-background hover:bg-foreground/90"
@@ -1682,9 +1680,6 @@ export function GafCoreIDE() {
                 setFiles={setFiles}
                 projectId={currentProjectId}
                 projectName={projectName}
-                deployLiveStatus={deployLiveStatus}
-                deploySiteHost={deploySiteHost}
-                onOpenPublish={() => publishTriggerRef.current?.click()}
                 onCodeGenerated={onPreviewCodeGenerated}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenHistory={() => setHistoryOpen(true)}
@@ -1792,9 +1787,6 @@ export function GafCoreIDE() {
                     setFiles={setFiles}
                     projectId={currentProjectId}
                     projectName={projectName}
-                    deployLiveStatus={deployLiveStatus}
-                    deploySiteHost={deploySiteHost}
-                    onOpenPublish={() => publishTriggerRef.current?.click()}
                     onCodeGenerated={onPreviewCodeGenerated}
                     onOpenSettings={() => setSettingsOpen(true)}
                     onOpenHistory={() => setHistoryOpen(true)}

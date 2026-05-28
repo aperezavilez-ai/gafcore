@@ -132,9 +132,6 @@ import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
 import { classifyUserIntent } from "@/orchestrator/intent.classifier";
 import { selectTemplateSlug } from "@/orchestrator/template.selector";
-import { ChatJourneyStrip } from "@/components/ide/ChatJourneyStrip";
-import { deriveGafcoreJourneyPhase } from "@/lib/gafcore-journey-phase.shared";
-import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { BUILTIN_PROJECT_TEMPLATES } from "@/lib/gafcore-templates.shared";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
@@ -304,11 +301,8 @@ export function ChatPanel({
   onOpenSettings,
   onOpenHistory,
   onOpenConnectors,
-  onOpenPublish,
   projectId,
   projectName,
-  deployLiveStatus = "idle",
-  deploySiteHost = null,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -316,11 +310,8 @@ export function ChatPanel({
   onOpenSettings?: () => void;
   onOpenHistory?: () => void;
   onOpenConnectors?: () => void;
-  onOpenPublish?: () => void;
   projectId?: string | null;
   projectName?: string | null;
-  deployLiveStatus?: ProjectDeployStatus;
-  deploySiteHost?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -2715,10 +2706,8 @@ export function ChatPanel({
           });
         } else if (effectiveBuild) {
           const publishGuide =
-            "✅ Build aplicado. Siguiente paso recomendado:\n" +
-            "1) Prueba la vista previa y corrige detalles visuales/funcionales.\n" +
-            "2) Cuando quede listo, pulsa **Publicar** para llevarlo a producción.\n" +
-            "3) Si algo falla al publicar, te ayudo a corregir y reintentar.";
+            "✅ Build aplicado. Revisa la vista previa y, cuando quieras, pulsa **Publicar**. " +
+            "Si algo falla al publicar, te ayudo a corregir y reintentar.";
           appendMessageDeduped("ai", publishGuide);
           scrollChatToBottomSoon("auto");
           void persistMessage("assistant", publishGuide);
@@ -2780,36 +2769,6 @@ export function ChatPanel({
   };
 
   const empty = messages.length === 0;
-
-  const workflowActive = Boolean(
-    activeWorkflowRunId || backgroundWorkflowRunId || workflowTasks.length > 0,
-  );
-
-  const journeyPhase = useMemo(
-    () =>
-      deriveGafcoreJourneyPhase({
-        files: files.map((f) => ({ name: f.name, content: f.content })),
-        loading,
-        autoFixActive,
-        pipelineStatus,
-        validationLabel,
-        lastError,
-        workflowActive,
-        deployStatus: deployLiveStatus,
-        deploySiteHost: deploySiteHost ?? null,
-      }),
-    [
-      files,
-      loading,
-      autoFixActive,
-      pipelineStatus,
-      validationLabel,
-      lastError,
-      workflowActive,
-      deployLiveStatus,
-      deploySiteHost,
-    ],
-  );
 
   const nextSteps = useMemo(
     () =>
@@ -2948,15 +2907,6 @@ export function ChatPanel({
           >
             Agregar créditos
           </Button>
-        ) : null}
-        {projectId ? (
-          <ChatJourneyStrip
-            className="mt-2"
-            phase={journeyPhase}
-            deploySiteHost={deploySiteHost}
-            onPublish={onOpenPublish}
-            publishing={deployLiveStatus === "building"}
-          />
         ) : null}
       </div>
       {/* Conversation */}
