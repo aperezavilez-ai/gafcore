@@ -72,7 +72,12 @@ export function auditFunctionalFirst(
       });
     }
 
-    if (/href\s*=\s*["']#["']/i.test(code) || /href\s*=\s*["']\s*["']/i.test(code)) {
+    if (
+      /href\s*=\s*["']\s*["']/i.test(code) ||
+      (/href\s*=\s*["']#["']/i.test(code) &&
+        !/href\s*=\s*["']#(?:inicio|contacto|top)\b/i.test(code) &&
+        !/\bonClick\s*=\s*\{[^}]*preventDefault/i.test(code))
+    ) {
       issues.push({
         severity: "warn",
         file: f.name,

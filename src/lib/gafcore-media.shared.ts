@@ -510,13 +510,15 @@ function fixLucideTypeImports(source: string): string {
 
 /** Reemplaza `href=""` o `href="#"` por `href="#section"` (evita warnings de a11y). */
 function fixEmptyAnchors(source: string): string {
-  return source
-    .replace(/href=""/g, 'href="#"')
-    // a "vacío" sin href → role="button" para a11y, mantiene visual
-    .replace(/<a(\s+[^>]*?)(?<!href=)>/g, (m, attrs) => {
-      if (/href=/.test(attrs)) return m;
-      return `<a${attrs} href="#">`;
-    });
+  let out = source.replace(/href=""/g, 'href="#inicio"');
+  out = out.replace(/<a([^>]*?)href=["']#["']([^>]*)>/gi, (_m, before: string, after: string) => {
+    const attrs = `${before}${after}`;
+    if (/contacto/i.test(attrs)) return `<a${before}href="#contacto"${after}>`;
+    if (/inicio|home|logo|marca/i.test(attrs)) return `<a${before}href="#inicio"${after}>`;
+    if (/\bonClick\s*=/.test(attrs)) return `<a${before}href="#inicio"${after}>`;
+    return `<a${before}href="#inicio"${after} onClick={(e) => e.preventDefault()}>`;
+  });
+  return out;
 }
 
 /**
@@ -580,17 +582,44 @@ function stripRecursiveIdeLinks(source: string): string {
  * objeto") rompa toda la página. El render no será perfecto, pero el preview
  * no quedará en pantalla roja y el auto-fix con IA podrá iterar.
  */
-function safeJsxChildExpr(name: string): string {
+function safeJsxChildTernary(expr: string): string {
   return (
-    "{(" +
-    `(${name} == null) ? null :` +
-    ` (typeof ${name} === 'string' || typeof ${name} === 'number' || typeof ${name} === 'boolean') ? ${name} :` +
-    ` (typeof ${name} === 'object' && ${name} != null && ${name}.$$typeof) ? ${name} :` +
-    ` Array.isArray(${name}) ? null :` +
-    ` (typeof ${name} === 'object' && 'type' in ${name} && 'props' in ${name}` +
-    ` ? (${name}.props?.children ?? ${name}.props?.title ?? ${name}.props?.label ?? '') :` +
-    ` (typeof ${name} === 'object' ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? ${name}.value ?? ${name}.text ?? ${name}.desc ?? '') : null)` +
-    ")}"
+    `(${expr} == null) ? null :` +
+    ` (typeof ${expr} === 'string' || typeof ${expr} === 'number' || typeof ${expr} === 'boolean') ? ${expr} :` +
+    ` (typeof ${expr} === 'object' && ${expr} != null && ${expr}.$$typeof) ? ${expr} :` +
+    ` Array.isArray(${expr}) ? null :` +
+    ` (typeof ${expr} === 'object' && 'type' in ${expr} && 'props' in ${expr}` +
+    ` ? (${expr}.props?.children ?? ${expr}.props?.title ?? ${expr}.props?.label ?? '') :` +
+    ` (typeof ${expr} === 'object' ? (${expr}.title ?? ${expr}.label ?? ${expr}.name ?? ${expr}.heading ?? ${expr}.value ?? ${expr}.text ?? ${expr}.desc ?? '') : null)`
+  );
+}
+
+function safeJsxChildExpr(name: string): string {
+  return `{${safeJsxChildTernary(name)}}`;
+}
+
+/** Envuelve expresiones compuestas en JSX: `{item.stats}`, `{row.icon}`, etc. */
+function fixMemberAccessAsJsxChild(source: string): string {
+  return source.replace(
+    /\{([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]+)+)\}(?!\s*[/.\w])/g,
+    (match, expr: string) => {
+      if (
+        /==\s*null|typeof\s|\.map\s*\(|createElement|__gafcore|safeJsx/i.test(expr) ||
+        /\.(length|map|filter|slice|join|includes|toFixed|toString)\b/.test(expr)
+      ) {
+        return match;
+      }
+      return `{${safeJsxChildTernary(expr)}}`;
+    },
+  );
+}
+
+/** `.map(x => x.campo)` cuando campo puede ser objeto (testimonios, features, stats). */
+function fixMapReturningMember(source: string): string {
+  return source.replace(
+    /\.map\(\s*\(?(\w+)\)?\s*=>\s*\1\.([a-zA-Z_$][\w$]*)\s*\)/g,
+    (_m, param: string, prop: string) =>
+      `.map((${param}) => (${safeJsxChildTernary(`${param}.${prop}`)}))`,
   );
 }
 
@@ -735,6 +764,8 @@ function fixObjectAsJsxChild(source: string): string {
   out = fixObjectArrayRenderedAsChild(out, objectArrayVars);
 
   out = fixComponentFieldAsJsxChild(out);
+  out = fixMapReturningMember(out);
+  out = fixMemberAccessAsJsxChild(out);
   return fixBareLucideComponentInJsx(out);
 }
 
@@ -778,7 +809,7 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
 
 export function repairCommonJsxSyntaxErrors(source: string): string {
   let out = source;
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < 6; pass++) {
     const next = repairCommonJsxSyntaxErrorsPass(out);
     if (next === out) break;
     out = next;

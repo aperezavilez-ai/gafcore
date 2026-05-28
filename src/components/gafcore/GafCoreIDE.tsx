@@ -32,6 +32,7 @@ import {
   type GafcoreDeployResult,
 } from "@/lib/gafcore-deploy.shared";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
+import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
 import { isRemoteProjectStale } from "@/lib/gafcore-project-stale.shared";
 import {
   clearPendingMarketplaceTemplate,
@@ -445,8 +446,10 @@ export function GafCoreIDE() {
 
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
     if (!isRemoteProjectStale(remote) && remote?.length) {
-      const sanitized = sanitizeProjectJsxFiles(remote);
-      const jsxFixed = sanitized.some((f, i) => f.content !== remote[i]?.content);
+      const sanitized = ensureReactPackageJson(sanitizeProjectJsxFiles(remote));
+      const jsxFixed =
+        sanitized.length !== remote.length ||
+        sanitized.some((f, i) => f.content !== remote[i]?.content);
       setFiles(sanitized);
       setOpenTabs([sanitized[0]?.name ?? remote[0].name]);
       setActiveIndex(0);

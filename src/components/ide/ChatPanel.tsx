@@ -91,6 +91,7 @@ import {
   buildRuntimeAutoFixInstruction,
   shouldAttemptAiAutofix,
 } from "@/lib/gafcore-chat-autofix.shared";
+import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
 import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
 import { listGafcoreActiveAiPlugins } from "@/lib/gafcore-extensions.functions";
 import { fetchUserExtensionInstalls } from "@/lib/gafcore-extensions-client";
@@ -192,6 +193,24 @@ async function readSseJsonPayload(
           }
         } catch {
           /* chunk incompleto */
+        }
+      }
+    }
+    if (buf.trim()) {
+      const t = buf.trim();
+      if (t.startsWith("data:")) {
+        const payload = t.slice(5).trim();
+        if (payload !== "[DONE]") {
+          try {
+            const j = JSON.parse(payload);
+            const piece = j?.choices?.[0]?.delta?.content;
+            if (typeof piece === "string") {
+              full += piece;
+              onTextProgress(full.length);
+            }
+          } catch {
+            /* */
+          }
         }
       }
     }
@@ -1214,16 +1233,8 @@ export function ChatPanel({
         });
         if (repairedLocally) return;
         if (looksLikeObjectChild) {
-          setFiles((current) => {
-            const next = sanitizeProjectJsxFiles(current);
-            const changed = next.some((f, i) => f.content !== current[i]?.content);
-            if (changed) return next;
-            return next.map((f) => ({ ...f }));
-          });
-          queueMicrotask(() => {
-            onCodeGenerated?.();
-            toast.message("Recargando preview con protección anti-error #31…", { duration: 4000 });
-          });
+          setLastError(msg);
+          scheduleRuntimeAutofixRef.current(msg);
           return;
         }
         if (looksLikeJsxGlue) {
@@ -1450,7 +1461,9 @@ export function ChatPanel({
     } catch {
       /* reparación local ya aplicada */
     }
-    const merged = sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles));
+    const merged = ensureReactPackageJson(
+      sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles)),
+    );
     setFiles(merged);
     filesRef.current = merged;
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
