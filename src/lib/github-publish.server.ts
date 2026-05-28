@@ -111,10 +111,9 @@ export async function publishProjectOnServer(
     return { ok: false, message: "Token de GitHub inválido. Vuelve a conectar." };
   }
 
-  const files =
-    input.files && input.files.length > 0
-      ? input.files
-      : await loadProjectFilesForUser(input.projectId, input.userId);
+  // Siempre publicar desde la copia persistida en `project_files` para evitar
+  // desalineaciones con estado local del navegador.
+  const files = await loadProjectFilesForUser(input.projectId, input.userId);
 
   if (!files || files.length === 0) {
     return { ok: false, message: "No hay archivos para publicar en este proyecto." };
