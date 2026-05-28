@@ -142,7 +142,7 @@ type ProjectKind =
 
 function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
   const t = corpus(ctx);
-  if (/taxi|taxidriv|conductor|pasajero|viaje activo|pedir un taxi|911|pánico|panico/i.test(t)) {
+  if (/taxi|conductor|pasajero|viaje activo|pedir un taxi|911|pánico|panico/i.test(t)) {
     return "taxi";
   }
   if (/restaurant|menú|menu|reserva mesa|platos/i.test(t)) return "restaurant";
