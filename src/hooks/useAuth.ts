@@ -68,6 +68,9 @@ export function initAuthOnce() {
       supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
           lastProfileUserId = null;
+          if (typeof window !== "undefined") {
+            void import("sonner").then(({ toast }) => toast.dismiss());
+          }
           applySession(null);
           return;
         }

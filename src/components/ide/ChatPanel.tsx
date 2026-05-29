@@ -657,6 +657,7 @@ export function ChatPanel({
   const filesRef = useRef(files);
   filesRef.current = files;
   const autofixDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoFixToastIdRef = useRef<string | number | null>(null);
   const scheduleRuntimeAutofixRef = useRef<(msg: string) => void>(() => {});
   const runPreviewAutofixRef = useRef<(msg: string) => Promise<void>>(async () => {});
 
@@ -696,6 +697,29 @@ export function ChatPanel({
     window.addEventListener("gafcore:credits-applied", onCreditsApplied);
     return () => window.removeEventListener("gafcore:credits-applied", onCreditsApplied);
   }, [refreshCredits]);
+
+  useEffect(() => {
+    return () => {
+      if (autofixDebounceRef.current) clearTimeout(autofixDebounceRef.current);
+      abortControllerRef.current?.abort();
+      autoFixInFlightRef.current = false;
+      if (autoFixToastIdRef.current != null) {
+        toast.dismiss(autoFixToastIdRef.current);
+        autoFixToastIdRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) return;
+    if (autofixDebounceRef.current) clearTimeout(autofixDebounceRef.current);
+    abortControllerRef.current?.abort();
+    autoFixInFlightRef.current = false;
+    if (autoFixToastIdRef.current != null) {
+      toast.dismiss(autoFixToastIdRef.current);
+      autoFixToastIdRef.current = null;
+    }
+  }, [user?.id]);
 
   const toggleMic = () => {
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -1979,12 +2003,15 @@ export function ChatPanel({
       setAutoFixActive(true);
 
       const toastId = toast.loading("Corrigiendo error del preview con IA…", { duration: 90_000 });
+      autoFixToastIdRef.current = toastId;
       const fixInstruction = buildRuntimeAutoFixInstruction(msg);
 
       try {
         const tok = await getAuthAccessToken();
         if (!tok) {
           autoFixAttemptedErrorsRef.current.delete(attemptKey);
+          toast.dismiss(toastId);
+          autoFixToastIdRef.current = null;
           return;
         }
 
@@ -2044,6 +2071,9 @@ export function ChatPanel({
       } finally {
         autoFixInFlightRef.current = false;
         setAutoFixActive(false);
+        if (autoFixToastIdRef.current === toastId) {
+          autoFixToastIdRef.current = null;
+        }
       }
     },
     [
