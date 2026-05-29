@@ -11,6 +11,11 @@ import { executeGafcoreFactoryRun } from "@/lib/gafcore-factory-run.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getPipelineRunForUser } from "@/lib/gafcore-orchestrator.server";
 import { getWorkflowSnapshot } from "@/tasks/workflow.server";
+import {
+  auditAiActionCompleted,
+  enforceAiGovernanceWithAudit,
+} from "@/lib/gafcore-governance.server";
+import { governanceBlockedHttpStatus } from "@/lib/gafcore-governance.shared";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const jsonResponse = (body: unknown, status = 200) =>
@@ -67,6 +72,20 @@ export async function handleGafcoreFactoryRunPost(request: Request): Promise<Res
   const access = await assertGafcoreProjectAccess(parsed.data.projectId, userId);
   if (!access.ok) return access.response;
 
+  const gov = await enforceAiGovernanceWithAudit({
+    userId,
+    action: "factory.run",
+    instruction: parsed.data.instruction,
+    projectId: parsed.data.projectId,
+    fileCount: parsed.data.files.length,
+  });
+  if (gov.blocked) {
+    return jsonResponse(
+      { ok: false, error: gov.code ?? "ai_blocked", detail: gov.message },
+      governanceBlockedHttpStatus(gov.code),
+    );
+  }
+
   const result = await executeGafcoreFactoryRun({
     sb: supabaseAdmin,
     userId,
@@ -81,7 +100,25 @@ export async function handleGafcoreFactoryRunPost(request: Request): Promise<Res
   });
 
   if (result.ok && "async" in result && result.async) {
+    auditAiActionCompleted({
+      userId,
+      action: "factory.run",
+      instruction: parsed.data.instruction,
+      projectId: parsed.data.projectId,
+      risk: gov.risk,
+      metadata: { async: true },
+    });
     return jsonResponse(result, 202);
+  }
+
+  if (result.ok) {
+    auditAiActionCompleted({
+      userId,
+      action: "factory.run",
+      instruction: parsed.data.instruction,
+      projectId: parsed.data.projectId,
+      risk: gov.risk,
+    });
   }
 
   return jsonResponse(result, result.ok ? 200 : 422);

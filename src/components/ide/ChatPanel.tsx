@@ -245,6 +245,17 @@ function describeGafcoreStreamFailure(message: string): string | null {
   if (message === "project_not_found") {
     return "No se encontró el proyecto abierto. Recarga la página o elige otro proyecto.";
   }
+  if (
+    message === "maintenance" ||
+    message === "ai_disabled" ||
+    message === "chat_disabled" ||
+    message === "factory_disabled"
+  ) {
+    return "GafCore está en mantenimiento o la IA está pausada temporalmente. Inténtalo en unos minutos.";
+  }
+  if (message === "risk_blocked") {
+    return "Tu solicitud fue bloqueada por seguridad. No pidas secretos, borrados masivos ni manipulación de pagos.";
+  }
   return null;
 }
 

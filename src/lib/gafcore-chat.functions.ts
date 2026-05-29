@@ -28,6 +28,11 @@ import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
 import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
 import { shouldBypassGafcoreChatCache, softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
 import { finalizeGafcoreBuildDelivery } from "@/lib/gafcore-chat-delivery.shared";
+import {
+  auditAiActionCompleted,
+  enforceAiGovernanceWithAudit,
+} from "@/lib/gafcore-governance.server";
+import { resolveChatAiAction } from "@/lib/gafcore-governance.shared";
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -50,6 +55,21 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     if (!projectAccess.ok) {
       const err: Error & { code?: string } = new Error("project_not_found");
       err.code = "project_not_found";
+      throw err;
+    }
+
+    const chatAction = resolveChatAiAction(data.instruction);
+    const gov = await enforceAiGovernanceWithAudit({
+      userId,
+      action: chatAction,
+      instruction: data.instruction,
+      projectId: data.projectId,
+      fileCount: data.files.length,
+      isAdmin: skipCredits,
+    });
+    if (gov.blocked) {
+      const err: Error & { code?: string } = new Error(gov.message || "AI bloqueada");
+      err.code = gov.code ?? "ai_blocked";
       throw err;
     }
 
@@ -81,6 +101,14 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
     if (cached) {
       const bal = await fetchBalance(userId);
+      auditAiActionCompleted({
+        userId,
+        action: chatAction,
+        instruction: data.instruction,
+        projectId: data.projectId,
+        risk: gov.risk,
+        metadata: { cached: true },
+      });
       console.info(
         JSON.stringify({
           event: "gafcore_chat",
@@ -188,6 +216,14 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     );
 
     cacheSet(cacheKey, { reply, files: safeFiles });
+
+    auditAiActionCompleted({
+      userId,
+      action: chatAction,
+      instruction: data.instruction,
+      projectId: data.projectId,
+      risk: gov.risk,
+    });
 
     console.info(
       JSON.stringify({

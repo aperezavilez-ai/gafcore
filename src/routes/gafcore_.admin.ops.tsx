@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { DiagnosticsOpsPanel } from "@/components/admin/DiagnosticsOpsPanel";
 import { FactoryMetricsPanel } from "@/components/admin/FactoryMetricsPanel";
+import { GovernanceOpsPanel } from "@/components/admin/GovernanceOpsPanel";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
@@ -49,7 +50,10 @@ function AdminOpsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <FactoryMetricsPanel />
+      <GovernanceOpsPanel />
+      <div className="border-t border-border">
+        <FactoryMetricsPanel />
+      </div>
       <div className="border-t border-border">
         <DiagnosticsOpsPanel />
       </div>

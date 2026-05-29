@@ -37,6 +37,16 @@ import { buildAiPluginPromptAppend } from "@/extensions/ai-plugins.server";
 import { readProjectBrand } from "@/lib/gafcore-brand.functions";
 import { brandContextBlock } from "@/lib/gafcore-brand.shared";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
+import {
+  auditAiActionCompleted,
+  enforceAiGovernanceWithAudit,
+  type GafcoreGovernanceResult,
+} from "@/lib/gafcore-governance.server";
+import {
+  governanceBlockedHttpStatus,
+  resolveChatAiAction,
+  type GafcoreAiAction,
+} from "@/lib/gafcore-governance.shared";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -61,6 +71,32 @@ async function deliverGafcoreChatFiles(
   } catch {
     return delivery.files;
   }
+}
+
+async function enforceChatGovernanceOrResponse(
+  userId: string,
+  data: { instruction: string; projectId: string; files: ProjFile[] },
+  skipCredits: boolean,
+): Promise<
+  | Response
+  | { gov: GafcoreGovernanceResult; action: GafcoreAiAction }
+> {
+  const action = resolveChatAiAction(data.instruction);
+  const gov = await enforceAiGovernanceWithAudit({
+    userId,
+    action,
+    instruction: data.instruction,
+    projectId: data.projectId,
+    fileCount: data.files.length,
+    isAdmin: skipCredits,
+  });
+  if (gov.blocked) {
+    return jsonResponse(
+      { error: gov.code ?? "ai_blocked", detail: gov.message },
+      governanceBlockedHttpStatus(gov.code),
+    );
+  }
+  return { gov, action };
 }
 
 /** POST /api/gafcore/chat/stream */
@@ -89,6 +125,14 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
 
   const projectAccess = await assertGafcoreProjectAccess(data.projectId, userId);
   if (!projectAccess.ok) return projectAccess.response;
+
+  const govResult = await enforceChatGovernanceOrResponse(
+    userId,
+    { instruction: data.instruction, projectId: data.projectId, files: data.files as ProjFile[] },
+    skipCredits,
+  );
+  if (govResult instanceof Response) return govResult;
+  const { gov, action } = govResult;
 
   let gateway: ReturnType<typeof getGafcoreAiGateway>;
   try {
@@ -122,6 +166,14 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
   if (cached) {
     const balance = await fetchBalance(userId);
+    auditAiActionCompleted({
+      userId,
+      action,
+      instruction: data.instruction,
+      projectId: data.projectId,
+      risk: gov.risk,
+      metadata: { cached: true },
+    });
     return jsonResponse({
       reply: cached.reply,
       files: cached.files,
@@ -173,6 +225,14 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
           softenRoboticReply(data.instruction, replyRaw),
         );
         cacheSet(cacheKey, { reply, files: safeFiles });
+        auditAiActionCompleted({
+          userId,
+          action,
+          instruction: data.instruction,
+          projectId: data.projectId,
+          risk: gov.risk,
+          metadata: { fallback: "complete" },
+        });
         return jsonResponse({ reply, files: safeFiles, fallback: "complete" });
       } catch {
         /* sigue con error upstream */
@@ -195,6 +255,15 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     }
     return jsonResponse({ error: "no_stream_body" }, 502);
   }
+
+  auditAiActionCompleted({
+    userId,
+    action,
+    instruction: data.instruction,
+    projectId: data.projectId,
+    risk: gov.risk,
+    metadata: { mode: "stream" },
+  });
 
   return new Response(upstream.body, {
     status: 200,
@@ -234,6 +303,14 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   const projectAccess = await assertGafcoreProjectAccess(data.projectId, userId);
   if (!projectAccess.ok) return projectAccess.response;
 
+  const govResult = await enforceChatGovernanceOrResponse(
+    userId,
+    { instruction: data.instruction, projectId: data.projectId, files: data.files as ProjFile[] },
+    skipCredits,
+  );
+  if (govResult instanceof Response) return govResult;
+  const { gov, action } = govResult;
+
   let gateway: ReturnType<typeof getGafcoreAiGateway>;
   try {
     gateway = getGafcoreAiGateway();
@@ -267,6 +344,14 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
   if (cached) {
     const bal = await fetchBalance(userId);
+    auditAiActionCompleted({
+      userId,
+      action,
+      instruction: data.instruction,
+      projectId: data.projectId,
+      risk: gov.risk,
+      metadata: { cached: true, mode: "complete" },
+    });
     return jsonResponse({
       reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, cached.reply)),
       files: cached.files,
@@ -330,6 +415,15 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   );
 
   cacheSet(cacheKey, { reply, files: safeFiles });
+
+  auditAiActionCompleted({
+    userId,
+    action,
+    instruction: data.instruction,
+    projectId: data.projectId,
+    risk: gov.risk,
+    metadata: { mode: "complete" },
+  });
 
   return jsonResponse({
     reply,
