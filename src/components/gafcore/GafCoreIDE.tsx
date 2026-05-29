@@ -1740,7 +1740,6 @@ export function GafCoreIDE() {
                       <DesignCritiqueDialog
                         files={files}
                         projectId={currentProjectId ?? null}
-                        onClose={closeWorkspacePanel}
                       />
                     </div>
                     <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
@@ -1845,7 +1844,6 @@ export function GafCoreIDE() {
                           <DesignCritiqueDialog
                             files={files}
                             projectId={currentProjectId ?? null}
-                            onClose={closeWorkspacePanel}
                           />
                         </div>
                         <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
