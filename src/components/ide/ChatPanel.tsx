@@ -141,9 +141,18 @@ import {
   GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
   GAFCORE_FORCE_FILES_BUILD_PREFIX,
   outputReplacesWelcome,
+  filesFromBuiltinTemplateByInstruction,
 } from "@/lib/gafcore-chat-delivery.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
+import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
+import {
+  buildFreshProjectInstructionPrefix,
+  resolveTemplateSlugForChatInstruction,
+  suggestProjectNameFromInstruction,
+  userWantsFreshProject,
+  userWantsInPlaceRebuild,
+} from "@/lib/gafcore-chat-project.shared";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -327,6 +336,7 @@ export function ChatPanel({
   onOpenSettings,
   onOpenHistory,
   onOpenConnectors,
+  onProjectCreated,
   projectId,
   projectName,
 }: {
@@ -336,6 +346,11 @@ export function ChatPanel({
   onOpenSettings?: () => void;
   onOpenHistory?: () => void;
   onOpenConnectors?: () => void;
+  /** Tras crear proyecto desde el chat (auto-provisión del cerebro). */
+  onProjectCreated?: (
+    created: { id: string; name: string; created_at: string },
+    nextFiles: FileItem[],
+  ) => void | Promise<void>;
   projectId?: string | null;
   projectName?: string | null;
 }) {
@@ -372,6 +387,12 @@ export function ChatPanel({
   /** Invalida respuestas tardías si el usuario envía otra cosa o pulsa detener. */
   const requestEpochRef = useRef(0);
   const sendInFlightRef = useRef(false);
+  /** projectId activo durante send (puede crearse mid-flight). */
+  const activeProjectIdRef = useRef<string | null | undefined>(projectId);
+
+  useEffect(() => {
+    activeProjectIdRef.current = projectId;
+  }, [projectId]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const pipelineRunIdRef = useRef<string | null>(null);
   /** Evita eco Realtime del mismo mensaje que acabamos de persistir. */
@@ -600,11 +621,12 @@ export function ChatPanel({
 
   // Persist a message (best-effort)
   const persistMessage = async (role: "user" | "assistant", content: string) => {
-    if (!projectId || !user?.id) return;
+    const pid = activeProjectIdRef.current ?? projectId;
+    if (!pid || !user?.id) return;
     markLocalEcho(role, content);
     try {
       await supabase.from("chat_messages").insert({
-        project_id: projectId,
+        project_id: pid,
         user_id: user.id,
         role,
         content,
@@ -618,12 +640,13 @@ export function ChatPanel({
   const syncFilesToDb = async (
     generated: Array<{ name: string; language?: string; content: string }>,
   ): Promise<{ ok: boolean; detail?: string }> => {
-    if (!projectId || !user?.id || generated.length === 0) {
+    const pid = activeProjectIdRef.current ?? projectId;
+    if (!pid || !user?.id || generated.length === 0) {
       return { ok: false, detail: "no_project" };
     }
     const { upsertSingleProjectFile } = await import("@/lib/userSupabase");
     for (const f of generated) {
-      const r = await upsertSingleProjectFile(projectId, {
+      const r = await upsertSingleProjectFile(pid, {
         name: f.name,
         language: f.language ?? "typescript",
         content: f.content,
@@ -1798,7 +1821,7 @@ export function ChatPanel({
         history,
         instruction,
         files: contextFiles,
-        ...(projectId ? { projectId } : {}),
+        ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
       }),
       signal: ac.signal,
     });
@@ -1859,7 +1882,7 @@ export function ChatPanel({
       history,
       instruction,
       files: contextFiles,
-      ...(projectId ? { projectId } : {}),
+      ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
     };
     try {
       const res = await fetch("/api/gafcore/chat/stream", {
@@ -1958,7 +1981,7 @@ export function ChatPanel({
                 history,
                 instruction,
                 files: contextFiles as any,
-                ...(projectId ? { projectId } : {}),
+                ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
               },
             });
           }
@@ -2556,10 +2579,80 @@ export function ChatPanel({
     const conversational = isConversationalOnly(raw) && pendingSnapshot.length === 0;
     const effectiveBuild = mode === "build" && !conversational;
 
+    let buildContextFiles = files;
+    let isFreshProject = false;
+
+    if (effectiveBuild && user?.id) {
+      const needsFirstProject = !projectId;
+      const wantsFresh = Boolean(projectId && userWantsFreshProject(raw, files));
+      if (needsFirstProject || wantsFresh) {
+        if (wantsFresh && projectId) {
+          try {
+            const { saveProjectFilesDetailed } = await import("@/lib/userSupabase");
+            await saveProjectFilesDetailed(files, projectId);
+          } catch {
+            /* best-effort */
+          }
+        }
+        const templateSlug = resolveTemplateSlugForChatInstruction(raw);
+        const name = suggestProjectNameFromInstruction(raw);
+        try {
+          const created = await gafcoreAuthJsonFetch<{
+            ok: boolean;
+            project?: { id: string; name: string; created_at: string };
+            files?: FileItem[];
+            error?: string;
+          }>("/api/gafcore/projects-create", { name, templateSlug });
+          if (!created.ok || !created.project) {
+            toast.error("No se pudo crear el proyecto", {
+              description: created.error ?? "Reintenta con «+ Nuevo».",
+              duration: 10_000,
+            });
+            return;
+          }
+          isFreshProject = true;
+          activeProjectIdRef.current = created.project.id;
+          buildContextFiles = (created.files?.length ? created.files : files) as FileItem[];
+          setFiles(buildContextFiles);
+          filesRef.current = buildContextFiles;
+          setMessages([]);
+          await onProjectCreated?.(created.project, buildContextFiles);
+          toast.success(`Proyecto «${created.project.name}» listo — construyendo…`, {
+            duration: 6000,
+          });
+        } catch (e) {
+          toast.error("Error al crear proyecto", {
+            description: e instanceof Error ? e.message : "Error de red",
+          });
+          return;
+        }
+      } else if (userWantsInPlaceRebuild(raw)) {
+        const bootstrap = filesFromBuiltinTemplateByInstruction(raw);
+        if (bootstrap.length > 0) {
+          buildContextFiles = ensureReactPackageJson(bootstrap) as FileItem[];
+          isFreshProject = true;
+        }
+      }
+    }
+
+    if (effectiveBuild && !activeProjectIdRef.current && !projectId) {
+      toast.error("No hay proyecto activo. Escribe tu idea y lo creamos automáticamente.", {
+        duration: 8000,
+      });
+      return;
+    }
+
     const functionalPrefix =
       effectiveBuild && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
+    const welcomeApp = buildContextFiles.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
+    const stillOnWelcome = Boolean(
+      welcomeApp?.content && isGafcoreDefaultTemplateApp(welcomeApp.content),
+    );
     const preservePrefix =
-      effectiveBuild && !visualEditOn ? buildPreserveExistingPrefix(files.length) : "";
+      effectiveBuild && !visualEditOn && !isFreshProject && !stillOnWelcome
+        ? buildPreserveExistingPrefix(buildContextFiles.length)
+        : "";
+    const freshProjectPrefix = isFreshProject ? buildFreshProjectInstructionPrefix() : "";
     const conversationalPrefix = conversational ? buildConversationalInstructionPrefix(raw) : "";
     const creativePrefix =
       effectiveBuild && !visualEditOn ? buildCreativeBuildPrefix(raw) : "";
@@ -2584,6 +2677,7 @@ export function ChatPanel({
     const forceBuildPrefix =
       effectiveBuild && isSubstantiveBuildRequest(coreText) ? GAFCORE_FORCE_FILES_BUILD_PREFIX : "";
     const instruction =
+      freshProjectPrefix +
       conversationalPrefix +
       forceBuildPrefix +
       creativePrefix +
@@ -2614,12 +2708,12 @@ export function ChatPanel({
     forceScrollToBottom();
     scrollChatToBottomSoon("auto");
     void persistMessage("user", userBubble);
-    if (effectiveBuild && projectId) void startPipelineRun(instruction);
-    if (effectiveBuild && files.length > 0) {
+    if (effectiveBuild && (activeProjectIdRef.current ?? projectId)) void startPipelineRun(instruction);
+    if (effectiveBuild && buildContextFiles.length > 0) {
       void (async () => {
         try {
           const { createSnapshot } = await import("@/lib/userSupabase");
-          await createSnapshot(files, `antes: ${(raw || "build").slice(0, 48)}`);
+          await createSnapshot(buildContextFiles, `antes: ${(raw || "build").slice(0, 48)}`);
         } catch {
           /* best-effort */
         }
@@ -2636,12 +2730,14 @@ export function ChatPanel({
       });
     }, CHAT_REQUEST_TIMEOUT_MS);
     try {
-      const history: ChatMsg[] = [
-        ...messages
-          .slice(-5)
-          .map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content })),
-        { role: "user", content: conversational ? userBubble : instruction },
-      ];
+      const history: ChatMsg[] = isFreshProject
+        ? [{ role: "user", content: conversational ? userBubble : instruction }]
+        : [
+            ...messages
+              .slice(-5)
+              .map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content })),
+            { role: "user", content: conversational ? userBubble : instruction },
+          ];
 
       const tok = await getAuthAccessToken();
       if (!tok) {
@@ -2654,7 +2750,7 @@ export function ChatPanel({
         files: Array<{ name: string; language?: string; content: string }>;
       };
 
-      if (effectiveBuild && factoryMode && projectId) {
+      if (effectiveBuild && factoryMode && (activeProjectIdRef.current ?? projectId)) {
         result = await runFactoryBuild(
           instruction,
           myEpoch,
@@ -2662,7 +2758,7 @@ export function ChatPanel({
           effectiveBuild,
           visualEditOn,
         );
-      } else if (effectiveBuild && multiAgentMode && projectId) {
+      } else if (effectiveBuild && multiAgentMode && (activeProjectIdRef.current ?? projectId)) {
         result = await runMultiAgentWorkflow(
           instruction,
           myEpoch,
@@ -2676,7 +2772,7 @@ export function ChatPanel({
           tok,
           history,
           instruction,
-          files,
+          buildContextFiles,
           ac.signal,
           myEpoch,
           raw,
@@ -2691,7 +2787,7 @@ export function ChatPanel({
       );
       setStreamChars(null);
 
-      const contextForDelivery = files.map((f) => ({
+      const contextForDelivery = buildContextFiles.map((f) => ({
         name: f.name,
         language: f.language,
         content: f.content,
@@ -2725,7 +2821,7 @@ export function ChatPanel({
             tok,
             customizeHistory,
             customizeInstruction,
-            filesToApply as FileItem[],
+            buildContextFiles as FileItem[],
             ac.signal,
             myEpoch,
             raw || coreText,
@@ -2755,7 +2851,7 @@ export function ChatPanel({
               { role: "user", content: strictInstruction },
             ],
             strictInstruction,
-            files,
+            buildContextFiles,
             ac.signal,
             myEpoch,
             raw || coreText,
@@ -2796,10 +2892,16 @@ export function ChatPanel({
 
       if (filesToApply.length > 0 && effectiveBuild) {
         const runFunctional = effectiveBuild && !visualEditOn;
-        let { merged, issues } = await applyGenerationFiles(files, filesToApply, instruction, raw, {
-          runFunctionalAudit: runFunctional,
-          snapshotLabel: `auto: ${raw.slice(0, 60)}`,
-        });
+        let { merged, issues } = await applyGenerationFiles(
+          buildContextFiles,
+          filesToApply,
+          instruction,
+          raw,
+          {
+            runFunctionalAudit: runFunctional,
+            snapshotLabel: `auto: ${raw.slice(0, 60)}`,
+          },
+        );
 
         const appAfterBuild = merged.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
         if (

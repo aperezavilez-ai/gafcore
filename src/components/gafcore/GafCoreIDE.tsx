@@ -527,6 +527,22 @@ export function GafCoreIDE() {
     }
   };
 
+  const onProjectCreatedFromChat = async (
+    created: { id: string; name: string; created_at: string },
+    nextFiles: FileItem[],
+  ) => {
+    const active = activateProjectRow(created);
+    setCurrentProjectIdState(active.id);
+    setProjectName(active.name);
+    const filesOut = nextFiles.length ? nextFiles : initialFiles;
+    setFiles(filesOut);
+    setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
+    setActiveIndex(0);
+    setLoaded(true);
+    setPreviewKey((k) => k + 1);
+    await refreshProjects(created.id);
+  };
+
   const onProjectCreatedFromTemplate = async (
     created: { id: string; name: string; created_at: string },
     nextFiles: FileItem[],
@@ -1717,6 +1733,7 @@ export function GafCoreIDE() {
                 onOpenSettings={() => setSettingsOpen(true)}
                 onOpenHistory={() => setHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
+                onProjectCreated={onProjectCreatedFromChat}
               />
               </div>
             </ResizablePanel>
@@ -1823,6 +1840,7 @@ export function GafCoreIDE() {
                     onOpenSettings={() => setSettingsOpen(true)}
                     onOpenHistory={() => setHistoryOpen(true)}
                     onOpenConnectors={() => setConnectorsOpen(true)}
+                    onProjectCreated={onProjectCreatedFromChat}
                   />
                 </div>
                 {/* Pane 2: Workspace */}

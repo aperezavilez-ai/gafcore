@@ -150,6 +150,9 @@ export function buildCreativeBuildPrefix(userText: string): string {
 /** No reutilizar caché de respuesta para saludos ni modo chat social. */
 export function shouldBypassGafcoreChatCache(instruction: string): boolean {
   const t = instruction.trim();
+  if (/^\[PROYECTO NUEVO GafCore\]/i.test(t)) return true;
+  if (/^\[GAFCORE BUILD OBLIGATORIO\]/i.test(t)) return true;
+  if (isSubstantiveBuildRequest(t)) return true;
   if (/^\[CONVERSACIÓN GafCore\]/i.test(t)) return true;
   if (/^\[Modo chat\]/i.test(t) && !/\[FUNCTIONAL-FIRST\]/i.test(t)) return true;
   if (userWantsHeroBackgroundChange(t) || (isVisualOnlyTweak(t) && /cambia|modifica|aplica|hero|fondo/i.test(t))) {
