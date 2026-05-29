@@ -1,7 +1,7 @@
 /** Rutas estáticas en /public (favicon, PWA, Open Graph). */
 import { GAFCORE_PWA_MANIFEST_PATH } from "@/lib/gafcore-mobile.shared";
 /** ?v= rompe caché del icono genérico en pestañas. */
-export const FAVICON_CACHE_VERSION = "gafcore-3";
+export const FAVICON_CACHE_VERSION = "gafcore-4";
 
 export const GAFCORE_FAVICON_SVG_PATH = `/favicon.svg?v=${FAVICON_CACHE_VERSION}`;
 export const GAFCORE_FAVICON_PATH = `/favicon.png?v=${FAVICON_CACHE_VERSION}`;

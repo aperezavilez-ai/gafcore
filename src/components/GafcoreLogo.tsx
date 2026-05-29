@@ -35,7 +35,6 @@ export function GafcoreLogo({
       className={cn(
         "w-auto max-w-full object-contain object-left",
         height,
-        variant === "toolbar" && "rounded-md",
         imgClassName,
       )}
       width={variant === "toolbar" ? 120 : 320}
