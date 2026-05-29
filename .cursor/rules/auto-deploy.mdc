@@ -1,0 +1,23 @@
+---
+description: Deploy automático tras cada cambio sustantivo (sin preguntar)
+alwaysApply: true
+---
+
+# Deploy automático (regla del usuario)
+
+Al **terminar** cualquier cambio o ajuste sustantivo en GafCore:
+
+1. Ejecutar `npm run build` (o `bun run build`) y corregir errores hasta que pase.
+2. **Commit** con mensaje claro (`fix:`, `feat:`, etc.).
+3. **`git push origin main`** (o la rama de producción conectada a Vercel).
+4. Informar al usuario que el deploy está en curso (Vercel suele tardar 2–4 min en `gafcore.com`).
+
+**No preguntar** si debe desplegarse: es obligatorio por decisión del productor.
+
+Excepciones (no deploy):
+
+- Solo lectura, preguntas o revisión sin editar código.
+- El usuario pide explícitamente **no** subir cambios.
+- Cambios locales experimentales que el usuario marca como WIP.
+
+No commitear: `.env`, `.env.*`, secretos, archivos auto-generados prohibidos en AGENTS.md.

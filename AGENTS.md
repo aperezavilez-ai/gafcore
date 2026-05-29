@@ -91,6 +91,7 @@ supabase/config.toml     config Supabase (no editar project_id)
 4. Para tareas grandes: plan corto primero.
 5. Comunica en español, conciso. Refiérete al backend como "backend" / "GafCore backend".
 6. **Al cerrar una tarea sustantiva:** añadir **«Qué sigue (propuesta)»** (1–3 pasos). Priorizar ejecución con herramientas en el repo; ver límites en `.cursorrules` (cuentas externas, `.env` con secretos).
+7. **Deploy:** build OK → commit → push a `main` sin preguntar (salvo que el usuario pida no subir).
 
 Persistencia: reglas de workspace en **`.cursorrules`**; este archivo para cualquier agente. Instrucciones globales del usuario: **Cursor → Settings → Rules for AI**.
 
@@ -103,5 +104,6 @@ Servidor (secretos del host, p. ej. Vercel): al menos una vía de IA (`OPENROUTE
 ## Despliegue
 
 - Repo en GitHub; build y deploy con el proveedor elegido (p. ej. Vercel conectado al repo).
+- **Regla del productor:** tras cada cambio sustantivo, el agente hace build + commit + push a `main` **sin preguntar** (Vercel → gafcore.com).
 - Migraciones y Edge Functions de Supabase se aplican desde el panel Supabase / CLI, no desde un editor externo.
 - Producción: **gafcore.com**.

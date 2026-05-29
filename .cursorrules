@@ -113,6 +113,7 @@ bun run format
 
 - Priorizar **acción con herramientas** (terminal, lectura/edición de archivos, lint/build) frente a pedir al usuario que copie/pegué o ejecute lo que el agente puede hacer en el repo.
 - Si un comando falla: leer el error, corregir y reintentar cuando el fallo sea local al proyecto.
-- **Límites:** no iniciar sesión en cuentas del usuario (Supabase/Vercel/GitHub/OpenAI); no escribir secretos en `.env` / `.env.*` (archivos ignorados o reglas del repo); no `git push` con credenciales ajenas.
+- **Deploy automático (regla del usuario):** al terminar un cambio o ajuste sustantivo, hacer **build → commit → `git push origin main`** sin preguntar. Vercel despliega `main` → **gafcore.com**. Informar que el deploy está en curso. No preguntar «¿hago push?». Excepción: el usuario pide explícitamente no subir, o la tarea fue solo consulta sin editar código.
+- **Límites:** no iniciar sesión en cuentas del usuario (Supabase/Vercel/GitHub/OpenAI); no escribir secretos en `.env` / `.env.*`; no force-push a `main`.
 
 > **Cómo persisten estas reglas:** Cursor carga `.cursorrules` en cada chat de este workspace. Para instrucciones **globales** (todos los proyectos): *Cursor Settings → Rules for AI / User Rules*.
