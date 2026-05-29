@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
   FolderOpen,
@@ -43,8 +44,11 @@ import {
 } from "@/lib/userSupabase";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
+import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
 import { activateProjectRow } from "@/core/project";
 import type { FileItem } from "@/components/ide/CodeEditor";
+import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
+import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
 
 export const Route = createFileRoute("/gafcore_/projects")({
   component: GafcoreProjectsPage,
@@ -71,6 +75,16 @@ function GafcoreProjectsPage() {
   const [renameTarget, setRenameTarget] = useState<ProjectRow | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null);
+  const [deletePendingApproval, setDeletePendingApproval] = useState<{
+    approvalId: string;
+    summary: string;
+    risk: GafcoreRiskAssessment;
+  } | null>(null);
+
+  const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
   useEffect(() => {
     if (authLoading) return;
@@ -186,30 +200,54 @@ function GafcoreProjectsPage() {
     }
   };
 
-  const handleDelete = async (p: ProjectRow) => {
-    if (
-      !window.confirm(
-        `¿Eliminar definitivamente «${p.name}»?\n\nSe borrarán archivos, historial y datos asociados.`,
-      )
-    ) {
-      return;
+  const beginDelete = async (p: ProjectRow) => {
+    try {
+      const approval = await requestCriticalApproval({
+        data: {
+          action: "project.delete",
+          projectId: p.id,
+          projectName: p.name,
+        },
+      });
+      setDeleteTarget(p);
+      setDeletePendingApproval({
+        approvalId: approval.approvalId,
+        summary: approval.summary,
+        risk: approval.risk,
+      });
+      setDeleteConfirmOpen(true);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "No se pudo preparar la eliminación");
     }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || !deletePendingApproval) return;
+    setDeleteConfirmBusy(true);
     try {
       const res = await gafcoreAuthJsonFetch<{ ok: boolean; error?: string }>(
         "/api/gafcore/projects-delete",
-        { projectId: p.id },
+        {
+          projectId: deleteTarget.id,
+          approvalId: deletePendingApproval.approvalId,
+        },
       );
       if (!res.ok) {
         toast.error(res.error ?? "No se pudo eliminar");
         return;
       }
-      if (getCurrentProjectId() === p.id) {
+      if (getCurrentProjectId() === deleteTarget.id) {
         clearCurrentProjectId();
       }
-      toast.success(`Proyecto «${p.name}» eliminado`);
+      setDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+      setDeletePendingApproval(null);
+      toast.success(`Proyecto «${deleteTarget.name}» eliminado`);
       await refresh();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+    } finally {
+      setDeleteConfirmBusy(false);
     }
   };
 
@@ -358,7 +396,7 @@ function GafcoreProjectsPage() {
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onSelect={() => {
-                              window.setTimeout(() => void handleDelete(p), 0);
+                              window.setTimeout(() => void beginDelete(p), 0);
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -437,6 +475,28 @@ function GafcoreProjectsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CriticalActionConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => {
+          setDeleteConfirmOpen(open);
+          if (!open) {
+            setDeleteTarget(null);
+            setDeletePendingApproval(null);
+          }
+        }}
+        title="Eliminar proyecto"
+        summary={
+          deletePendingApproval?.summary ??
+          (deleteTarget
+            ? `Eliminar definitivamente «${deleteTarget.name}» y todos sus datos.`
+            : "Esta acción no se puede deshacer.")
+        }
+        risk={deletePendingApproval?.risk ?? null}
+        confirmLabel="Eliminar definitivamente"
+        busy={deleteConfirmBusy}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
