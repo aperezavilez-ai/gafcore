@@ -20,6 +20,7 @@ export type GafcoreAiModels = {
   fast: string;
   deep: string;
   support: string;
+  ui: string;
 };
 
 export type GafcoreAiGateway = {
@@ -39,8 +40,9 @@ export function getGafcoreAiGateway(): GafcoreAiGateway {
   const defaults = resolveGafcoreModelDefaults(config.url);
   const fast = process.env.AI_MODEL_FAST?.trim() || defaults.fast;
   const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
+  const ui = process.env.AI_MODEL_UI?.trim() || defaults.ui;
   const support = process.env.AI_SUPPORT_MODEL?.trim() || fast;
-  return { config, models: { fast, deep, support } };
+  return { config, models: { fast, deep, support, ui } };
 }
 
 export function tryGetGafcoreAiGateway(): GafcoreAiGateway | null {
@@ -71,6 +73,7 @@ export function resolveGatewayModel(
       models.fast,
       models.deep,
       Boolean(opts.hasVision),
+      models.ui,
     );
   }
   return models.fast;

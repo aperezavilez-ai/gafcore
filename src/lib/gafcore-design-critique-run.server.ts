@@ -9,7 +9,7 @@ import {
   refundAiCredits,
 } from "@/lib/gafcore-ai-gateway.server";
 import { readProjectBrand } from "@/lib/gafcore-brand.functions";
-import { MODEL_DEEP } from "@/lib/gafcore-chat.shared";
+import { MODEL_UI } from "@/lib/gafcore-chat.shared";
 import {
   buildCritiqueSystemPrompt,
   buildCritiqueUserMessage,
@@ -77,7 +77,7 @@ export async function performDesignCritique(
   let raw2: { content: string } | null = null;
   try {
     raw2 = await completeChatMessage({
-      model: MODEL_DEEP,
+      model: MODEL_UI,
       messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
       temperature: 0.4,
       json: true,

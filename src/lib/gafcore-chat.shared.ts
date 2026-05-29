@@ -105,17 +105,20 @@ Reglas de **archivos (eficiencia)**:
 export const COST_PER_REQUEST = 1;
 
 /**
- * Slugs compatibles con OpenRouter (o otro gateway OpenAI-compatible).
- * Deep usa Claude Sonnet 4.5 — mejor calidad para UI/Tailwind/diseño profesional.
- * Fast usa GPT-4o-mini — barato y rápido para chat y validaciones.
- * Sobrescribibles con `AI_MODEL_FAST` / `AI_MODEL_DEEP` en el entorno.
+ * Slugs OpenRouter — cerebro multi-proveedor (competir con Lovable/v0):
+ * - Fast: Gemini Flash → chat y respuestas rápidas.
+ * - Deep: GPT-4o → generación de código React/Tailwind (calidad tipo v0).
+ * - UI: Gemini Pro → diseño visual, layout y auditoría estética.
+ * Sobrescribibles: AI_MODEL_FAST / AI_MODEL_DEEP / AI_MODEL_UI.
  */
-export const MODEL_FAST = "openai/gpt-4o-mini";
-export const MODEL_DEEP = "anthropic/claude-sonnet-4.5";
+export const MODEL_FAST = "google/gemini-2.0-flash-001";
+export const MODEL_DEEP = "openai/gpt-4o";
+export const MODEL_UI = "google/gemini-2.5-pro";
 
-/** IDs por defecto en `https://api.openai.com/v1/chat/completions` (no slugs `proveedor/modelo`). */
+/** IDs por defecto en API nativa OpenAI (sin OpenRouter). */
 export const OPENAI_API_DEFAULT_FAST = "gpt-4o-mini";
 export const OPENAI_API_DEFAULT_DEEP = "gpt-4o";
+export const OPENAI_API_DEFAULT_UI = "gpt-4o";
 
 /**
  * Elige defaults de modelo según el host del endpoint.
@@ -126,6 +129,7 @@ export const OPENAI_API_DEFAULT_DEEP = "gpt-4o";
 export function resolveGafcoreModelDefaults(chatCompletionsUrl: string): {
   fast: string;
   deep: string;
+  ui: string;
 } {
   const u = chatCompletionsUrl.toLowerCase();
   const isOpenAiNative =
@@ -133,6 +137,7 @@ export function resolveGafcoreModelDefaults(chatCompletionsUrl: string): {
   return {
     fast: isOpenAiNative ? OPENAI_API_DEFAULT_FAST : MODEL_FAST,
     deep: isOpenAiNative ? OPENAI_API_DEFAULT_DEEP : MODEL_DEEP,
+    ui: isOpenAiNative ? OPENAI_API_DEFAULT_UI : MODEL_UI,
   };
 }
 
@@ -222,6 +227,7 @@ export function pickModel(
   fast: string = MODEL_FAST,
   deep: string = MODEL_DEEP,
   hasVisionImages = false,
+  ui: string = MODEL_UI,
 ): string {
   if (hasVisionImages) return pickVisionModel(deep);
   const t = instruction.trim();
@@ -231,7 +237,7 @@ export function pickModel(
   if (/^\[modo chat\]/i.test(t)) return fast;
   if (/^\[CREATIVIDAD OBLIGATORIA\]/i.test(t) || isSubstantiveBuildRequest(t)) return deep;
 
-  /** Pide calidad visual / maquetación: el modelo “fast” suele dejar UI pobre o URLs de imagen inválidas en el preview del IDE. */
+  /** Pide calidad visual / maquetación: Gemini Pro para UI premium; GPT-4o para builds con código. */
   const wantsDeepUi =
     /p[aá]gina|landing|dise[ñn]o|dise[ñn]a|maquet|componente|ui\b|layout|hero|secci[oó]n|estilo|tailwind|css|tema|foto|im[áa]gen|im[áa]genes|imagenes|e-?commerce|tienda|venta|cat[áa]logo|navbar|footer|responsive|accesibilidad|animaci|preview|zapato|tenis|ropa|producto|galer[ií]a|collage|rejilla|mosaico|cuadr[íi]cula|bento|showcase|portafolio|portfolio|presupuesto|cotizaci[oó]n|cta\b|mockup|figma|tipograf|jerarqu[ií]a|hiperreal|fotograf|coating|pintura|fachada|edificio|comercial|residencial|premium|marca|branding|wireframe|maqueta|alta\s*calidad|resoluci|llamada\s+a\s+la\s+acci[oó]n/i.test(
       t,
@@ -241,11 +247,12 @@ export function pickModel(
     );
 
   const wantsDeepTech =
-    /refactor|migraci[oó]n|migrat|architect|error|bug|despliegue|optimiza|seguridad|typescript|eslint|performance/i.test(
+    /refactor|migraci[oó]n|migrat|architect|error|bug|despliegue|optimiza|seguridad|typescript|eslint|performance|FUNCTIONAL-FIRST|GAFCORE BUILD|files\b/i.test(
       t,
     );
 
-  if (wantsDeepUi || wantsDeepTech || instructionNeedsLayoutModel(t)) return deep;
+  if (wantsDeepTech || instructionNeedsLayoutModel(t)) return deep;
+  if (wantsDeepUi) return ui;
   if (t.length >= 420) return deep;
   if (t.length < 260) return fast;
   return deep;

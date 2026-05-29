@@ -54,6 +54,7 @@ import {
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { Toaster } from "@/components/ui/sonner";
 import { GafcoreInstallApp } from "@/components/GafcoreInstallApp";
+import { GafcoreLogo } from "@/components/GafcoreLogo";
 import {
   LayoutGrid,
   Loader2,
@@ -930,20 +931,7 @@ export function GafCoreIDE() {
         <div className="flex h-11 items-center justify-between gap-1 border-b border-border/40 px-2 md:h-12 md:gap-2 md:px-3 md:border-b-0">
         {/* Left: logo + selector de proyecto */}
         <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden md:gap-1 md:flex-none">
-          <div
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white"
-            style={{
-              background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #38bdf8 100%)",
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontWeight: 700,
-              fontSize: "14px",
-              letterSpacing: "-0.02em",
-              boxShadow: "0 1px 2px rgba(37,99,235,0.35)",
-            }}
-            aria-label="GafCore"
-          >
-            G
-          </div>
+          <GafcoreLogo variant="toolbar" linkTo="/gafcore" className="shrink-0" />
           {userShortLabel ? (
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>

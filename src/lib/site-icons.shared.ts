@@ -1,14 +1,14 @@
 /** Rutas estáticas en /public (favicon, PWA, Open Graph). */
 import { GAFCORE_PWA_MANIFEST_PATH } from "@/lib/gafcore-mobile.shared";
 /** ?v= rompe caché del icono genérico en pestañas. */
-export const FAVICON_CACHE_VERSION = "gafcore-2";
+export const FAVICON_CACHE_VERSION = "gafcore-3";
 
 export const GAFCORE_FAVICON_SVG_PATH = `/favicon.svg?v=${FAVICON_CACHE_VERSION}`;
 export const GAFCORE_FAVICON_PATH = `/favicon.png?v=${FAVICON_CACHE_VERSION}`;
 export const GAFCORE_APPLE_TOUCH_ICON_PATH = `/apple-touch-icon.png?v=${FAVICON_CACHE_VERSION}`;
 
 /** Inline: evita 404 en /favicon.ico y caché del icono genérico (Cursor Simple Browser). */
-const FAVICON_SVG_MARKUP = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#gc)"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="18" font-weight="700">G</text></svg>`;
+const FAVICON_SVG_MARKUP = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#a855f7"/><stop offset="50%" stop-color="#d946ef"/><stop offset="100%" stop-color="#22d3ee"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="#000"/><path d="M16 4 L26 9.5 V22.5 L16 28 L6 22.5 V9.5 Z" fill="none" stroke="url(#gc)" stroke-width="1.5"/><text x="16" y="21" text-anchor="middle" fill="url(#gc)" font-family="system-ui,sans-serif" font-size="14" font-weight="800">G</text></svg>`;
 
 export const GAFCORE_FAVICON_INLINE = `data:image/svg+xml,${encodeURIComponent(FAVICON_SVG_MARKUP)}`;
 

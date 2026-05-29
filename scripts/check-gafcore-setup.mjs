@@ -105,6 +105,7 @@ for (const k of [
   "OPENROUTER_API_KEY",
   "AI_MODEL_FAST",
   "AI_MODEL_DEEP",
+  "AI_MODEL_UI",
 ]) {
   console.log(`  ${k}: ${mask(k)}`);
 }
