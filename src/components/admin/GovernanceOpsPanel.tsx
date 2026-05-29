@@ -5,6 +5,7 @@ import {
   listGafcoreAuditEvents,
   listGafcoreSystemControls,
   updateGafcoreSystemControl,
+  exportGafcoreAuditCsv,
 } from "@/lib/gafcore-governance.functions";
 import {
   auditOutcomeLabel,
@@ -19,7 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Shield, ShieldAlert } from "lucide-react";
+import { Loader2, RefreshCw, Shield, ShieldAlert, Download } from "lucide-react";
 
 function formatTime(iso: string): string {
   try {
@@ -44,11 +45,13 @@ export function GovernanceOpsPanel() {
   const listControls = useServerFn(listGafcoreSystemControls);
   const updateControl = useServerFn(updateGafcoreSystemControl);
   const listAudit = useServerFn(listGafcoreAuditEvents);
+  const exportCsv = useServerFn(exportGafcoreAuditCsv);
 
   const [controls, setControls] = useState<GafcoreSystemControlRow[]>([]);
   const [audit, setAudit] = useState<GafcoreAuditEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
   const [messages, setMessages] = useState<Record<string, string>>({});
 
   const reload = useCallback(async () => {
@@ -113,6 +116,25 @@ export function GovernanceOpsPanel() {
       toast.error(e instanceof Error ? e.message : "Error guardando mensaje");
     } finally {
       setBusyKey(null);
+    }
+  };
+
+  const downloadAuditCsv = async () => {
+    setExportBusy(true);
+    try {
+      const res = await exportCsv({ data: { limit: 5000 } });
+      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("CSV descargado");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error exportando CSV");
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -212,9 +234,24 @@ export function GovernanceOpsPanel() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Auditoría reciente</CardTitle>
-          <CardDescription>Acciones IA, bloqueos y cambios de control.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>Auditoría reciente</CardTitle>
+            <CardDescription>Acciones IA, bloqueos y cambios de control.</CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={exportBusy}
+            onClick={() => void downloadAuditCsv()}
+          >
+            {exportBusy ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Exportar CSV
+          </Button>
         </CardHeader>
         <CardContent>
           {audit.length === 0 ? (

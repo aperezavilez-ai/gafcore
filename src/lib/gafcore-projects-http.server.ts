@@ -35,6 +35,7 @@ const CreateBodySchema = z
 
 const DeleteBodySchema = z.object({
   projectId: z.string().uuid(),
+  approvalId: z.string().uuid().optional(),
 });
 
 /** POST /api/gafcore/projects-create */
@@ -90,7 +91,11 @@ export async function handleGafcoreProjectsDeletePost(request: Request): Promise
     return json({ ok: false, error: "invalid_body" }, 400);
   }
 
-  const result = await deleteProjectForUser(userId, parsed.data.projectId);
+  const result = await deleteProjectForUser(
+    userId,
+    parsed.data.projectId,
+    parsed.data.approvalId,
+  );
   if (!result.ok) {
     return json({ ok: false, error: result.error }, 400);
   }

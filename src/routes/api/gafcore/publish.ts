@@ -14,6 +14,7 @@ const BodySchema = z.object({
   projectId: z.string().uuid(),
   projectName: z.string().min(1).max(200),
   files: z.array(FileSchema).optional(),
+  approvalId: z.string().uuid().optional(),
 });
 
 /**
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/api/gafcore/publish")({
           projectId: parsed.data.projectId,
           projectName: parsed.data.projectName,
           files: parsed.data.files as FileItem[] | undefined,
+          approvalId: parsed.data.approvalId,
         });
 
         return json(result, result.ok ? 200 : 400);

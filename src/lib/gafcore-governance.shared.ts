@@ -20,6 +20,8 @@ export type GafcoreAiAction =
   | "factory.run"
   | "publish.deploy";
 
+export type GafcoreCriticalAction = "project.delete" | "project.publish";
+
 export type GafcoreRiskLevel = "low" | "medium" | "high" | "critical";
 
 export type GafcoreAuditOutcome = "allowed" | "blocked" | "pending_approval" | "completed";
@@ -147,4 +149,8 @@ export function resolveChatAiAction(instruction: string): GafcoreAiAction {
 
 export function governanceBlockedHttpStatus(code?: string): number {
   return code === "risk_blocked" ? 403 : 503;
+}
+
+export function criticalActionLabel(action: GafcoreCriticalAction): string {
+  return action === "project.delete" ? "Eliminar proyecto" : "Publicar proyecto";
 }

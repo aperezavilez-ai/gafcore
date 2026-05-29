@@ -27,6 +27,9 @@ import {
   updatePublishRecord,
   type PublishRow,
 } from "@/lib/userSupabase";
+import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
+import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
+import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
 import type { GafcoreDeployResult, ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { isBlockedDeployHost, normalizeDeployHost } from "@/lib/gafcore-deploy.shared";
 import { getProjectDeployStatus, verifyDeploySite } from "@/lib/gafcore-deploy.functions";
@@ -40,10 +43,11 @@ type Props = {
   siteHost?: string | null;
   githubRepo?: string | null;
   projectId?: string | null;
+  projectName?: string;
   hasProject?: boolean;
   githubConfigured?: boolean;
   isUpdating?: boolean;
-  onUpdate?: () => Promise<GafcoreDeployResult>;
+  onUpdate?: (opts?: { approvalId?: string }) => Promise<GafcoreDeployResult>;
   onOpenSettings?: () => void;
   onOpenChange?: (open: boolean) => void;
 };
@@ -54,6 +58,7 @@ export function PublishDialog({
   siteHost,
   githubRepo,
   projectId,
+  projectName = "Proyecto",
   hasProject = true,
   githubConfigured = false,
   isUpdating = false,
@@ -72,9 +77,17 @@ export function PublishDialog({
   const [liveRepo, setLiveRepo] = useState<string | null>(githubRepo ?? null);
   const [liveHost, setLiveHost] = useState<string | null>(siteHost ?? null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<{
+    approvalId: string;
+    summary: string;
+    risk: GafcoreRiskAssessment;
+  } | null>(null);
 
   const callDeployStatus = useServerFn(getProjectDeployStatus);
   const callVerifySite = useServerFn(verifyDeploySite);
+  const requestApproval = useServerFn(requestGafcoreCriticalApproval);
 
   const rawHost = liveHost ?? siteHost ?? null;
   const hostBlocked = isBlockedDeployHost(rawHost);
@@ -194,50 +207,73 @@ export function PublishDialog({
       openSetup();
       return;
     }
-    if (!hasProject) {
+    if (!hasProject || !projectId) {
       toast.error("Crea un proyecto primero (+ Nuevo).");
       return;
     }
     if (!onUpdate) return;
 
-    let result: GafcoreDeployResult;
     try {
-      result = await onUpdate();
+      const approval = await requestApproval({
+        data: {
+          action: "project.publish",
+          projectId,
+          projectName,
+        },
+      });
+      setPendingApproval({
+        approvalId: approval.approvalId,
+        summary: approval.summary,
+        risk: approval.risk,
+      });
+      setConfirmOpen(true);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "No se pudo preparar la publicación");
+    }
+  };
+
+  const executePublish = async () => {
+    if (!onUpdate || !pendingApproval) return;
+    setConfirmBusy(true);
+    try {
+      const result = await onUpdate({ approvalId: pendingApproval.approvalId });
+      setConfirmOpen(false);
+
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+
+      if (result.siteHost && !isBlockedDeployHost(result.siteHost)) {
+        setLiveHost(result.siteHost);
+      }
+      if (result.repoUrl) {
+        const m = result.repoUrl.match(/github\.com\/([^/]+\/[^/]+)/);
+        if (m?.[1]) setLiveRepo(m[1]);
+      }
+
+      const verifyHost = normalizeDeployHost(result.siteHost ?? host);
+      const publishId = await recordPublish({
+        projectId: projectId ?? undefined,
+        url: verifyHost ? `https://${verifyHost}` : undefined,
+        visibility,
+        status: "pending",
+        fileCount: result.fileCount ?? 0,
+        metadata: { repoUrl: result.repoUrl, message: result.message },
+      });
+
+      toast.success("Publicando…");
+      void reloadHistory();
+
+      if (result.deployStatus === "building") {
+        startDeployPolling();
+      } else if (verifyHost) {
+        setTimeout(() => void runVerification(publishId, verifyHost), 5000);
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al publicar");
-      return;
-    }
-
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-
-    if (result.siteHost && !isBlockedDeployHost(result.siteHost)) {
-      setLiveHost(result.siteHost);
-    }
-    if (result.repoUrl) {
-      const m = result.repoUrl.match(/github\.com\/([^/]+\/[^/]+)/);
-      if (m?.[1]) setLiveRepo(m[1]);
-    }
-
-    const verifyHost = normalizeDeployHost(result.siteHost ?? host);
-    const publishId = await recordPublish({
-      projectId: projectId ?? undefined,
-      url: verifyHost ? `https://${verifyHost}` : undefined,
-      visibility,
-      status: "pending",
-      fileCount: result.fileCount ?? 0,
-      metadata: { repoUrl: result.repoUrl, message: result.message },
-    });
-
-    toast.success("Publicando…");
-    void reloadHistory();
-
-    if (result.deployStatus === "building") {
-      startDeployPolling();
-    } else if (verifyHost) {
-      setTimeout(() => void runVerification(publishId, verifyHost), 5000);
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -266,6 +302,7 @@ export function PublishDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpenBoth}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="gap-0 overflow-hidden border border-border/80 bg-card p-0 shadow-2xl sm:max-w-[400px] rounded-2xl [&>button.absolute]:hidden">
@@ -419,5 +456,16 @@ export function PublishDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <CriticalActionConfirmDialog
+      open={confirmOpen}
+      onOpenChange={setConfirmOpen}
+      title="Confirmar publicación"
+      summary={pendingApproval?.summary ?? "Publicar cambios a producción."}
+      risk={pendingApproval?.risk ?? null}
+      confirmLabel="Publicar ahora"
+      busy={confirmBusy || isUpdating}
+      onConfirm={executePublish}
+    />
+    </>
   );
 }

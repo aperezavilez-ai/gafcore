@@ -14,6 +14,11 @@ import {
 } from "@/lib/vercel-deploy.server";
 import { setProjectDeployStatus } from "@/lib/gafcore-deploy-status.server";
 import { runDeployValidationGate } from "@/validation/integrations/deploy-gate";
+import {
+  auditAiActionCompleted,
+  enforceAiGovernanceWithAudit,
+} from "@/lib/gafcore-governance.server";
+import { consumeCriticalActionApproval } from "@/lib/gafcore-governance-approval.server";
 
 export async function loadProjectFilesForUser(
   projectId: string,
@@ -92,11 +97,39 @@ export type ServerPublishInput = {
   projectId: string;
   projectName: string;
   files?: FileItem[];
+  approvalId?: string;
 };
 
 export async function publishProjectOnServer(
   input: ServerPublishInput,
 ): Promise<GafcoreDeployResult> {
+  const gov = await enforceAiGovernanceWithAudit({
+    userId: input.userId,
+    action: "publish.deploy",
+    instruction: `publish ${input.projectName}`,
+    projectId: input.projectId,
+    fileCount: input.files?.length,
+  });
+  if (gov.blocked) {
+    return { ok: false, message: gov.message ?? "Publicación pausada temporalmente." };
+  }
+
+  if (!input.approvalId) {
+    return {
+      ok: false,
+      message: "Confirma la publicación en el diálogo de seguridad antes de continuar.",
+    };
+  }
+  const approved = await consumeCriticalActionApproval({
+    userId: input.userId,
+    approvalId: input.approvalId,
+    action: "project.publish",
+    resourceId: input.projectId,
+  });
+  if (!approved.ok) {
+    return { ok: false, message: approved.error };
+  }
+
   const token = await getStoredGithubToken(input.userId);
   if (!token) {
     return {
@@ -211,6 +244,15 @@ export async function publishProjectOnServer(
   const sitePart = siteHost ? ` Sitio: https://${siteHost}.` : ` Publicado en ${fullRepo}.`;
   const extra = vercelNote.trim() ? ` ${vercelNote.trim()}` : "";
   const gateNote = gate.warning ? ` ${gate.warning}` : "";
+
+  auditAiActionCompleted({
+    userId: input.userId,
+    action: "project.publish",
+    instruction: `publish ${input.projectName}`,
+    projectId: input.projectId,
+    risk: gov.risk,
+    metadata: { repo: fullRepo, branch },
+  });
 
   return {
     ok: true,

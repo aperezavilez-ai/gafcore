@@ -1,6 +1,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 import {
+  auditAiActionCompleted,
+} from "@/lib/gafcore-governance.server";
+import { consumeCriticalActionApproval } from "@/lib/gafcore-governance-approval.server";
+import {
   listActiveTemplates,
   loadTemplateFilesBySlug,
 } from "@/lib/gafcore-templates.server";
@@ -120,8 +124,26 @@ export async function createProjectForUser(
 export async function deleteProjectForUser(
   userId: string,
   projectId: string,
+  approvalId?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    if (!approvalId) {
+      return {
+        ok: false,
+        error: "Confirma la eliminación en el diálogo de seguridad antes de continuar.",
+      };
+    }
+
+    const approved = await consumeCriticalActionApproval({
+      userId,
+      approvalId,
+      action: "project.delete",
+      resourceId: projectId,
+    });
+    if (!approved.ok) {
+      return { ok: false, error: approved.error };
+    }
+
     const { data: proj, error: qErr } = await supabaseAdmin
       .from("projects")
       .select("id, user_id")
@@ -167,6 +189,14 @@ export async function deleteProjectForUser(
     if (!deletedRows?.length) {
       return { ok: false, error: "No se eliminó el proyecto." };
     }
+
+    auditAiActionCompleted({
+      userId,
+      action: "project.delete",
+      instruction: `delete project ${projectId}`,
+      projectId,
+      risk: { score: 70, level: "high", signals: ["project.delete"], requiresConfirmation: true, blocked: false },
+    });
 
     return { ok: true };
   } catch (e) {

@@ -27,6 +27,7 @@ export async function publishProjectOnServerApi(input: {
   projectId: string;
   projectName: string;
   files?: { name: string; language: string; content: string }[];
+  approvalId?: string;
 }): Promise<GafcoreDeployResult> {
   const res = await fetch("/api/gafcore/publish", {
     method: "POST",

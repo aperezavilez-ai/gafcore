@@ -9,6 +9,7 @@ import {
   scoreAiRequestRisk,
   type GafcoreAiAction,
   type GafcoreAuditOutcome,
+  type GafcoreCriticalAction,
   type GafcoreRiskAssessment,
   type GafcoreSystemControlKey,
   type GafcoreSystemControlRow,
@@ -279,7 +280,7 @@ export async function enforceAiGovernanceWithAudit(args: {
 
 export function auditAiActionCompleted(args: {
   userId: string;
-  action: GafcoreAiAction;
+  action: GafcoreAiAction | GafcoreCriticalAction;
   instruction: string;
   projectId?: string;
   risk: GafcoreRiskAssessment;
@@ -312,4 +313,40 @@ export async function listAuditEvents(args: {
 
   if (error) throw new Error(error.message);
   return { events: data ?? [], total: count ?? 0 };
+}
+
+function csvEscape(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+export function auditEventsToCsv(events: Record<string, unknown>[]): string {
+  const cols = [
+    "created_at",
+    "actor_id",
+    "action",
+    "resource_type",
+    "resource_id",
+    "risk_level",
+    "risk_score",
+    "outcome",
+    "instruction_hash",
+  ] as const;
+  const header = cols.join(",");
+  const rows = events.map((ev) =>
+    cols.map((c) => csvEscape(ev[c])).join(","),
+  );
+  return [header, ...rows].join("\n");
+}
+
+export async function exportAuditEventsCsv(limit = 5000): Promise<string> {
+  const capped = Math.min(Math.max(limit, 1), 10_000);
+  const { data, error } = await supabaseAdmin
+    .from("audit_events")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(capped);
+  if (error) throw new Error(error.message);
+  return auditEventsToCsv(data ?? []);
 }

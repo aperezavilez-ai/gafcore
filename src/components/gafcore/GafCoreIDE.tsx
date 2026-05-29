@@ -27,6 +27,9 @@ import {
   type ProjectRow,
 } from "@/core/project";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
+import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
+import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
+import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
 import {
   isGithubDeployConfigured,
   type GafcoreDeployResult,
@@ -195,12 +198,20 @@ export function GafCoreIDE() {
     (subscription?.price_id === "plan_creador_monthly" ||
       String(subscription?.plan_tier ?? "").toLowerCase() === "creador");
   const callDeployStatus = useServerFn(getProjectDeployStatus);
+  const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
   const [files, setFiles] = useState<FileItem[]>(initialFiles);
   const [activeIndex, setActiveIndex] = useState(0);
   const [openTabs, setOpenTabs] = useState<string[]>([initialFiles[0].name]);
   const [loaded, setLoaded] = useState(false);
   const [deploying, setDeploying] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false);
+  const [deletePendingApproval, setDeletePendingApproval] = useState<{
+    approvalId: string;
+    summary: string;
+    risk: GafcoreRiskAssessment;
+  } | null>(null);
   const [view, setView] = useState<View>("preview");
   const [previewKey, setPreviewKey] = useState(0);
   const previewRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -513,28 +524,45 @@ export function GafCoreIDE() {
     toast.success(`Proyecto «${created.name}» creado.`);
   };
 
-  const deleteCurrentProject = async () => {
+  const beginDeleteCurrentProject = async () => {
     const cur = currentProjectId ?? getCurrentProjectId();
     if (!cur) {
       toast.error("No hay proyecto activo para eliminar");
       return;
     }
-    if (
-      !window.confirm(
-        `¿Eliminar definitivamente «${projectName}»?\n\nSe borrarán archivos, historial y datos asociados.`,
-      )
-    ) {
-      return;
+    try {
+      const approval = await requestCriticalApproval({
+        data: {
+          action: "project.delete",
+          projectId: cur,
+          projectName,
+        },
+      });
+      setDeletePendingApproval({
+        approvalId: approval.approvalId,
+        summary: approval.summary,
+        risk: approval.risk,
+      });
+      setDeleteConfirmOpen(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo preparar la eliminación");
     }
+  };
+
+  const confirmDeleteCurrentProject = async () => {
+    const cur = currentProjectId ?? getCurrentProjectId();
+    if (!cur || !deletePendingApproval) return;
+    setDeleteConfirmBusy(true);
     try {
       const res = await gafcoreAuthJsonFetch<{ ok: boolean; error?: string }>(
         "/api/gafcore/projects-delete",
-        { projectId: cur },
+        { projectId: cur, approvalId: deletePendingApproval.approvalId },
       );
       if (!res.ok) {
         toast.error(res.error ?? "No se pudo eliminar el proyecto");
         return;
       }
+      setDeleteConfirmOpen(false);
       clearCurrentProjectId();
       toast.success(`Proyecto «${projectName}» eliminado`);
       const list = await listProjects();
@@ -551,8 +579,12 @@ export function GafCoreIDE() {
       await switchToProject(list[0]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+    } finally {
+      setDeleteConfirmBusy(false);
     }
   };
+
+  const deleteCurrentProject = beginDeleteCurrentProject;
 
   const renameCurrent = async () => {
     const cur = getCurrentProjectId();
@@ -789,7 +821,7 @@ export function GafCoreIDE() {
     setOpenTabs(next.length ? next : ([files[0]?.name].filter(Boolean) as string[]));
   };
 
-  const onDeploy = async (): Promise<GafcoreDeployResult> => {
+  const onDeploy = async (opts?: { approvalId?: string }): Promise<GafcoreDeployResult> => {
     if (!currentProjectId) {
       throw new Error("Crea o selecciona un proyecto antes de publicar (+ Nuevo).");
     }
@@ -814,6 +846,7 @@ export function GafCoreIDE() {
         projectName,
         files,
         secrets,
+        approvalId: opts?.approvalId,
       });
 
       if (result.ok && result.siteHost) {
@@ -1454,6 +1487,7 @@ export function GafCoreIDE() {
             siteHost={deploySiteHost}
             githubRepo={deployGithubRepo}
             projectId={currentProjectId}
+            projectName={projectName}
             hasProject={Boolean(currentProjectId)}
             githubConfigured={deployGithubReady}
             isUpdating={deploying}
@@ -1956,6 +1990,16 @@ export function GafCoreIDE() {
       />
 
       <GafCoreAuthDialog open={authOpen} onOpenChange={setAuthOpen} initialMode={authMode} />
+      <CriticalActionConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Eliminar proyecto"
+        summary={deletePendingApproval?.summary ?? "Esta acción no se puede deshacer."}
+        risk={deletePendingApproval?.risk ?? null}
+        confirmLabel="Eliminar definitivamente"
+        busy={deleteConfirmBusy}
+        onConfirm={confirmDeleteCurrentProject}
+      />
 
       <CreditsOutModal
         open={creditsModalOpen}

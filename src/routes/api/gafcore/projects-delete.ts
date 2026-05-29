@@ -5,6 +5,7 @@ import { deleteProjectForUser } from "@/lib/gafcore-projects-api.server";
 
 const BodySchema = z.object({
   projectId: z.string().uuid(),
+  approvalId: z.string().uuid().optional(),
 });
 
 export const Route = createFileRoute("/api/gafcore/projects-delete")({
@@ -26,7 +27,11 @@ export const Route = createFileRoute("/api/gafcore/projects-delete")({
           return json({ ok: false, error: "invalid_body" }, 400);
         }
 
-        const result = await deleteProjectForUser(userId, parsed.data.projectId);
+        const result = await deleteProjectForUser(
+          userId,
+          parsed.data.projectId,
+          parsed.data.approvalId,
+        );
         if (!result.ok) {
           return json({ ok: false, error: result.error }, 400);
         }

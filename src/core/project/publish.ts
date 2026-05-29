@@ -17,6 +17,7 @@ export type AutoPublishInput = {
   projectName: string;
   files: FileItem[];
   secrets?: { name: string; value: string }[];
+  approvalId?: string;
 };
 
 /**
@@ -28,6 +29,7 @@ export async function autoPublishProject(input: AutoPublishInput): Promise<Gafco
       projectId: input.projectId,
       projectName: input.projectName,
       files: input.files,
+      approvalId: input.approvalId,
     });
     if (server.ok) return server;
     if (isGafcoreProductionHost() && !getIdeConfig().githubToken?.trim()) {
