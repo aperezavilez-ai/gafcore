@@ -245,7 +245,8 @@ function GafcoreProjectsPage() {
       toast.success(`Proyecto «${deleteTarget.name}» eliminado`);
       await refresh();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
+      const msg = e instanceof Error ? e.message : "No se pudo eliminar";
+      toast.error(msg === "invalid_body" ? "Error al confirmar eliminación. Recarga e inténtalo de nuevo." : msg);
     } finally {
       setDeleteConfirmBusy(false);
     }

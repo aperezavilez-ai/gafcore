@@ -5,7 +5,7 @@ import { deleteProjectForUser } from "@/lib/gafcore-projects-api.server";
 
 const BodySchema = z.object({
   projectId: z.string().uuid(),
-  approvalId: z.string().uuid().optional(),
+  approvalId: z.string().min(1).max(128).optional(),
 });
 
 export const Route = createFileRoute("/api/gafcore/projects-delete")({

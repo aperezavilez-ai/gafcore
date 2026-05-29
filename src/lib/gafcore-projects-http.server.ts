@@ -35,7 +35,7 @@ const CreateBodySchema = z
 
 const DeleteBodySchema = z.object({
   projectId: z.string().uuid(),
-  approvalId: z.string().uuid().optional(),
+  approvalId: z.string().min(1).max(128).optional(),
 });
 
 /** POST /api/gafcore/projects-create */

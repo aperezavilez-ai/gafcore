@@ -14,7 +14,7 @@ const BodySchema = z.object({
   projectId: z.string().uuid(),
   projectName: z.string().min(1).max(200),
   files: z.array(FileSchema).optional(),
-  approvalId: z.string().uuid().optional(),
+  approvalId: z.string().min(1).max(128).optional(),
 });
 
 /**
