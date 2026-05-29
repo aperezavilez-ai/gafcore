@@ -13,6 +13,8 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
 import { GafcorePwaRegister } from "@/components/GafcorePwaRegister";
+import { InstallPrompt } from "@/components/InstallPrompt";
+import { GAFCORE_PWA_THEME_COLOR } from "@/lib/gafcore-pwa.shared";
 import { installServerFnAuth } from "@/lib/server-fn-auth";
 
 if (typeof window !== "undefined") {
@@ -68,7 +70,7 @@ export const Route = createRootRoute({
       { name: "twitter:description", content: "GafCore: crea apps y prototipos con chat, preview en vivo y editor integrado." },
       { property: "og:image", content: `${site}/og-image.png` },
       { name: "twitter:image", content: `${site}/og-image.png` },
-      { name: "theme-color", content: "#6366f1" },
+      { name: "theme-color", content: GAFCORE_PWA_THEME_COLOR },
       ...gafcorePwaMetaTags(),
     ],
     links: [{ rel: "canonical", href: site }, ...gafcoreHeadIconLinks()],
@@ -105,6 +107,7 @@ function RootComponent() {
       <Outlet />
       <ClientOnly>
         <GafcorePwaRegister />
+        <InstallPrompt />
         <ClientRootWidgets />
       </ClientOnly>
     </I18nProvider>

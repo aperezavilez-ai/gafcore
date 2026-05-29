@@ -1,17 +1,23 @@
 {
   "id": "/",
-  "name": "GafCore — Plataforma de creación con IA",
+  "name": "GafCore Ecosystem",
   "short_name": "GafCore",
-  "description": "Crea apps y sitios con IA: chat, preview en vivo y editor integrado.",
+  "description": "Plataforma central del ecosistema GafCore. Gestiona tus proyectos de inteligencia artificial, herramientas avanzadas y software en un solo lugar. Tu idea + IA = Realidad.",
   "start_url": "/gafcore/app",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b0d12",
-  "theme_color": "#6366f1",
+  "background_color": "#0B0914",
+  "theme_color": "#0B0914",
   "lang": "es",
   "categories": ["productivity", "developer"],
   "icons": [
+    {
+      "src": "/gafcore-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/apple-touch-icon.png",
       "sizes": "180x180",
@@ -19,15 +25,15 @@
       "purpose": "any"
     },
     {
+      "src": "/apple-touch-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/favicon.png",
       "sizes": "32x32",
       "type": "image/png"
-    },
-    {
-      "src": "/og-image.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
     }
   ],
   "screenshots": [
