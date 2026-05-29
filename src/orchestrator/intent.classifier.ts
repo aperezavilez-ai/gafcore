@@ -40,6 +40,13 @@ export function classifyUserIntent(
   } else if (LANDING.test(text)) {
     projectType = "landing";
     confidence = Math.max(confidence, 0.68);
+  } else if (
+    /\b(p[aá]gina|pagina|sitio|web|estudio|tatu|restaurante|hotel|cl[ií]nica|negocio|empresa|marca|sal[oó]n|barber|gym|gimnasio)\b/i.test(
+      text,
+    )
+  ) {
+    projectType = "landing";
+    confidence = Math.max(confidence, 0.66);
   } else if (/\b(dashboard|panel de control|métricas|kpi|sidebar)\b/i.test(text)) {
     projectType = "app";
     confidence = Math.max(confidence, 0.72);

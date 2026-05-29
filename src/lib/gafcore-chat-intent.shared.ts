@@ -28,7 +28,7 @@ export function isConversationalOnly(text: string): boolean {
 export function isSubstantiveBuildRequest(text: string): boolean {
   const t = text.trim();
   if (t.length < 8) return false;
-  return /crea|genera|haz|hazme|monta|levanta|añade|agrega|modifica|cambia|landing|tienda|app|aplicaci[oó]n|p[aá]gina|dise[ñn]|imagen|vuelo|viaje|formulario|registro|proyecto|estudio|tatu|m[oó]dulo|sistema|dashboard|saas|web|sitio|profesional/i.test(
+  return /crea|genera|haz|hazme|monta|levanta|añade|agrega|modifica|cambia|construye|construir|desarrolla|implementa|landing|tienda|app|aplicaci[oó]n|p[aá]gina|pagina|sitio|web|dise[ñn]|imagen|vuelo|viaje|formulario|registro|proyecto|estudio|tatu|m[oó]dulo|sistema|dashboard|saas|negocio|empresa|marca|restaurante|hotel|cl[ií]nica|profesional/i.test(
     t,
   );
 }
@@ -36,14 +36,18 @@ export function isSubstantiveBuildRequest(text: string): boolean {
 /** Respuesta de la IA que solo planifica (sin código) — no debe quedarse en preview de bienvenida. */
 export function aiReplyLooksLikePlanOnly(reply: string): boolean {
   const t = reply.trim();
-  if (t.length < 200) return false;
+  if (t.length < 120) return false;
   const planSignals =
-    (/\b(m[oó]dulo|fase|estructura de carpetas|arquitectura|stack|tailwind|lucide)\b/i.test(t) &&
-      /\b(components|views|hooks|admin|cliente|dashboard)\b/i.test(t)) ||
+    (/\b(m[oó]dulo|fase|estructura de carpetas|arquitectura|stack|tailwind|lucide|instalar)\b/i.test(
+      t,
+    ) &&
+      /\b(components|views|hooks|admin|cliente|dashboard|App\.tsx)\b/i.test(t)) ||
     /\bFASE\s*\d/i.test(t) ||
-    /\b\d+\)\s/m.test(t);
+    /\b\d+\)\s/m.test(t) ||
+    /\b(vamos a|implementar[eá]|crear[eá])\s+(un|una|el|la)\s+(m[oó]dulo|sistema|estructura)/i.test(t);
   const hasCodeFence = /```/.test(t);
-  return planSignals && !hasCodeFence;
+  const mentionsFiles = /\bfiles\b/i.test(t) && /\bApp\.tsx\b/i.test(t);
+  return planSignals && !hasCodeFence && !mentionsFiles;
 }
 
 export function buildConversationalInstructionPrefix(userText: string): string {

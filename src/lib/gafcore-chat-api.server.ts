@@ -8,7 +8,6 @@ import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server"
 import {
   gafcoreChatBodySchema,
   buildGafcoreMessages,
-  validateOutputFiles,
   cacheGet,
   cacheSet,
   fetchBalance,
@@ -31,12 +30,9 @@ import {
 import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
-import {
-  extractVisionImageParts,
-  patchProjectFilesVisually,
-  repairGafcoreOutputFiles,
-} from "@/lib/gafcore-media.shared";
+import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
 import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
+import { finalizeGafcoreBuildDelivery } from "@/lib/gafcore-chat-delivery.shared";
 import { buildAiPluginPromptAppend } from "@/extensions/ai-plugins.server";
 import { readProjectBrand } from "@/lib/gafcore-brand.functions";
 import { brandContextBlock } from "@/lib/gafcore-brand.shared";
@@ -46,6 +42,25 @@ const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+}
+
+async function deliverGafcoreChatFiles(
+  instruction: string,
+  contextFiles: ProjFile[],
+  replyRaw: string,
+  rawFiles: unknown,
+): Promise<Array<{ name: string; language?: string; content: string }>> {
+  const delivery = finalizeGafcoreBuildDelivery(
+    instruction,
+    contextFiles,
+    replyRaw,
+    rawFiles,
+  );
+  try {
+    return await enrichGafcoreOutputFiles(delivery.files, contextFiles, instruction);
+  } catch {
+    return delivery.files;
+  }
 }
 
 /** POST /api/gafcore/chat/stream */
@@ -147,25 +162,15 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
         if (!parsedOut.reply && !parsedOut.files) {
           console.warn("[gafcore-chat] stream-fallback non-JSON content len=" + content.length);
         }
-        let safeFiles = repairGafcoreOutputFiles(validateOutputFiles(parsedOut.files));
-        if (safeFiles.length === 0) {
-          const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
-          if (localPatch.length > 0) safeFiles = repairGafcoreOutputFiles(localPatch);
-        }
-        try {
-          safeFiles = await enrichGafcoreOutputFiles(
-            safeFiles,
-            data.files as ProjFile[],
-            data.instruction,
-          );
-        } catch {
-          /* optional */
-        }
+        const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
+        const safeFiles = await deliverGafcoreChatFiles(
+          data.instruction,
+          data.files as ProjFile[],
+          replyRaw,
+          parsedOut.files,
+        );
         const reply = sanitizeUserFacingAiText(
-          softenRoboticReply(
-            data.instruction,
-            typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.",
-          ),
+          softenRoboticReply(data.instruction, replyRaw),
         );
         cacheSet(cacheKey, { reply, files: safeFiles });
         return jsonResponse({ reply, files: safeFiles, fallback: "complete" });
@@ -312,26 +317,16 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     );
   }
 
-  let safeFiles = repairGafcoreOutputFiles(validateOutputFiles(parsedOut.files));
-  if (safeFiles.length === 0) {
-    const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
-    if (localPatch.length > 0) safeFiles = repairGafcoreOutputFiles(localPatch);
-  }
-  try {
-    safeFiles = await enrichGafcoreOutputFiles(
-      safeFiles,
-      data.files as ProjFile[],
-      data.instruction,
-    );
-  } catch {
-    /* enrich opcional */
-  }
+  const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
+  const safeFiles = await deliverGafcoreChatFiles(
+    data.instruction,
+    data.files as ProjFile[],
+    replyRaw,
+    parsedOut.files,
+  );
 
   const reply = sanitizeUserFacingAiText(
-    softenRoboticReply(
-      data.instruction,
-      typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.",
-    ),
+    softenRoboticReply(data.instruction, replyRaw),
   );
 
   cacheSet(cacheKey, { reply, files: safeFiles });

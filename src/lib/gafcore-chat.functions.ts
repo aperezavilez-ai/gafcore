@@ -4,7 +4,6 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   gafcoreChatBodySchema,
   buildGafcoreMessages,
-  validateOutputFiles,
   cacheGet,
   cacheSet,
   fetchBalance,
@@ -25,33 +24,10 @@ import { enforceGafcoreChatRateLimit } from "@/lib/gafcore-api-ratelimit.server"
 import { assertGafcoreProjectAccess } from "@/lib/gafcore-project-access.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
-import {
-  extractVisionImageParts,
-  patchProjectFilesVisually,
-  repairGafcoreOutputFiles,
-} from "@/lib/gafcore-media.shared";
+import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
 import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
 import { shouldBypassGafcoreChatCache, softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
-import { classifyUserIntent } from "@/orchestrator/intent.classifier";
-import { selectTemplateSlug } from "@/orchestrator/template.selector";
-import { loadTemplateFilesBySlug } from "@/lib/gafcore-templates.server";
-
-const BUILD_INTENT_RE =
-  /\b(crea|crear|construye|construir|genera|generar|haz|hacer|monta|levanta|app|aplicaci[oó]n|sitio|web|landing|tienda|e-?commerce|dashboard|saas|proyecto)\b/i;
-
-function shouldBootstrapProjectFromTemplate(
-  instruction: string,
-  currentFiles: ProjFile[],
-  outputFiles: Array<{ name: string; language?: string; content: string }>,
-): boolean {
-  if (outputFiles.length > 0) return false;
-  const text = instruction.trim();
-  if (!text) return false;
-  if (!BUILD_INTENT_RE.test(text)) return false;
-  const appFile = currentFiles.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
-  if (!appFile) return true;
-  return /Bienvenidos a GafCore|gafcore-logo\.png/i.test(appFile.content);
-}
+import { finalizeGafcoreBuildDelivery } from "@/lib/gafcore-chat-delivery.shared";
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -190,11 +166,14 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       };
     }
 
-    let safeFiles = repairGafcoreOutputFiles(validateOutputFiles(parsed.files));
-    if (safeFiles.length === 0) {
-      const localPatch = patchProjectFilesVisually(data.files as ProjFile[], data.instruction);
-      if (localPatch.length > 0) safeFiles = repairGafcoreOutputFiles(localPatch);
-    }
+    const replyRaw = typeof parsed.reply === "string" ? parsed.reply : "Listo.";
+    const delivery = finalizeGafcoreBuildDelivery(
+      data.instruction,
+      data.files as ProjFile[],
+      replyRaw,
+      parsed.files,
+    );
+    let safeFiles = delivery.files;
     try {
       safeFiles = await enrichGafcoreOutputFiles(
         safeFiles,
@@ -204,34 +183,8 @@ export const gafcoreChat = createServerFn({ method: "POST" })
     } catch (e) {
       console.warn("enrichGafcoreOutputFiles:", e);
     }
-    if (shouldBootstrapProjectFromTemplate(data.instruction, data.files as ProjFile[], safeFiles)) {
-      try {
-        const intent = classifyUserIntent(data.instruction, {
-          mode: "build",
-          visualEdit: false,
-        });
-        const templateSlug = selectTemplateSlug(intent);
-        const templateFiles = await loadTemplateFilesBySlug(templateSlug, userId);
-        if (templateFiles.length > 0) {
-          safeFiles = repairGafcoreOutputFiles(templateFiles);
-          console.info(
-            JSON.stringify({
-              event: "gafcore_chat_bootstrap_template",
-              userId,
-              templateSlug,
-              filesOut: safeFiles.length,
-            }),
-          );
-        }
-      } catch (e) {
-        console.warn("bootstrap_template_fallback:", e);
-      }
-    }
     const reply = sanitizeUserFacingAiText(
-      softenRoboticReply(
-        data.instruction,
-        typeof parsed.reply === "string" ? parsed.reply : "Listo.",
-      ),
+      softenRoboticReply(data.instruction, replyRaw),
     );
 
     cacheSet(cacheKey, { reply, files: safeFiles });

@@ -136,11 +136,14 @@ import {
   buildLiteralVisualChangePrefix,
 } from "@/lib/gafcore-chat-intent.shared";
 import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
+import {
+  finalizeGafcoreBuildDelivery,
+  GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
+  GAFCORE_FORCE_FILES_BUILD_PREFIX,
+  outputReplacesWelcome,
+} from "@/lib/gafcore-chat-delivery.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
-import { classifyUserIntent } from "@/orchestrator/intent.classifier";
-import { selectTemplateSlug } from "@/orchestrator/template.selector";
-import { BUILTIN_PROJECT_TEMPLATES } from "@/lib/gafcore-templates.shared";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -148,20 +151,6 @@ type Msg = { role: "user" | "ai"; content: string; ts?: number };
 const CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
-
-function filesFromBuiltinTemplateByInstruction(
-  instruction: string,
-): Array<{ name: string; language?: string; content: string }> {
-  const intent = classifyUserIntent(instruction, { mode: "build", visualEdit: false });
-  const slug = selectTemplateSlug(intent);
-  const tpl = BUILTIN_PROJECT_TEMPLATES.find((t) => t.slug === slug);
-  if (!tpl?.files?.length) return [];
-  return tpl.files.map((f) => ({
-    name: f.name.replace(/^src\//i, "").replace(/^public\//i, ""),
-    language: f.language,
-    content: f.content,
-  }));
-}
 
 async function readSseJsonPayload(
   res: Response,
@@ -1816,10 +1805,21 @@ export function ChatPanel({
     ac: AbortSignal,
     myEpoch: number,
     userTextForTone: string,
+    options?: { preferReliableJson?: boolean },
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
   }> => {
+    if (options?.preferReliableJson) {
+      return fetchGafcoreChatComplete(
+        tok,
+        history,
+        instruction,
+        contextFiles,
+        ac,
+        userTextForTone,
+      );
+    }
     const chatPayload = {
       history,
       instruction,
@@ -2540,8 +2540,11 @@ export function ChatPanel({
     const layoutPrefix = buildLayoutInstructionPrefix(raw);
     const heroBgPrefix = buildHeroBackgroundInstructionPrefix(raw);
     const literalVisualPrefix = buildLiteralVisualChangePrefix(raw);
+    const forceBuildPrefix =
+      effectiveBuild && isSubstantiveBuildRequest(coreText) ? GAFCORE_FORCE_FILES_BUILD_PREFIX : "";
     const instruction =
       conversationalPrefix +
+      forceBuildPrefix +
       creativePrefix +
       functionalPrefix +
       preservePrefix +
@@ -2636,6 +2639,7 @@ export function ChatPanel({
           ac.signal,
           myEpoch,
           raw,
+          { preferReliableJson: isSubstantiveBuildRequest(raw || coreText) },
         );
       }
 
@@ -2646,79 +2650,102 @@ export function ChatPanel({
       );
       setStreamChars(null);
 
-      let filesToApply = repairGeneratedSourceFiles(result.files ?? []);
-      if (effectiveBuild && filesToApply.length === 0) {
-        const localPatch = patchProjectFilesVisually(
-          files.map((f) => ({ name: f.name, language: f.language, content: f.content })),
-          instruction,
+      const contextForDelivery = files.map((f) => ({
+        name: f.name,
+        language: f.language,
+        content: f.content,
+      }));
+
+      let filesToApply: Array<{ name: string; language?: string; content: string }> = [];
+
+      if (effectiveBuild) {
+        let delivery = finalizeGafcoreBuildDelivery(
+          raw || coreText,
+          contextForDelivery,
+          result.reply || "",
+          result.files ?? [],
         );
-        if (localPatch.length > 0) {
-          filesToApply = localPatch;
-          replyText = sanitizeUserFacingAiText(
-            `${replyText}\n\nApliqué el fondo de ciudad en ${localPatch.map((f) => f.name).join(", ")} (parche local; la IA no envió archivos).`,
-          );
-          toast.success("Fondo de ciudad aplicado en el preview", { duration: 5000 });
-        } else if (userWantsHeroBackgroundChange(raw) || /cambia|modifica|añade|agrega|aplica/i.test(raw)) {
-          toast.error("No encontré App.tsx/JSX para parchear. Abre Código y confirma que existe App.tsx.", {
-            duration: 10_000,
-          });
-        } else {
-          const needsWelcomeReplace = files.some(
-            (f) => /^app\.(tsx|jsx)$/i.test(f.name) && isGafcoreDefaultTemplateApp(f.content),
-          );
-          const strictInstruction =
-            FUNCTIONAL_FIRST_BUILD_PREFIX +
-            "[modo build estricto] Debes devolver `files` con proyecto funcional completo. " +
-            "Si no hay cambios, reescribe App.tsx y main.tsx igualmente para inicializar el proyecto. " +
-            (needsWelcomeReplace || aiReplyLooksLikePlanOnly(replyText)
-              ? "OBLIGATORIO: reemplaza la pantalla «Bienvenidos a GafCore» por el proyecto real pedido. " +
-                "Prohibido responder solo con un plan en texto. "
-              : "") +
-            "Prohibido react-router; usa useState para vistas. Prohibido responder con files vacío.\n\n" +
-            (raw || coreText);
-          const strictHistory: ChatMsg[] = [
+        filesToApply = delivery.files;
+
+        const needsCustomize =
+          delivery.source === "template_bootstrap" ||
+          delivery.planOnly ||
+          (filesToApply.length > 0 && !outputReplacesWelcome(contextForDelivery, filesToApply));
+
+        if (needsCustomize && filesToApply.length > 0 && myEpoch === requestEpochRef.current) {
+          toast.message("Personalizando proyecto con IA…", { duration: 8000 });
+          const customizeInstruction = GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX + (raw || coreText);
+          const customizeHistory: ChatMsg[] = [
             ...history,
             { role: "assistant", content: replyText },
-            { role: "user", content: strictInstruction },
+            { role: "user", content: customizeInstruction },
           ];
+          const customized = await requestGafcoreGeneration(
+            tok,
+            customizeHistory,
+            customizeInstruction,
+            filesToApply as FileItem[],
+            ac.signal,
+            myEpoch,
+            raw || coreText,
+            { preferReliableJson: true },
+          );
+          if (myEpoch !== requestEpochRef.current) return;
+          delivery = finalizeGafcoreBuildDelivery(
+            raw || coreText,
+            filesToApply,
+            customized.reply || "",
+            customized.files ?? [],
+          );
+          filesToApply = delivery.files;
+          replyText = sanitizeUserFacingAiText(
+            softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto aplicado al preview.`),
+          );
+        } else if (filesToApply.length === 0) {
+          const strictInstruction =
+            FUNCTIONAL_FIRST_BUILD_PREFIX +
+            GAFCORE_FORCE_FILES_BUILD_PREFIX +
+            (raw || coreText);
           const strictRetry = await requestGafcoreGeneration(
             tok,
-            strictHistory,
+            [
+              ...history,
+              { role: "assistant", content: replyText },
+              { role: "user", content: strictInstruction },
+            ],
             strictInstruction,
             files,
             ac.signal,
             myEpoch,
             raw || coreText,
+            { preferReliableJson: true },
           );
-          const strictFiles = repairGeneratedSourceFiles(strictRetry.files ?? []);
-          if (strictFiles.length > 0) {
-            filesToApply = strictFiles;
-            replyText = sanitizeUserFacingAiText(
-              strictRetry.reply ||
-                `${replyText}\n\nApliqué un reintento automático estricto y ya generé archivos.`,
-            );
-            toast.success("Proyecto generado tras reintento automático", { duration: 6000 });
-          } else {
-            const bootstrapFiles = filesFromBuiltinTemplateByInstruction(raw || coreText);
-            if (bootstrapFiles.length > 0) {
-              filesToApply = bootstrapFiles;
-              replyText = sanitizeUserFacingAiText(
-                `${replyText}\n\nInicialicé automáticamente una base funcional del proyecto para evitar bloqueo. Ahora sigue pidiendo ajustes y funciones.`,
-              );
-              toast.message("Inicialicé base del proyecto para desbloquear el build", {
-                duration: 8000,
-              });
-            } else {
-              toast.error(
-                "El cerebro respondió sin archivos. Intenta de nuevo con un prompt más corto y claro (ej: 'Crea la landing de X').",
-                { duration: 12_000 },
-              );
-              replyText = sanitizeUserFacingAiText(
-                `${replyText}\n\nNo recibí archivos generados en dos intentos automáticos.`,
-              );
-            }
-          }
+          if (myEpoch !== requestEpochRef.current) return;
+          delivery = finalizeGafcoreBuildDelivery(
+            raw || coreText,
+            contextForDelivery,
+            strictRetry.reply || "",
+            strictRetry.files ?? [],
+          );
+          filesToApply = delivery.files;
+          replyText = sanitizeUserFacingAiText(
+            softenRoboticReply(
+              raw,
+              strictRetry.reply || `${replyText}\n\nProyecto generado tras reintento.`,
+            ),
+          );
         }
+
+        if (filesToApply.length > 0) {
+          toast.success("Proyecto aplicado al preview", { duration: 5000 });
+        } else {
+          toast.error(
+            "No pude generar archivos. Prueba: «Crea landing de [tu negocio] con hero y formulario».",
+            { duration: 12_000 },
+          );
+        }
+      } else if (Array.isArray(result.files) && result.files.length > 0) {
+        filesToApply = result.files;
       }
 
       appendMessageDeduped("ai", replyText);
