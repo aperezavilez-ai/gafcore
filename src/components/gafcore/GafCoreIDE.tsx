@@ -10,6 +10,7 @@ import {
   saveProjectFilesDetailed,
   getUserSupabase,
   listSecrets,
+  setProjectSaveSuppressed,
 } from "@/lib/userSupabase";
 import {
   activateProjectRow,
@@ -179,7 +180,7 @@ function ideUserToolbarShortName(
 }
 
 export function GafCoreIDE() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { profile } = useProfile(user?.id);
   const navigate = useNavigate();
   const userShortLabel = ideUserToolbarShortName(user, profile);
@@ -318,6 +319,25 @@ export function GafCoreIDE() {
   const saveErrToastAt = useRef(0);
   const pendingTemplateCreateRef = useRef(false);
   const [creditsModalOpen, setCreditsModalOpen] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    setProjectSaveSuppressed(true);
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    toast.dismiss();
+    await signOut();
+    toast.success("Sesión cerrada");
+    navigate({
+      to: "/gafcore/login",
+      search: { redirect: "/gafcore/app", signedOut: true },
+    });
+  }, [navigate, signOut]);
+
+  useEffect(() => {
+    if (user?.id) setProjectSaveSuppressed(false);
+  }, [user?.id]);
 
   const openNewProjectDialog = useCallback(() => {
     setProjectMenuOpen(false);
@@ -742,7 +762,7 @@ export function GafCoreIDE() {
   }, [loaded, openNewProjectDialog]);
 
   useEffect(() => {
-    if (!loaded || !getUserSupabase() || !currentProjectId) return;
+    if (!loaded || !getUserSupabase() || !currentProjectId || !user?.id) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const result = await saveProjectFilesDetailed(files, currentProjectId);
@@ -763,7 +783,7 @@ export function GafCoreIDE() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [files, loaded, currentProjectId]);
+  }, [files, loaded, currentProjectId, user?.id]);
 
   useEffect(() => {
     if (!currentProjectId) {
@@ -1030,15 +1050,7 @@ export function GafCoreIDE() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onClick={async () => {
-                    const { supabase } = await import("@/integrations/supabase/client");
-                    await supabase.auth.signOut();
-                    toast.success("Sesión cerrada");
-                    navigate({
-                      to: "/gafcore/login",
-                      search: { redirect: "/gafcore/app", signedOut: true },
-                    });
-                  }}
+                  onClick={() => void handleSignOut()}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Cerrar sesión
@@ -1087,15 +1099,7 @@ export function GafCoreIDE() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
-                  onClick={async () => {
-                    const { supabase } = await import("@/integrations/supabase/client");
-                    await supabase.auth.signOut();
-                    toast.success("Sesión cerrada");
-                    navigate({
-                      to: "/gafcore/login",
-                      search: { redirect: "/gafcore/app", signedOut: true },
-                    });
-                  }}
+                  onClick={() => void handleSignOut()}
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Cerrar sesión
@@ -1532,15 +1536,7 @@ export function GafCoreIDE() {
             variant="ghost"
             title="Cerrar sesión"
             aria-label="Cerrar sesión"
-            onClick={async () => {
-              const { supabase } = await import("@/integrations/supabase/client");
-              await supabase.auth.signOut();
-              toast.success("Sesión cerrada");
-              navigate({
-                to: "/gafcore/login",
-                search: { redirect: "/gafcore/app", signedOut: true },
-              });
-            }}
+            onClick={() => void handleSignOut()}
             className="hidden h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive lg:inline-flex"
           >
             <LogOut className="h-4 w-4" />

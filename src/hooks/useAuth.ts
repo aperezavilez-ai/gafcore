@@ -112,6 +112,11 @@ export function useAuth() {
   const signOut = useCallback(async () => {
     if (!isSupabaseConfigured()) return;
     try {
+      const { setProjectSaveSuppressed } = await import("@/lib/userSupabase");
+      setProjectSaveSuppressed(true);
+      if (typeof window !== "undefined") {
+        void import("sonner").then(({ toast }) => toast.dismiss());
+      }
       await supabase.auth.signOut();
     } catch {
       applySession(null, false);

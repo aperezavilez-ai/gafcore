@@ -6,6 +6,23 @@ const CFG_KEY = "ide.supabase.config";
 const PROJECT_KEY = "ide.project.id";
 
 let cached: { url: string; key: string; client: SupabaseClient } | null = null;
+let projectSaveSuppressed = false;
+
+/** Evita escrituras a project_files durante cierre de sesión (RLS sin auth). */
+export function setProjectSaveSuppressed(value: boolean) {
+  projectSaveSuppressed = value;
+}
+
+async function hasActiveAuthSession(sb: SupabaseClient): Promise<boolean> {
+  const { data } = await sb.auth.getSession();
+  return !!data.session?.access_token;
+}
+
+function isRlsAuthError(message: string | undefined): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return m.includes("row-level security") || m.includes("jwt");
+}
 
 export function getUserSupabase(): SupabaseClient | null {
   try {
@@ -235,6 +252,7 @@ export async function upsertSingleProjectFile(
 ): Promise<{ ok: boolean; detail?: string }> {
   const sb = getUserSupabase();
   if (!sb) return { ok: false, detail: "no_client" };
+  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
   const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
   if (!owned?.id) return { ok: false, detail: "project_not_visible" };
@@ -250,6 +268,9 @@ export async function upsertSingleProjectFile(
     { onConflict: "project_id,name" },
   );
   if (error) {
+    if (projectSaveSuppressed || isRlsAuthError(error.message)) {
+      if (!(await hasActiveAuthSession(sb))) return { ok: true };
+    }
     console.error("[Supabase] upsert single file:", error);
     return { ok: false, detail: error.message };
   }
@@ -262,6 +283,7 @@ export async function saveProjectFilesDetailed(
 ): Promise<SaveProjectFilesResult> {
   const sb = getUserSupabase();
   if (!sb) return { ok: false, reason: "no_client" };
+  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
@@ -279,6 +301,9 @@ export async function saveProjectFilesDetailed(
 
   const { error: delErr } = await sb.from("project_files").delete().eq("project_id", projectId);
   if (delErr) {
+    if (projectSaveSuppressed || isRlsAuthError(delErr.message)) {
+      if (!(await hasActiveAuthSession(sb))) return { ok: true };
+    }
     console.error("[Supabase] delete files error:", delErr);
     return { ok: false, reason: "delete_failed", detail: delErr.message };
   }
@@ -296,6 +321,9 @@ export async function saveProjectFilesDetailed(
 
   const { error: insErr } = await sb.from("project_files").insert(rows);
   if (insErr) {
+    if (projectSaveSuppressed || isRlsAuthError(insErr.message)) {
+      if (!(await hasActiveAuthSession(sb))) return { ok: true };
+    }
     console.error("[Supabase] insert files error:", insErr);
     return { ok: false, reason: "insert_failed", detail: insErr.message };
   }
