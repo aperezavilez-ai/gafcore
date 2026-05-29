@@ -277,10 +277,20 @@ function isProbablyImageFile(f: File): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(f.name);
 }
 
+/** PNG/WebP/GIF/SVG suelen llevar transparencia — no convertir a JPEG. */
+function fileLikelyHasAlpha(file: File): boolean {
+  const t = (file.type || "").toLowerCase();
+  if (t === "image/png" || t === "image/webp" || t === "image/gif" || t === "image/svg+xml") {
+    return true;
+  }
+  return /\.(png|webp|gif|svg)$/i.test(file.name);
+}
+
 function dataUrlFromImageFileViaCanvas(
   file: File,
   maxEdge: number,
   quality: number,
+  opts?: { preserveAlpha?: boolean },
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -300,8 +310,14 @@ function dataUrlFromImageFileViaCanvas(
           reject(new Error("no_canvas"));
           return;
         }
+        if (!opts?.preserveAlpha) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, width, height);
+        }
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        const dataUrl = opts?.preserveAlpha
+          ? canvas.toDataURL("image/png")
+          : canvas.toDataURL("image/jpeg", quality);
         URL.revokeObjectURL(url);
         resolve(dataUrl);
       } catch (e) {
@@ -317,16 +333,37 @@ function dataUrlFromImageFileViaCanvas(
   });
 }
 
-async function compressChatImageFile(file: File): Promise<string> {
+async function compressChatImageFile(
+  file: File,
+): Promise<{ dataUrl: string; ext: "png" | "jpg" }> {
+  const preserveAlpha = fileLikelyHasAlpha(file);
+  if (preserveAlpha) {
+    let edge = 1280;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const dataUrl = await dataUrlFromImageFileViaCanvas(file, edge, 0.82, {
+        preserveAlpha: true,
+      });
+      if (dataUrl.length <= CHAT_IMAGE_DATA_URL_MAX_CHARS) {
+        return { dataUrl, ext: "png" };
+      }
+      edge = Math.round(edge * 0.72);
+    }
+    const dataUrl = await dataUrlFromImageFileViaCanvas(file, 480, 0.82, {
+      preserveAlpha: true,
+    });
+    return { dataUrl, ext: "png" };
+  }
+
   let q = 0.82;
   let edge = 1280;
   for (let attempt = 0; attempt < 7; attempt++) {
     const dataUrl = await dataUrlFromImageFileViaCanvas(file, edge, q);
-    if (dataUrl.length <= CHAT_IMAGE_DATA_URL_MAX_CHARS) return dataUrl;
+    if (dataUrl.length <= CHAT_IMAGE_DATA_URL_MAX_CHARS) return { dataUrl, ext: "jpg" };
     q = Math.max(0.38, q - 0.1);
     edge = Math.round(edge * 0.78);
   }
-  return dataUrlFromImageFileViaCanvas(file, 512, 0.38);
+  const dataUrl = await dataUrlFromImageFileViaCanvas(file, 512, 0.38);
+  return { dataUrl, ext: "jpg" };
 }
 
 export function ChatPanel({
@@ -797,14 +834,14 @@ export function ChatPanel({
       return;
     }
     try {
-      const dataUrl = await compressChatImageFile(file);
+      const { dataUrl, ext } = await compressChatImageFile(file);
       if (dataUrl.length > CHAT_IMAGE_DATA_URL_MAX_CHARS + 500) {
         toast.error(
           "La imagen sigue siendo demasiado grande tras comprimir. Prueba otra más pequeña.",
         );
         return;
       }
-      const relName = `assets/gafcore-ref-${Date.now()}.jpg`;
+      const relName = `assets/gafcore-ref-${Date.now()}.${ext}`;
       const item: FileItem = {
         name: relName,
         language: "plaintext",
@@ -969,7 +1006,9 @@ export function ChatPanel({
             const res = await fetch(m[1]);
             const blob = await res.blob();
             await applyChatImageFromBlob(
-              new File([blob], "pegado.jpg", { type: blob.type || "image/jpeg" }),
+              new File([blob], `pegado.${blob.type?.includes("png") ? "png" : "jpg"}`, {
+                type: blob.type || "image/png",
+              }),
               "Imagen pegada",
             );
           } catch {
