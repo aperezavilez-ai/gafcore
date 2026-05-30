@@ -53,6 +53,7 @@ function GafCoreLoginPage() {
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const loginFormRef = useRef<HTMLFormElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
   const supabaseReady = isSupabaseConfigured();
   /** Cambia al cerrar sesión para resetear inputs no controlados (autofill). */
   const formKey = signedOut ? "signed-out" : "login";
@@ -112,8 +113,10 @@ function GafCoreLoginPage() {
 
   const syncAutofillFromDom = useCallback(() => {
     const creds = readLoginCredentials(loginFormRef.current, { email, password });
+    const pwFromRef = passwordInputRef.current?.value ?? "";
     if (creds.email && creds.email !== email) setEmail(creds.email);
-    if (creds.password && creds.password !== password) setPassword(creds.password);
+    const pw = pwFromRef || creds.password;
+    if (pw && pw !== password) setPassword(pw);
   }, [email, password]);
 
   useEffect(() => {
@@ -134,23 +137,28 @@ function GafCoreLoginPage() {
   const runLogin = async (form?: HTMLFormElement | null) => {
     syncAutofillFromDom();
     const creds = readLoginCredentials(form ?? loginFormRef.current, { email, password });
+    const passwordValue = passwordInputRef.current?.value || creds.password;
     setError("");
     setMessage("");
+    if (!creds.email || !passwordValue) {
+      setError("Escribe tu correo y contraseña (si usas autofill, haz clic en el campo contraseña antes de Entrar).");
+      return;
+    }
     setLoading(true);
     try {
       const result = await gafcoreLoginWithPassword({
         email: creds.email,
-        password: creds.password,
+        password: passwordValue,
         redirectTo,
       });
       if (!result.ok) {
         setError(result.error);
+        setLoading(false);
         return;
       }
       gafcoreLoginRedirectNow(result.redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.");
-    } finally {
       setLoading(false);
     }
   };
@@ -371,6 +379,7 @@ function GafCoreLoginPage() {
                       <div className="relative">
                         <Lock size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
+                          ref={passwordInputRef}
                           id="gc-pw"
                           name="password"
                           type={showPw ? "text" : "password"}
@@ -378,6 +387,7 @@ function GafCoreLoginPage() {
                           defaultValue=""
                           onChange={(e) => setPassword(e.target.value)}
                           onInput={(e) => setPassword(e.currentTarget.value)}
+                          onFocus={syncAutofillFromDom}
                           required
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
@@ -394,9 +404,24 @@ function GafCoreLoginPage() {
                       </div>
                     </div>
 
-                    <button type="submit" disabled={loading} className="auth-grad-btn mt-2">
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="auth-grad-btn mt-2"
+                      onClick={() => syncAutofillFromDom()}
+                    >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
+                    <p className={`text-center text-xs ${subtleText}`}>
+                      Admin:{" "}
+                      <Link
+                        to="/gafcore/login"
+                        search={{ redirect: "/gafcore/admin/ops", email: "alfonsoavilery@icloud.com" }}
+                        className="text-violet-400 hover:underline"
+                      >
+                        entrar a Ops
+                      </Link>
+                    </p>
                   </form>
 
                   <button

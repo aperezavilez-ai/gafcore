@@ -31,6 +31,10 @@ BEGIN
     VALUES (r.user_id, 'admin'::public.app_role)
     ON CONFLICT (user_id, role) DO NOTHING;
 
+    INSERT INTO public.profiles (user_id, email)
+    VALUES (r.user_id, r.email)
+    ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email, updated_at = now();
+
     INSERT INTO public.user_credits (user_id, balance, monthly_allowance, daily_limit)
     VALUES (r.user_id, 1000, 1000, 1000)
     ON CONFLICT (user_id) DO UPDATE SET

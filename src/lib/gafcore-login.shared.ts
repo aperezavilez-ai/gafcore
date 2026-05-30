@@ -2,8 +2,19 @@
  * @locked Flujo de inicio de sesión GafCore (email + contraseña).
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
+import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
+
+async function ensureGafcoreProfile(user: User): Promise<void> {
+  await supabase.from("profiles").upsert(
+    {
+      user_id: user.id,
+      email: user.email ?? null,
+    },
+    { onConflict: "user_id", ignoreDuplicates: true },
+  );
+}
 
 export function formatGafcoreSignInError(raw: string): string {
   const m = raw.trim();
@@ -84,12 +95,14 @@ export async function gafcoreLoginWithPassword(input: {
   }
 
   if (data.session?.user) {
+    await ensureGafcoreProfile(data.session.user);
     return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };
   }
 
   for (let i = 0; i < 15; i++) {
     const { data: sessionData } = await supabase.auth.getSession();
     if (sessionData.session?.user) {
+      await ensureGafcoreProfile(sessionData.session.user);
       return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };
     }
     await new Promise((r) => setTimeout(r, 80));
