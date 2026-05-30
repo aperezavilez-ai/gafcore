@@ -162,7 +162,11 @@ function runtimeEnvDiag(): Response {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     ensureSupabaseSsrEnv();
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (request.method === "GET" && path === "/") {
+      return Response.redirect(`${url.origin}/gafcore`, 307);
+    }
     const publicAsset = servePublicStatic(path);
     if (publicAsset) return publicAsset;
     if (path === "/api/__runtime-diag") {

@@ -2,6 +2,13 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "framework": null,
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/gafcore",
+      "permanent": false
+    }
+  ],
   "crons": [
     {
       "path": "/api/gafcore/workflow/drain",
