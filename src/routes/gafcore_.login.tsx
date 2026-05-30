@@ -72,8 +72,9 @@ function GafCoreLoginPage() {
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const loginFormRef = useRef<HTMLFormElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+  const emailPrefilledFromUrl = useRef(false);
   const supabaseReady = isSupabaseConfigured();
-  /** Cambia al cerrar sesión para resetear inputs no controlados (autofill). */
+  /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
 
   const cleanLoginUrl = useCallback(
@@ -103,7 +104,10 @@ function GafCoreLoginPage() {
       cleanLoginUrl(mail);
       return;
     }
-    if (emailFromUrl && !signedOut) setEmail(emailFromUrl);
+    if (emailFromUrl && !signedOut && !emailPrefilledFromUrl.current) {
+      emailPrefilledFromUrl.current = true;
+      setEmail(emailFromUrl);
+    }
   }, [emailFromUrl, signedOut, cleanLoginUrl]);
 
   useEffect(() => {
@@ -130,19 +134,13 @@ function GafCoreLoginPage() {
     };
   }, []);
 
+  /** Solo al enviar o al enfocar: lee autofill sin pisar lo que el usuario acaba de borrar. */
   const syncAutofillFromDom = useCallback(() => {
     const creds = readLoginCredentials(loginFormRef.current, { email, password });
-    const pwFromRef = passwordInputRef.current?.value ?? "";
-    if (creds.email && creds.email !== email) setEmail(creds.email);
-    const pw = pwFromRef || creds.password;
-    if (pw && pw !== password) setPassword(pw);
+    if (creds.email && !email) setEmail(creds.email);
+    const pw = passwordInputRef.current?.value || creds.password;
+    if (pw && !password) setPassword(pw);
   }, [email, password]);
-
-  useEffect(() => {
-    syncAutofillFromDom();
-    const t = window.setInterval(syncAutofillFromDom, 400);
-    return () => window.clearInterval(t);
-  }, [syncAutofillFromDom]);
 
   const switchAccount = async () => {
     setSwitching(true);
@@ -237,9 +235,9 @@ function GafCoreLoginPage() {
       <div className="relative z-[1] flex w-full flex-1 flex-col justify-center px-4 py-8 sm:py-12 lg:justify-start lg:pt-12 lg:pb-12">
         <div className="relative mx-auto w-full max-w-md lg:max-w-6xl">
           <div className="mb-4 lg:mb-6">
-            <Link to="/gafcore" className={`inline-flex items-center gap-1.5 text-sm ${subtleText} hover:opacity-80`}>
+            <a href="/gafcore" className={`inline-flex items-center gap-1.5 text-sm ${subtleText} hover:opacity-80`}>
               <ArrowLeft size={16} /> Volver a GafCore
-            </Link>
+            </a>
           </div>
 
           <div className="grid gap-8 lg:grid-cols-[1.05fr_minmax(0,440px)] lg:items-center lg:gap-14">
@@ -373,8 +371,6 @@ function GafCoreLoginPage() {
                     ref={loginFormRef}
                     id="gc-login-form"
                     className="space-y-4"
-                    method="post"
-                    action="/gafcore/login"
                     onSubmit={handleSubmit}
                     autoComplete="on"
                     noValidate
@@ -411,10 +407,8 @@ function GafCoreLoginPage() {
                           name="password"
                           type={showPw ? "text" : "password"}
                           autoComplete="current-password"
-                          defaultValue=""
+                          value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          onInput={(e) => setPassword(e.currentTarget.value)}
-                          onFocus={syncAutofillFromDom}
                           required
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
@@ -433,23 +427,29 @@ function GafCoreLoginPage() {
 
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={loading || !supabaseReady}
                       className="auth-grad-btn mt-2"
-                      onClick={() => syncAutofillFromDom()}
                     >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
                     <p className={`text-center text-xs ${subtleText}`}>
-                      Admin (correo en Supabase:{" "}
-                      <span className="font-mono text-violet-300">alfonsoavilery@icloud.com</span>
-                      , no «avilez» ni «aviery»):{" "}
-                      <Link
-                        to="/gafcore/login"
-                        search={{ redirect: "/gafcore/admin/ops", email: "alfonsoavilery@icloud.com" }}
+                      Admin: correo{" "}
+                      <span className="font-mono text-violet-300">alfonsoavilery@icloud.com</span>{" "}
+                      (no «avilez» / «aviery»).{" "}
+                      <button
+                        type="button"
                         className="text-violet-400 hover:underline"
+                        onClick={() => {
+                          setEmail("alfonsoavilery@icloud.com");
+                          void navigate({
+                            to: "/gafcore/login",
+                            search: { redirect: "/gafcore/admin/ops" },
+                            replace: true,
+                          });
+                        }}
                       >
-                        entrar a Ops
-                      </Link>
+                        Preparar acceso Ops
+                      </button>
                     </p>
                   </form>
 
@@ -465,9 +465,12 @@ function GafCoreLoginPage() {
 
                   <p className={`mt-5 text-center text-sm ${subtleText}`}>
                     ¿No tienes cuenta?{" "}
-                    <Link to="/gafcore/register" search={{ redirect: redirectTo }} className="font-semibold text-violet-400 hover:underline">
+                    <a
+                      href={`/gafcore/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""}`}
+                      className="font-semibold text-violet-400 hover:underline"
+                    >
                       Crea una
-                    </Link>
+                    </a>
                   </p>
                 </div>
               </div>
