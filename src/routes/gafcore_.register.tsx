@@ -9,7 +9,6 @@ import { assertGafcoreSignupAllowed } from "@/lib/gafcore-register.functions";
 import { clearPlanChoicePending, setPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { TurnstileWidget, isTurnstileSiteKeyConfigured } from "@/components/TurnstileWidget";
-import { authInputAntiAutofill } from "@/lib/gafcore-auth-input.shared";
 
 type AccountType = "user" | "demo" | "admin";
 
@@ -269,7 +268,6 @@ function GafCoreRegisterPage() {
                     required
                     placeholder="Escribe tu correo"
                     className={`h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
-                    {...authInputAntiAutofill}
                   />
                 </div>
               </div>
@@ -291,7 +289,6 @@ function GafCoreRegisterPage() {
                     required
                     placeholder="Crea una contraseña"
                     className={`h-12 w-full rounded-xl border pl-11 pr-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
-                    {...authInputAntiAutofill}
                   />
                   <button
                     type="button"

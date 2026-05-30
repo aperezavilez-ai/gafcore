@@ -12,7 +12,6 @@ import {
   loginUrlHasForbiddenParams,
 } from "@/lib/gafcore-login.shared";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
-import { authInputAntiAutofill } from "@/lib/gafcore-auth-input.shared";
 import { initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
@@ -373,7 +372,6 @@ function GafCoreLoginPage() {
                           required
                           placeholder="tu@correo.com"
                           className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
-                          {...authInputAntiAutofill}
                         />
                       </div>
                     </div>
@@ -388,7 +386,7 @@ function GafCoreLoginPage() {
                           id="gc-pw"
                           name="gafcore_password"
                           type={showPw ? "text" : "password"}
-                          autoComplete="new-password"
+                          autoComplete="off"
                           data-1p-ignore
                           data-lpignore="true"
                           value={password}
@@ -396,7 +394,6 @@ function GafCoreLoginPage() {
                           required
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
-                          {...authInputAntiAutofill}
                         />
                         <button
                           type="button"
@@ -425,7 +422,7 @@ function GafCoreLoginPage() {
                       >
                         panel Ops
                       </a>
-                      . Escribe tu correo y contraseña arriba (campos siempre en blanco al abrir).
+                      .
                     </p>
                   </form>
 
