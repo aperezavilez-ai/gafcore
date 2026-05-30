@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
@@ -7,9 +7,9 @@ import {
   gafcoreLoginRedirectNow,
   gafcoreLoginWithPassword,
   normalizeGafcoreLoginEmail,
-  readLoginCredentials,
   stripSecretsFromLoginUrl,
   loginUrlHasForbiddenParams,
+  buildSanitizedLoginUrl,
 } from "@/lib/gafcore-login.shared";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { initAuthOnce } from "@/hooks/useAuth";
@@ -64,8 +64,6 @@ function GafCoreLoginPage() {
   const { redirect, signedOut } = search;
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
-  const loginFormRef = useRef<HTMLFormElement>(null);
-  const passwordInputRef = useRef<HTMLInputElement>(null);
   const supabaseReady = isSupabaseConfigured();
   /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
@@ -83,20 +81,15 @@ function GafCoreLoginPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
+    if (!loginUrlHasForbiddenParams(url)) return;
     const hadPasswordInUrl =
       url.searchParams.has("password") ||
       url.searchParams.has("pwd") ||
       url.searchParams.has("pass") ||
       url.searchParams.has("gafcore_password");
-    if (stripSecretsFromLoginUrl() || loginUrlHasForbiddenParams(url)) {
-      if (hadPasswordInUrl) {
-        setUrlPasswordWarning(true);
-        setPassword("");
-      }
-      setEmail("");
-      cleanLoginUrl();
-    }
-  }, [cleanLoginUrl]);
+    if (hadPasswordInUrl) setUrlPasswordWarning(true);
+    window.location.replace(buildSanitizedLoginUrl(url));
+  }, []);
 
   useEffect(() => {
     if (!signedOut) return;
@@ -131,22 +124,20 @@ function GafCoreLoginPage() {
     setSwitching(false);
   };
 
-  const runLogin = async (form?: HTMLFormElement | null) => {
-    const creds = readLoginCredentials(form ?? loginFormRef.current, { email, password });
-    const passwordValue = passwordInputRef.current?.value || creds.password;
+  const runLogin = async () => {
     setError("");
     setMessage("");
-    if (!creds.email || !passwordValue) {
-      setError("Escribe tu correo y contraseña (si usas autofill, haz clic en el campo contraseña antes de Entrar).");
+    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(email);
+    if (typoHint) setMessage(typoHint);
+    if (!loginEmail || !password) {
+      setError("Escribe tu correo y contraseña.");
       return;
     }
-    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(creds.email);
-    if (typoHint) setMessage(typoHint);
     setLoading(true);
     try {
       const result = await gafcoreLoginWithPassword({
         email: loginEmail,
-        password: passwordValue,
+        password,
         redirectTo,
       });
       if (!result.ok) {
@@ -164,14 +155,8 @@ function GafCoreLoginPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    void runLogin(e.currentTarget);
-  };
-
   const handlePasswordReset = async () => {
-    const creds = readLoginCredentials(loginFormRef.current, { email, password });
-    const normalizedEmail = creds.email.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       setError("Escribe tu correo para enviarte el enlace.");
       return;
@@ -344,16 +329,15 @@ function GafCoreLoginPage() {
                     <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
                   </div>
 
-                  <form
+                  <div
                     key={formKey}
-                    ref={loginFormRef}
-                    id="gc-login-form"
                     className="space-y-4"
-                    method="post"
-                    action="/gafcore/login"
-                    onSubmit={handleSubmit}
-                    autoComplete="off"
-                    noValidate
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void runLogin();
+                      }
+                    }}
                   >
                     <div>
                       <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-email">
@@ -363,14 +347,10 @@ function GafCoreLoginPage() {
                         <Mail size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-email"
-                          name="gafcore_email"
                           type="email"
                           autoComplete="off"
-                          data-1p-ignore
-                          data-lpignore="true"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          required
                           placeholder="tu@correo.com"
                           className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                         />
@@ -383,15 +363,11 @@ function GafCoreLoginPage() {
                       <div className="relative">
                         <Lock size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
-                          ref={passwordInputRef}
                           id="gc-pw"
                           type={showPw ? "text" : "password"}
                           autoComplete="off"
-                          data-1p-ignore
-                          data-lpignore="true"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          required
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                         />
@@ -408,23 +384,14 @@ function GafCoreLoginPage() {
                     </div>
 
                     <button
-                      type="submit"
+                      type="button"
                       disabled={loading || !supabaseReady}
                       className="auth-grad-btn mt-2"
+                      onClick={() => void runLogin()}
                     >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
-                    <p className={`text-center text-xs ${subtleText}`}>
-                      Tras entrar, administradores van a{" "}
-                      <a
-                        href="/gafcore/login?redirect=%2Fgafcore%2Fadmin%2Fops"
-                        className="text-violet-400 hover:underline"
-                      >
-                        panel Ops
-                      </a>
-                      .
-                    </p>
-                  </form>
+                  </div>
 
                   <button
                     type="button"
