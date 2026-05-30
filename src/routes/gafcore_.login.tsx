@@ -71,6 +71,7 @@ function GafCoreLoginPage() {
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const loginFormRef = useRef<HTMLFormElement>(null);
   const supabaseReady = isSupabaseConfigured();
 
   const cleanLoginUrl = useCallback(
@@ -166,84 +167,97 @@ function GafCoreLoginPage() {
     setSwitching(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const emailEl = form.elements.namedItem("email") as HTMLInputElement | null;
-    const passwordEl = form.elements.namedItem("password") as HTMLInputElement | null;
-    const normalizedEmail = (emailEl?.value ?? email).trim().toLowerCase();
-    const currentPassword = passwordEl?.value ?? password;
+  const performLogin = useCallback(
+    async (form?: HTMLFormElement | null) => {
+      const target = form ?? loginFormRef.current;
+      const emailEl = target?.elements.namedItem("email") as HTMLInputElement | null;
+      const passwordEl = target?.elements.namedItem("password") as HTMLInputElement | null;
+      const normalizedEmail = (emailEl?.value ?? email).trim().toLowerCase();
+      const currentPassword = passwordEl?.value ?? password;
 
-    setError("");
-    setMessage("");
-    if (!supabaseReady) {
-      const msg =
-        "Falta configurar Supabase en el servidor (VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel).";
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
-    if (!normalizedEmail || !currentPassword) {
-      const msg = "Escribe tu correo y contraseña para iniciar sesión.";
-      setError(msg);
-      toast.error(msg);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const signInTask = supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password: currentPassword,
-      });
-      const timeoutTask = new Promise<never>((_, reject) => {
-        window.setTimeout(
-          () => reject(new Error("La conexión tardó demasiado. Revisa tu internet e intenta de nuevo.")),
-          18_000,
-        );
-      });
-      const { data: signInData, error: authError } = await Promise.race([signInTask, timeoutTask]);
-
-      if (authError) {
-        const msg = formatGafcoreSignInError(authError.message);
-        setError(msg);
-        toast.error(msg);
-        return;
-      }
-
-      if (signInData.session) {
-        toast.success("Sesión iniciada. Entrando…");
-        window.location.assign(redirectTo);
-        return;
-      }
-
-      let sessionOk = false;
-      for (let i = 0; i < 40; i++) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.user) {
-          sessionOk = true;
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 100));
-      }
-
-      if (!sessionOk) {
+      setError("");
+      setMessage("");
+      if (!supabaseReady) {
         const msg =
-          "El inicio de sesión respondió pero no se guardó la sesión. Permite cookies/almacenamiento para gafcore.com o prueba otro navegador.";
+          "Falta configurar Supabase en el servidor (VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel).";
+        setError(msg);
+        toast.error(msg);
+        return;
+      }
+      if (!normalizedEmail || !currentPassword) {
+        const msg = "Escribe tu correo y contraseña para iniciar sesión.";
         setError(msg);
         toast.error(msg);
         return;
       }
 
-      toast.success("Sesión iniciada. Entrando…");
-      window.location.assign(redirectTo);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true);
+      try {
+        const signInTask = supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: currentPassword,
+        });
+        const timeoutTask = new Promise<never>((_, reject) => {
+          window.setTimeout(
+            () => reject(new Error("La conexión tardó demasiado. Revisa tu internet e intenta de nuevo.")),
+            18_000,
+          );
+        });
+        const { data: signInData, error: authError } = await Promise.race([signInTask, timeoutTask]);
+
+        if (authError) {
+          const msg = formatGafcoreSignInError(authError.message);
+          setError(msg);
+          toast.error(msg);
+          return;
+        }
+
+        const goToApp = () => {
+          const dest =
+            redirectTo.startsWith("http") ? redirectTo : `${window.location.origin}${redirectTo.startsWith("/") ? redirectTo : `/${redirectTo}`}`;
+          window.location.href = dest;
+        };
+
+        if (signInData.session) {
+          toast.success("Sesión iniciada. Entrando…");
+          goToApp();
+          return;
+        }
+
+        let sessionOk = false;
+        for (let i = 0; i < 40; i++) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.user) {
+            sessionOk = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+
+        if (!sessionOk) {
+          const msg =
+            "El inicio de sesión respondió pero no se guardó la sesión. Permite cookies/almacenamiento para gafcore.com o prueba otro navegador.";
+          setError(msg);
+          toast.error(msg);
+          return;
+        }
+
+        toast.success("Sesión iniciada. Entrando…");
+        goToApp();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.";
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [email, password, redirectTo, supabaseReady],
+  );
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    void performLogin(e.currentTarget);
   };
 
   const handlePasswordReset = async () => {
@@ -395,7 +409,13 @@ function GafCoreLoginPage() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => window.location.replace(redirectTo)}
+                    onClick={() => {
+                      const dest =
+                        redirectTo.startsWith("http")
+                          ? redirectTo
+                          : `${window.location.origin}${redirectTo.startsWith("/") ? redirectTo : `/${redirectTo}`}`;
+                      window.location.href = dest;
+                    }}
                     className="rounded-md bg-violet-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-400"
                   >
                     Continuar a GafCore
@@ -419,9 +439,9 @@ function GafCoreLoginPage() {
             </div>
 
             <form
+              ref={loginFormRef}
+              id="gc-login-form"
               className="space-y-4"
-              method="post"
-              action="#"
               onSubmit={handleSubmit}
               autoComplete="on"
               noValidate
@@ -500,7 +520,12 @@ function GafCoreLoginPage() {
                 </div>
               </div>
 
-              <button type="submit" disabled={loading} className="auth-grad-btn mt-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void performLogin()}
+                className="auth-grad-btn mt-2"
+              >
                 {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
               </button>
             </form>

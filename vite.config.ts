@@ -122,6 +122,8 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "127.0.0.1",
       port: 5174,
+      // Abre el login en el navegador al arrancar `npm run dev`.
+      open: "/gafcore/login",
       // Si queda un Vite zombie en 5174, usar 5175… sin fallar el arranque.
       strictPort: false,
       hmr: {
