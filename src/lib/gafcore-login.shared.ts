@@ -85,6 +85,7 @@ const LOGIN_URL_FORBIDDEN_PARAMS = [
   "password",
   "pwd",
   "pass",
+  "email",
   "access_token",
   "refresh_token",
   "token",

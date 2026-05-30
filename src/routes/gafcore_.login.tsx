@@ -12,6 +12,7 @@ import {
   loginUrlHasForbiddenParams,
 } from "@/lib/gafcore-login.shared";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
+import { authInputAntiAutofill } from "@/lib/gafcore-auth-input.shared";
 import { initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
@@ -22,7 +23,7 @@ if (typeof window !== "undefined") {
 export const Route = createFileRoute("/gafcore_/login")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { redirect?: string; signedOut?: boolean; email?: string } => {
+  ): { redirect?: string; signedOut?: boolean } => {
     const redirect =
       typeof search.redirect === "string" && search.redirect.startsWith("/") && !search.redirect.startsWith("//")
         ? search.redirect
@@ -30,23 +31,17 @@ export const Route = createFileRoute("/gafcore_/login")({
     const raw = search.signedOut;
     const signedOut =
       raw === true || raw === "true" || raw === "1" || raw === 1 || raw === "yes";
-    const email =
-      typeof search.email === "string" && search.email.includes("@")
-        ? search.email.trim().toLowerCase().slice(0, 320)
-        : undefined;
-    const out: { redirect?: string; signedOut?: boolean; email?: string } = {};
+    const out: { redirect?: string; signedOut?: boolean } = {};
     if (redirect) out.redirect = redirect;
     if (signedOut) out.signedOut = true;
-    if (email) out.email = email;
     return out;
   },
   beforeLoad: ({ search }) => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     if (!loginUrlHasForbiddenParams(url)) return;
-    const nextSearch: { redirect?: string; email?: string; signedOut?: boolean } = {};
+    const nextSearch: { redirect?: string; signedOut?: boolean } = {};
     if (search.redirect) nextSearch.redirect = search.redirect;
-    if (search.email) nextSearch.email = search.email;
     if (search.signedOut) nextSearch.signedOut = true;
     throw redirect({ to: "/gafcore/login", search: nextSearch, replace: true });
   },
@@ -67,26 +62,20 @@ function GafCoreLoginPage() {
   const [activeSessionEmail, setActiveSessionEmail] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
   const light = false;
-  const { redirect, signedOut, email: emailFromUrl } = search;
+  const { redirect, signedOut } = search;
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const loginFormRef = useRef<HTMLFormElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
-  const emailPrefilledFromUrl = useRef(false);
   const supabaseReady = isSupabaseConfigured();
   /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
 
-  const cleanLoginUrl = useCallback(
-    (prefillEmail?: string) => {
-      const nextSearch: { redirect?: string; email?: string } = {};
-      if (redirect) nextSearch.redirect = redirect;
-      const e = (prefillEmail ?? emailFromUrl ?? "").trim().toLowerCase();
-      if (e.includes("@")) nextSearch.email = e;
-      void navigate({ to: "/gafcore/login", replace: true, search: nextSearch });
-    },
-    [emailFromUrl, navigate, redirect],
-  );
+  const cleanLoginUrl = useCallback(() => {
+    const nextSearch: { redirect?: string } = {};
+    if (redirect) nextSearch.redirect = redirect;
+    void navigate({ to: "/gafcore/login", replace: true, search: nextSearch });
+  }, [navigate, redirect]);
 
   useEffect(() => {
     void initAuthOnce();
@@ -94,21 +83,18 @@ function GafCoreLoginPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    stripSecretsFromLoginUrl();
     const params = new URLSearchParams(window.location.search);
-    const hadPasswordInUrl = params.has("password") || stripSecretsFromLoginUrl();
-    if (hadPasswordInUrl) {
-      setUrlPasswordWarning(true);
-      setPassword("");
-      const mail = params.get("email")?.trim().toLowerCase() ?? emailFromUrl ?? "";
-      if (mail.includes("@")) setEmail(mail);
-      cleanLoginUrl(mail);
-      return;
+    const hadPasswordInUrl = params.has("password") || params.has("pwd") || params.has("pass");
+    if (params.has("email") || hadPasswordInUrl) {
+      if (hadPasswordInUrl) {
+        setUrlPasswordWarning(true);
+        setPassword("");
+      }
+      setEmail("");
+      cleanLoginUrl();
     }
-    if (emailFromUrl && !signedOut && !emailPrefilledFromUrl.current) {
-      emailPrefilledFromUrl.current = true;
-      setEmail(emailFromUrl);
-    }
-  }, [emailFromUrl, signedOut, cleanLoginUrl]);
+  }, [cleanLoginUrl]);
 
   useEffect(() => {
     if (!signedOut) return;
@@ -134,14 +120,6 @@ function GafCoreLoginPage() {
     };
   }, []);
 
-  /** Solo al enviar o al enfocar: lee autofill sin pisar lo que el usuario acaba de borrar. */
-  const syncAutofillFromDom = useCallback(() => {
-    const creds = readLoginCredentials(loginFormRef.current, { email, password });
-    if (creds.email && !email) setEmail(creds.email);
-    const pw = passwordInputRef.current?.value || creds.password;
-    if (pw && !password) setPassword(pw);
-  }, [email, password]);
-
   const switchAccount = async () => {
     setSwitching(true);
     await supabase.auth.signOut();
@@ -152,7 +130,6 @@ function GafCoreLoginPage() {
   };
 
   const runLogin = async (form?: HTMLFormElement | null) => {
-    syncAutofillFromDom();
     const creds = readLoginCredentials(form ?? loginFormRef.current, { email, password });
     const passwordValue = passwordInputRef.current?.value || creds.password;
     setError("");
@@ -191,7 +168,6 @@ function GafCoreLoginPage() {
   };
 
   const handlePasswordReset = async () => {
-    syncAutofillFromDom();
     const creds = readLoginCredentials(loginFormRef.current, { email, password });
     const normalizedEmail = creds.email.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -372,9 +348,13 @@ function GafCoreLoginPage() {
                     id="gc-login-form"
                     className="space-y-4"
                     onSubmit={handleSubmit}
-                    autoComplete="on"
+                    autoComplete="off"
                     noValidate
                   >
+                    <div className="sr-only" aria-hidden>
+                      <input type="text" name="username" tabIndex={-1} autoComplete="username" />
+                      <input type="password" name="password" tabIndex={-1} autoComplete="current-password" />
+                    </div>
                     <div>
                       <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-email">
                         Correo electrónico
@@ -383,15 +363,17 @@ function GafCoreLoginPage() {
                         <Mail size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-email"
-                          name="email"
+                          name="gafcore_email"
                           type="email"
-                          autoComplete="username"
+                          autoComplete="off"
+                          data-1p-ignore
+                          data-lpignore="true"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          onInput={(e) => setEmail(e.currentTarget.value)}
                           required
                           placeholder="tu@correo.com"
                           className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
+                          {...authInputAntiAutofill}
                         />
                       </div>
                     </div>
@@ -404,14 +386,17 @@ function GafCoreLoginPage() {
                         <input
                           ref={passwordInputRef}
                           id="gc-pw"
-                          name="password"
+                          name="gafcore_password"
                           type={showPw ? "text" : "password"}
-                          autoComplete="current-password"
+                          autoComplete="new-password"
+                          data-1p-ignore
+                          data-lpignore="true"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
+                          {...authInputAntiAutofill}
                         />
                         <button
                           type="button"
@@ -433,23 +418,14 @@ function GafCoreLoginPage() {
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
                     <p className={`text-center text-xs ${subtleText}`}>
-                      Admin: correo{" "}
-                      <span className="font-mono text-violet-300">alfonsoavilery@icloud.com</span>{" "}
-                      (no «avilez» / «aviery»).{" "}
-                      <button
-                        type="button"
+                      Tras entrar, administradores van a{" "}
+                      <a
+                        href="/gafcore/login?redirect=%2Fgafcore%2Fadmin%2Fops"
                         className="text-violet-400 hover:underline"
-                        onClick={() => {
-                          setEmail("alfonsoavilery@icloud.com");
-                          void navigate({
-                            to: "/gafcore/login",
-                            search: { redirect: "/gafcore/admin/ops" },
-                            replace: true,
-                          });
-                        }}
                       >
-                        Preparar acceso Ops
-                      </button>
+                        panel Ops
+                      </a>
+                      . Escribe tu correo y contraseña arriba (campos siempre en blanco al abrir).
                     </p>
                   </form>
 

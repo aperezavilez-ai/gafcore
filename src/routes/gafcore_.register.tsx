@@ -9,6 +9,7 @@ import { assertGafcoreSignupAllowed } from "@/lib/gafcore-register.functions";
 import { clearPlanChoicePending, setPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { TurnstileWidget, isTurnstileSiteKeyConfigured } from "@/components/TurnstileWidget";
+import { authInputAntiAutofill } from "@/lib/gafcore-auth-input.shared";
 
 type AccountType = "user" | "demo" | "admin";
 
@@ -245,7 +246,11 @@ function GafCoreRegisterPage() {
               <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
             </div>
 
-            <form className="space-y-4" onSubmit={handleSubmit}>
+            <form className="space-y-4" onSubmit={handleSubmit} autoComplete="off">
+              <div className="sr-only" aria-hidden>
+                <input type="text" name="username" tabIndex={-1} autoComplete="username" />
+                <input type="password" name="password" tabIndex={-1} autoComplete="current-password" />
+              </div>
               <div>
                 <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`}>
                   Correo electrónico
@@ -253,14 +258,18 @@ function GafCoreRegisterPage() {
                 <div className="relative">
                   <Mail size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
                   <input
-                    name="email"
+                    id="gc-reg-email"
+                    name="gafcore_reg_email"
                     type="email"
-                    autoComplete="username"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     placeholder="Escribe tu correo"
                     className={`h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
+                    {...authInputAntiAutofill}
                   />
                 </div>
               </div>
@@ -271,14 +280,18 @@ function GafCoreRegisterPage() {
                 <div className="relative">
                   <Lock size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
                   <input
-                    name="password"
+                    id="gc-reg-pw"
+                    name="gafcore_reg_password"
                     type={showPw ? "text" : "password"}
                     autoComplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="Crea una contraseña"
                     className={`h-12 w-full rounded-xl border pl-11 pr-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
+                    {...authInputAntiAutofill}
                   />
                   <button
                     type="button"
