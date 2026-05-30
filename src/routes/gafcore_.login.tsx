@@ -11,6 +11,7 @@ import {
   stripSecretsFromLoginUrl,
   loginUrlHasForbiddenParams,
 } from "@/lib/gafcore-login.shared";
+import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
@@ -176,6 +177,9 @@ function GafCoreLoginPage() {
         setLoading(false);
         return;
       }
+      const { data: sessionAfterLogin } = await supabase.auth.getSession();
+      const uid = sessionAfterLogin.session?.user?.id;
+      if (uid) clearPlanChoicePending(uid);
       gafcoreLoginRedirectNow(result.redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.");

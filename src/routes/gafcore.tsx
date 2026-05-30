@@ -1,6 +1,7 @@
 import { createFileRoute, getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
@@ -169,6 +170,7 @@ function GafCoreLanding() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading: roleLoading } = useSubscription(user?.id);
   const { plan: planFromUrl } = gafcoreRouteApi.useSearch();
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   const { theme, setTheme } = useGafcoreTheme();
@@ -187,6 +189,52 @@ function GafCoreLanding() {
       return undefined;
     }
   }, [user?.id]);
+
+  /** Entra al IDE (plan gratis): limpia bloqueo de «elegir plan» y navega. */
+  const enterGafcoreApp = useCallback(
+    async (opts?: { adminOps?: boolean }) => {
+      const uid = await resolveUserId();
+      if (!uid) {
+        navigate({
+          to: "/gafcore/login",
+          search: { redirect: opts?.adminOps ? "/gafcore/admin/ops" : "/gafcore/app" },
+        });
+        return false;
+      }
+      clearPlanChoicePending(uid);
+      if (opts?.adminOps || isAdmin) {
+        window.location.assign(`${window.location.origin}/gafcore/admin/ops`);
+        return true;
+      }
+      window.location.assign(`${window.location.origin}/gafcore/app`);
+      return true;
+    },
+    [resolveUserId, navigate, isAdmin],
+  );
+
+  /** Admin con sesión: no debe quedarse en tabla de planes. */
+  useEffect(() => {
+    if (authLoading || roleLoading) return;
+    if (!user?.id || !isAdmin) return;
+    clearPlanChoicePending(user.id);
+    void navigate({ to: "/gafcore/admin/ops", replace: true });
+  }, [authLoading, roleLoading, user?.id, isAdmin, navigate]);
+
+  /** Sesión activa en #plan-free → entrar al editor (el ancla sola no basta). */
+  useEffect(() => {
+    if (typeof window === "undefined" || authLoading || roleLoading) return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash !== "plan-free" && hash !== "planes") return;
+    if (planFromUrl) return;
+    void (async () => {
+      const uid = await resolveUserId();
+      if (!uid) return;
+      if (hash === "plan-free") {
+        toast.success("Entrando al plan gratis…");
+        await enterGafcoreApp({ adminOps: isAdmin });
+      }
+    })();
+  }, [authLoading, roleLoading, planFromUrl, resolveUserId, enterGafcoreApp, isAdmin]);
 
   /** Tras verificar correo: URL con ?pick_plan=1 → tabla de planes (añadir en Supabase Auth URL redirects). */
   useEffect(() => {
@@ -237,19 +285,27 @@ function GafCoreLanding() {
       if (!uid) return;
       if (planFromUrl === "free") {
         clearPlanChoicePending(uid);
-        toast.success("Plan gratis: entra al editor con 10 créditos de bienvenida.");
-        navigate({ to: "/gafcore/app", search: {}, replace: true });
+        toast.success("Plan gratis: entrando al editor…");
+        if (isAdmin) {
+          window.location.assign(`${window.location.origin}/gafcore/admin/ops`);
+        } else {
+          window.location.assign(`${window.location.origin}/gafcore/app`);
+        }
         return;
       }
       setCheckoutPriceId(planFromUrl);
       navigate({ to: "/gafcore", search: {}, hash: "planes", replace: true });
     })();
-  }, [planFromUrl, user?.id, navigate]);
+  }, [planFromUrl, user?.id, navigate, isAdmin]);
 
   const choosePlan = (planId: string) => {
     void (async () => {
-      if (authLoading) {
+      if (authLoading || roleLoading) {
         toast.message("Comprobando tu sesión…");
+        return;
+      }
+      if (planId === "free") {
+        await enterGafcoreApp();
         return;
       }
       const uid = await resolveUserId();
@@ -293,12 +349,25 @@ function GafCoreLanding() {
           {/* Acciones desktop */}
           <div className="hidden items-center gap-2 sm:gap-3 md:flex">
             <LanguageSwitcher variant="compact" />
-            <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
-              <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }}>{t("gc.auth.login")}</Link>
-            </Button>
-            <Button asChild size="sm" className="gc-cta rounded-full px-4">
-              <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }}>{t("gc.auth.register")}</Link>
-            </Button>
+            {user?.id ? (
+              <Button
+                type="button"
+                size="sm"
+                className="gc-cta rounded-full px-4"
+                onClick={() => void enterGafcoreApp({ adminOps: isAdmin })}
+              >
+                {isAdmin ? "Panel admin" : "Ir al panel"}
+              </Button>
+            ) : (
+              <>
+                <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
+                  <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }}>{t("gc.auth.login")}</Link>
+                </Button>
+                <Button asChild size="sm" className="gc-cta rounded-full px-4">
+                  <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }}>{t("gc.auth.register")}</Link>
+                </Button>
+              </>
+            )}
           </div>
           {/* Acciones móvil: idioma compacto + hamburguesa */}
           <div className="flex items-center gap-1.5 md:hidden">
@@ -336,16 +405,32 @@ function GafCoreLanding() {
                 {t("gc.nav.contact")}
               </button>
               <div className="mt-2 flex flex-col gap-2 border-t gc-border pt-3">
-                <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
-                  <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }} onClick={closeMobileNav}>
-                    {t("gc.auth.login")}
-                  </Link>
-                </Button>
-                <Button asChild size="sm" className="gc-cta rounded-full px-4">
-                  <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }} onClick={closeMobileNav}>
-                    {t("gc.auth.register")}
-                  </Link>
-                </Button>
+                {user?.id ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gc-cta rounded-full px-4"
+                    onClick={() => {
+                      closeMobileNav();
+                      void enterGafcoreApp({ adminOps: isAdmin });
+                    }}
+                  >
+                    {isAdmin ? "Panel admin" : "Ir al panel"}
+                  </Button>
+                ) : (
+                  <>
+                    <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
+                      <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }} onClick={closeMobileNav}>
+                        {t("gc.auth.login")}
+                      </Link>
+                    </Button>
+                    <Button asChild size="sm" className="gc-cta rounded-full px-4">
+                      <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }} onClick={closeMobileNav}>
+                        {t("gc.auth.register")}
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
             </nav>
           </div>
@@ -379,8 +464,14 @@ function GafCoreLanding() {
             {t("gc.hero.subtitle")}
           </p>
           <div className="mx-auto mt-8 flex w-full max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
-            <Button asChild size="lg" className="gc-cta h-12 w-full rounded-full px-7 text-base font-semibold sm:w-auto">
-              <a href="#plan-free">{t("gc.hero.cta")}</a>
+            <Button
+              type="button"
+              size="lg"
+              className="gc-cta h-12 w-full rounded-full px-7 text-base font-semibold sm:w-auto"
+              onClick={() => void enterGafcoreApp()}
+            >
+              {t("gc.hero.cta")}
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
@@ -466,20 +557,10 @@ function GafCoreLanding() {
                   </ul>
                   <Button
                     type="button"
+                    disabled={authLoading || roleLoading}
                     onClick={() => {
                       if (plan.id === "free") {
-                        void (async () => {
-                          const uid = await resolveUserId();
-                          if (uid) {
-                            clearPlanChoicePending(uid);
-                            navigate({ to: "/gafcore/app" });
-                            return;
-                          }
-                          navigate({
-                            to: "/gafcore/register",
-                            search: { plan: "free" },
-                          });
-                        })();
+                        void enterGafcoreApp();
                         return;
                       }
                       choosePlan(plan.id);

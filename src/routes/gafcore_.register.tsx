@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { assertGafcoreSignupAllowed } from "@/lib/gafcore-register.functions";
-import { setPlanChoicePending } from "@/lib/gafcore-plan-choice";
+import { clearPlanChoicePending, setPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
 import { TurnstileWidget, isTurnstileSiteKeyConfigured } from "@/components/TurnstileWidget";
 
@@ -42,6 +42,7 @@ function GafCoreRegisterPage() {
     if (redirect?.startsWith("/gafcore") && redirect.includes("plan=") && !redirect.includes("plan=free")) {
       return redirect.startsWith("/") ? redirect : `/${redirect}`;
     }
+    if (plan === "free") return "/gafcore/app";
     if (plan && plan !== "free") return `/gafcore?plan=${encodeURIComponent(plan)}`;
     return "/gafcore#planes";
   })();
@@ -173,7 +174,8 @@ function GafCoreRegisterPage() {
         return;
       }
       setLoading(false);
-      setPlanChoicePending(userId);
+      if (plan !== "free") setPlanChoicePending(userId);
+      else clearPlanChoicePending(userId);
       window.location.replace(authAbsoluteUrl(postRegisterPath));
     } catch (err) {
       setLoading(false);

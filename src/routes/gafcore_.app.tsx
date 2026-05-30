@@ -123,7 +123,7 @@ function GafCoreAppPage() {
         if (checkoutOk) clearPlanChoicePending(uid);
         if (isAdmin) clearPlanChoicePending(uid);
         if (!checkoutOk && !isAdmin && isPlanChoicePending(uid)) {
-          window.location.replace(`${window.location.origin}/gafcore?pick_plan=1#planes`);
+          window.location.replace(`${window.location.origin}/gafcore?pick_plan=1#plan-free`);
           return;
         }
       } catch {
