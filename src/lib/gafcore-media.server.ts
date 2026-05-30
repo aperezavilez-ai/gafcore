@@ -1,4 +1,5 @@
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
+import { logDev } from "@/lib/gafcore-logger.server";
 import {
   applyPicsumFallbacksInSource,
   buildAssetUrlMap,
@@ -170,7 +171,7 @@ async function repairBrokenHttpImages(
       if (generated) {
         replacement = generated;
         replicateUsed += 1;
-        console.info("[image-router] used", plan.model, "for intent", plan.intent);
+        logDev("image_router_used", { model: plan.model, intent: plan.intent });
       }
     }
 

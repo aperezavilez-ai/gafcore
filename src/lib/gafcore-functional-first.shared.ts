@@ -11,9 +11,9 @@ export const FUNCTIONAL_FIRST_BUILD_PREFIX =
 export function buildPreserveExistingPrefix(fileCount: number): string {
   if (fileCount < 2) return "";
   return (
-    "[PRESERVAR AVANCE] El proyecto YA tiene archivos generados. " +
-    "NO elimines secciones, formularios ni buscadores existentes salvo que el usuario pida quitarlos explícitamente. " +
-    "Parchea o extiende archivos; si reescribes uno, conserva TODA la funcionalidad previa más lo nuevo. "
+    "[PRESERVAR AVANCE / PRESERVACIÓN DE ESTRUCTURA] El proyecto YA tiene archivos generados. " +
+    "NUNCA elimines componentes, secciones, formularios ni archivos existentes salvo petición explícita (quitar/eliminar/borrar). " +
+    "Reescritura incremental obligatoria: parchea o extiende; si reescribes un archivo, conserva TODA la funcionalidad y exports previos más lo nuevo. "
   );
 }
 

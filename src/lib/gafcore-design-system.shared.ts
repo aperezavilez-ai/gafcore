@@ -105,15 +105,14 @@ K2) **Reglas técnicas críticas para preview ESM (cumplir siempre)**
        \`Heart\`, \`Settings\`, \`Mail\`, \`Phone\`, \`Calendar\`, \`Check\`, \`X\`, \`ArrowRight\`, \`StickyNote\`,
        \`NotebookText\`, \`BookOpen\`, \`User\`, \`Users\`, \`Home\`, \`Search\`, \`Menu\`, \`ChevronDown\`.
        NUNCA inventes nombres como \`Note\`, \`Notes\`, \`Notepad\`, \`Notion\` — no existen.
-   - **NO renderices objetos directamente en JSX** (causa React error #31 "Objects are not valid as a React child").
-     * MAL: \`const f = { title: "X", desc: "Y" }; return <div>{f}</div>;\`
-     * BIEN: \`return <div><h3>{f.title}</h3><p>{f.desc}</p></div>;\`
-     * Si mapeas una lista de objetos, devuelve JSX, NO el objeto: \`items.map(it => <li key={it.id}>{it.label}</li>)\`.
+   - **Brain V2 / listas**: \`const features = ['Análisis', 'Reportes', 'Equipo'];\` pre-procesado antes del \`return\`.
+     * Patrón: \`features.map((text, idx) => <li key={idx}>{text}</li>)\` — solo strings en el array.
+     * Prohibido en ejemplos: objetos en listas, \`typeof\`, \`Array.isArray\`, ternarios anidados dentro del \`return()\`.
    - No importes módulos de Node (\`fs\`, \`path\`, \`crypto\`) en código de cliente.
    - Todo \`<a>\` debe tener \`href\` real (no \`href=""\` ni \`href="#"\` solo). Si es navegación interna, usa \`href="#sectionId"\`.
    - Todo \`<button onClick>\` debe tener lógica real, no \`() => {}\` vacío.
    - JSX cerrado correctamente: no atributos fuera de etiqueta, no URL sueltas entre comillas.
-   - Usa siempre \`key\` único en listas mapeadas: \`items.map(it => <Card key={it.id} ... />)\`.
+   - \`key\` en listas: \`items.map((text, idx) => <li key={idx}>{text}</li>)\` (idx solo si la lista es estática en el componente).
 
 L) **Auto-checklist antes de cerrar respuesta (UI)**
    - ¿La página se ve bien a 375px (iPhone SE) y a 1440px?

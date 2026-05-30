@@ -13,6 +13,7 @@ import {
   resolveGafcoreModelDefaults,
   type GafcoreChatMessage,
 } from "@/lib/gafcore-chat.shared";
+import { logDev } from "@/lib/gafcore-logger.server";
 
 export type AiModelTier = "fast" | "deep" | "support";
 
@@ -84,14 +85,7 @@ export async function upstreamChatCompletions(body: Record<string, unknown>): Pr
   const t0 = Date.now();
   const res = await postChatCompletions(body);
   if (!res.ok) {
-    console.warn(
-      JSON.stringify({
-        event: "gafcore_ai_upstream_error",
-        status: res.status,
-        model,
-        ms: Date.now() - t0,
-      }),
-    );
+    logDev("gafcore_ai_upstream_error", { status: res.status, model, ms: Date.now() - t0 });
   }
   return res;
 }

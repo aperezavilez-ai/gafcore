@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { FileItem } from "@/components/ide/CodeEditor";
+import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
 
 const CFG_KEY = "ide.supabase.config";
@@ -337,10 +338,10 @@ export type SnapshotRow = {
   created_at: string;
 };
 
-export async function listSnapshots(): Promise<SnapshotRow[]> {
+export async function listSnapshots(explicitProjectId?: string | null): Promise<SnapshotRow[]> {
   const sb = getUserSupabase();
   if (!sb) return [];
-  const projectId = await ensureProjectId();
+  const projectId = explicitProjectId?.trim() || (await ensureProjectId());
   if (!projectId) return [];
   const { data, error } = await sb
     .from("project_snapshots")
@@ -355,10 +356,14 @@ export async function listSnapshots(): Promise<SnapshotRow[]> {
   return (data ?? []) as SnapshotRow[];
 }
 
-export async function createSnapshot(files: FileItem[], label?: string): Promise<boolean> {
+export async function createSnapshot(
+  files: FileItem[],
+  label?: string,
+  explicitProjectId?: string | null,
+): Promise<boolean> {
   const sb = getUserSupabase();
   if (!sb) return false;
-  const projectId = await ensureProjectId();
+  const projectId = explicitProjectId?.trim() || (await ensureProjectId());
   if (!projectId) return false;
   const { data: userRes } = await sb.auth.getUser();
   const userId = userRes?.user?.id;
@@ -377,19 +382,25 @@ export async function createSnapshot(files: FileItem[], label?: string): Promise
   return true;
 }
 
-export async function loadSnapshotFiles(snapshotId: string): Promise<FileItem[] | null> {
+export async function loadSnapshotFiles(
+  snapshotId: string,
+  explicitProjectId?: string | null,
+): Promise<FileItem[] | null> {
   const sb = getUserSupabase();
   if (!sb) return null;
-  const { data, error } = await sb
+  const projectId = explicitProjectId?.trim() || (await ensureProjectId());
+  if (!projectId) return null;
+  let query = sb
     .from("project_snapshots")
     .select("files")
     .eq("id", snapshotId)
-    .maybeSingle();
+    .eq("project_id", projectId);
+  const { data, error } = await query.maybeSingle();
   if (error || !data) {
     console.error("[Supabase] load snapshot error:", error);
     return null;
   }
-  return (data.files ?? []) as FileItem[];
+  return normalizeSnapshotFiles(data.files);
 }
 
 export async function deleteSnapshot(snapshotId: string): Promise<boolean> {

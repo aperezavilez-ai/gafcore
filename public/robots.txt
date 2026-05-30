@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /gafcore
+Disallow: /gafcore/app
+Disallow: /gafcore/debug/
+Disallow: /gafcore/admin/
+Disallow: /api/
+
+Sitemap: https://gafcore.com/sitemap.xml

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripeEnvironment } from "@/lib/stripe";
+import { logClientWarn } from "@/lib/gafcore-client-logger";
 
 export interface Subscription {
   id: string;
@@ -69,7 +70,7 @@ export function useSubscription(userId: string | undefined) {
         _role: "admin",
       });
       if (!rpcErr && typeof rpcAdmin === "boolean") return rpcAdmin;
-      if (rpcErr) console.warn("[useSubscription] has_role:", rpcErr.message);
+      if (rpcErr) logClientWarn("useSubscription has_role", rpcErr.message);
       const { data, error: roleErr } = await supabase
         .from("user_roles")
         .select("role")
@@ -97,7 +98,7 @@ export function useSubscription(userId: string | undefined) {
         if (cancelled) return;
         const { data: subData, error: subErr } = subRes;
         if (subErr) {
-          console.warn("[useSubscription] subscriptions:", subErr.message);
+          logClientWarn("useSubscription subscriptions", subErr.message);
           setSubscription(null);
         } else {
           setSubscription(subData as Subscription | null);

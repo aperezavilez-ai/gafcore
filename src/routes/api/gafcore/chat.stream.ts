@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { handleGafcoreChatStreamPost } from "@/lib/gafcore-chat-api.server";
+import { withGafcoreApiDiagnostics } from "@/services/health/gafcore-api-error-handler.server";
 
 /**
  * POST /api/gafcore/chat/stream
@@ -8,7 +9,10 @@ import { handleGafcoreChatStreamPost } from "@/lib/gafcore-chat-api.server";
 export const Route = createFileRoute("/api/gafcore/chat/stream")({
   server: {
     handlers: {
-      POST: async ({ request }: { request: Request }) => handleGafcoreChatStreamPost(request),
+      POST: withGafcoreApiDiagnostics(
+        (request) => handleGafcoreChatStreamPost(request),
+        { component: "gafcore.chat.stream" },
+      ),
     },
   },
 });

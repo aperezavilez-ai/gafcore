@@ -16,6 +16,11 @@ import {
 import { classifyUserIntent } from "@/orchestrator/intent.classifier";
 import { selectTemplateSlug } from "@/orchestrator/template.selector";
 import { BUILTIN_PROJECT_TEMPLATES } from "@/lib/gafcore-templates.shared";
+import {
+  applyIncrementalEditPersistence,
+  prepareIncrementalEditSession,
+} from "@/lib/gafcore-incremental-edit.shared";
+import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 
 export type GafcoreDeliveredFile = {
   name: string;
@@ -110,6 +115,16 @@ export function finalizeGafcoreBuildDelivery(
     }
   } else if (files.length > 0) {
     files = ensureReactPackageJson(files);
+  }
+
+  const session = prepareIncrementalEditSession(contextFiles, instruction);
+  if (session.active && files.length > 0) {
+    const persisted = applyIncrementalEditPersistence(contextFiles, files, session);
+    const shield = runIntegrityShield(contextFiles, persisted.files, session.snapshot, {
+      deltaPaths: files.map((f) => f.name),
+      instruction,
+    });
+    files = shield.files;
   }
 
   return { reply, files, source, planOnly };

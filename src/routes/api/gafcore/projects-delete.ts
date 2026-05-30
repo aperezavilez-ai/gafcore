@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { requireUser } from "@/routes/api/elevenlabs/-_auth";
 import { deleteProjectForUser } from "@/lib/gafcore-projects-api.server";
+import { withGafcoreApiDiagnostics } from "@/services/health/gafcore-api-error-handler.server";
 
 const BodySchema = z.object({
   projectId: z.string().uuid(),
@@ -11,7 +12,7 @@ const BodySchema = z.object({
 export const Route = createFileRoute("/api/gafcore/projects-delete")({
   server: {
     handlers: {
-      POST: async ({ request }: { request: Request }) => {
+      POST: withGafcoreApiDiagnostics(async (request) => {
         const userId = await requireUser(request);
         if (userId instanceof Response) return userId;
 
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/api/gafcore/projects-delete")({
         }
 
         return json({ ok: true });
-      },
+      }, { component: "gafcore.projects.delete" }),
     },
   },
 });

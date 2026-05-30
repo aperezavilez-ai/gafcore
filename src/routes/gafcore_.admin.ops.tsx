@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
+import { AiMonitorPanel } from "@/components/admin/AiMonitorPanel";
 import { DiagnosticsOpsPanel } from "@/components/admin/DiagnosticsOpsPanel";
 import { FactoryMetricsPanel } from "@/components/admin/FactoryMetricsPanel";
 import { GovernanceOpsPanel } from "@/components/admin/GovernanceOpsPanel";
@@ -50,6 +51,7 @@ function AdminOpsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AiMonitorPanel />
       <GovernanceOpsPanel />
       <div className="border-t border-border">
         <FactoryMetricsPanel />

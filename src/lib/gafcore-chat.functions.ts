@@ -13,7 +13,6 @@ import {
   type ProjFile,
 } from "@/lib/gafcore-chat.shared";
 import {
-  completeChatMessage,
   consumeAiCredits,
   getGafcoreAiGateway,
   refundAiCredits,
@@ -27,12 +26,25 @@ import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
 import { retrieveProjectMemoryContext } from "@/memory/retrieve.server";
 import { shouldBypassGafcoreChatCache, softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
-import { finalizeGafcoreBuildDelivery } from "@/lib/gafcore-chat-delivery.shared";
+import {
+  getPersistedChatCache,
+  setPersistedChatCache,
+} from "@/lib/gafcore-chat-cache.server";
+import { logDev } from "@/lib/gafcore-logger.server";
 import {
   auditAiActionCompleted,
   enforceAiGovernanceWithAudit,
 } from "@/lib/gafcore-governance.server";
 import { resolveChatAiAction } from "@/lib/gafcore-governance.shared";
+import {
+  buildPersistedSnapshotPromptAppend,
+  loadProjectCodeSnapshot,
+  persistProjectCodeSnapshot,
+  priorityPathsFromPersistedSnapshot,
+} from "@/lib/gafcore-edit-snapshot.server";
+import { mergeIncrementalDelta } from "@/lib/gafcore-incremental-edit.shared";
+import { runGafcoreAgentChatCompletion } from "@/lib/gafcore-chat-agent.server";
+import { gateDeliveredFiles } from "@/lib/gafcore-chat-delivery-gate.shared";
 
 export const gafcoreChat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -80,26 +92,37 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       throw new Error("AI no configurado");
     }
 
+    const projFiles = data.files as ProjFile[];
+    const persistedSnapshot = await loadProjectCodeSnapshot(data.projectId, userId);
+    void persistProjectCodeSnapshot(data.projectId, userId, projFiles);
+    const recoveryAppend = buildPersistedSnapshotPromptAppend(persistedSnapshot, projFiles);
+    const snapshotPriority = priorityPathsFromPersistedSnapshot(persistedSnapshot);
+
     const memory = await retrieveProjectMemoryContext({
       projectId: data.projectId,
       userId,
       instruction: data.instruction,
-      files: data.files as ProjFile[],
+      files: projFiles,
     });
     const model = resolveGatewayModel(gateway, {
       instruction: data.instruction,
-      hasVision: extractVisionImageParts(data.files as ProjFile[]).length > 0,
+      hasVision: extractVisionImageParts(projFiles).length > 0,
     });
     const { messages, subset, ctxFiles } = buildGafcoreMessages(
       data,
       model,
-      memory.promptAppendix,
-      memory.priorityPaths,
+      `${memory.promptAppendix}${recoveryAppend}`,
+      [...memory.priorityPaths, ...snapshotPriority],
     );
 
     const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
-    const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
+    let cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
+    if (!cached && !shouldBypassGafcoreChatCache(data.instruction)) {
+      cached = await getPersistedChatCache(cacheKey);
+      if (cached) cacheSet(cacheKey, cached);
+    }
     if (cached) {
+      const cachedGate = gateDeliveredFiles(projFiles, cached.files, data.instruction);
       const bal = await fetchBalance(userId);
       auditAiActionCompleted({
         userId,
@@ -109,22 +132,10 @@ export const gafcoreChat = createServerFn({ method: "POST" })
         risk: gov.risk,
         metadata: { cached: true },
       });
-      console.info(
-        JSON.stringify({
-          event: "gafcore_chat",
-          cacheHit: true,
-          userId,
-          model,
-          ms: Date.now() - t0,
-          filesIn: data.files.length,
-          ctxFiles: ctxFiles.length,
-          subset,
-          filesOut: cached.files.length,
-        }),
-      );
+      logDev("gafcore_chat_cache_hit", { userId, model, ms: Date.now() - t0 });
       return {
         reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, cached.reply)),
-        files: cached.files,
+        files: cachedGate.ok ? cachedGate.files : [],
         balance: bal,
       };
     }
@@ -148,10 +159,15 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       balanceAfterConsume = credit.balance;
     }
 
-    let content: string;
+    let agentResult: Awaited<ReturnType<typeof runGafcoreAgentChatCompletion>>;
     try {
-      const completed = await completeChatMessage({ model, messages, json: true });
-      content = completed.content || "{}";
+      agentResult = await runGafcoreAgentChatCompletion({
+        model,
+        messages,
+        instruction: data.instruction,
+        contextFiles: projFiles,
+        enrichContext: data.files as ProjFile[],
+      });
     } catch (e: unknown) {
       if (!skipCredits) {
         await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_refund", {
@@ -166,56 +182,14 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       }
       throw e;
     }
-    const { parseJsonLoose } = await import("@/lib/gafcore-json-loose.shared");
-    const looseParsed = parseJsonLoose<{ reply?: string; files?: unknown }>(content);
-    let parsed: { reply?: string; files?: unknown };
-    if (looseParsed) {
-      parsed = looseParsed;
-    } else {
-      parsed = {};
-      console.info(
-        JSON.stringify({
-          event: "gafcore_chat",
-          cacheHit: false,
-          userId,
-          model,
-          ms: Date.now() - t0,
-          filesIn: data.files.length,
-          ctxFiles: ctxFiles.length,
-          subset,
-          filesOut: 0,
-          parseError: true,
-        }),
-      );
-      return {
-        reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, content)),
-        files: [],
-        balance: balanceAfterConsume,
-      };
-    }
 
-    const replyRaw = typeof parsed.reply === "string" ? parsed.reply : "Listo.";
-    const delivery = finalizeGafcoreBuildDelivery(
-      data.instruction,
-      data.files as ProjFile[],
-      replyRaw,
-      parsed.files,
-    );
-    let safeFiles = delivery.files;
-    try {
-      safeFiles = await enrichGafcoreOutputFiles(
-        safeFiles,
-        data.files as ProjFile[],
-        data.instruction,
-      );
-    } catch (e) {
-      console.warn("enrichGafcoreOutputFiles:", e);
-    }
+    const safeFiles = agentResult.files;
     const reply = sanitizeUserFacingAiText(
-      softenRoboticReply(data.instruction, replyRaw),
+      softenRoboticReply(data.instruction, agentResult.reply),
     );
 
     cacheSet(cacheKey, { reply, files: safeFiles });
+    void setPersistedChatCache(cacheKey, userId, model, { reply, files: safeFiles });
 
     auditAiActionCompleted({
       userId,
@@ -225,19 +199,18 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       risk: gov.risk,
     });
 
-    console.info(
-      JSON.stringify({
-        event: "gafcore_chat",
-        cacheHit: false,
-        userId,
-        model,
-        ms: Date.now() - t0,
-        filesIn: data.files.length,
-        ctxFiles: ctxFiles.length,
-        subset,
-        filesOut: safeFiles.length,
-      }),
-    );
+    const mergedForSnapshot =
+      safeFiles.length > 0 ? mergeIncrementalDelta(projFiles, safeFiles) : projFiles;
+    void persistProjectCodeSnapshot(data.projectId, userId, mergedForSnapshot);
+
+    logDev("gafcore_chat_done", {
+      userId,
+      model,
+      ms: Date.now() - t0,
+      filesOut: safeFiles.length,
+      agentAttempts: agentResult.attempts,
+      validationBlocked: agentResult.validationBlocked,
+    });
 
     return {
       reply,

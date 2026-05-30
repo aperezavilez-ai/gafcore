@@ -24,11 +24,22 @@ import {
   getGafcoreAiGateway,
   parseUpstreamFailure,
   refundAiCredits,
-  resolveGatewayModel,
   streamChatCompletions,
 } from "@/lib/gafcore-ai-gateway.server";
+import { resolveModelForGafcoreChat } from "@/services/ai/chat-brain.server";
+import { runSafeBuildQualityLoop } from "@/services/ai/safe-build.server";
+import type { SafeBuildMeta } from "@/services/ai/safe-build.shared";
+import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
-import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
+import {
+  getPersistedChatCache,
+  setPersistedChatCache,
+} from "@/lib/gafcore-chat-cache.server";
+import { logDev } from "@/lib/gafcore-logger.server";
+import {
+  sanitizeApiErrorDetail,
+  sanitizeUserFacingAiText,
+} from "@/lib/gafcore-user-facing-errors";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { extractVisionImageParts } from "@/lib/gafcore-media.shared";
 import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
@@ -47,11 +58,29 @@ import {
   resolveChatAiAction,
   type GafcoreAiAction,
 } from "@/lib/gafcore-governance.shared";
+import {
+  buildPersistedSnapshotPromptAppend,
+  loadProjectCodeSnapshot,
+  persistProjectCodeSnapshot,
+  priorityPathsFromPersistedSnapshot,
+} from "@/lib/gafcore-edit-snapshot.server";
+import { mergeIncrementalDelta } from "@/lib/gafcore-incremental-edit.shared";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+}
+
+function persistSnapshotAfterChat(
+  projectId: string | undefined,
+  userId: string,
+  baseline: ProjFile[],
+  output: Array<{ name: string; content: string; language?: string }>,
+): void {
+  const merged =
+    output.length > 0 ? mergeIncrementalDelta(baseline, output as ProjFile[]) : baseline;
+  void persistProjectCodeSnapshot(projectId, userId, merged);
 }
 
 async function deliverGafcoreChatFiles(
@@ -71,6 +100,49 @@ async function deliverGafcoreChatFiles(
   } catch {
     return delivery.files;
   }
+}
+
+async function finalizeChatDeliveryWithSafeBuild(input: {
+  instruction: string;
+  contextFiles: ProjFile[];
+  replyRaw: string;
+  rawFiles: unknown;
+  messages: ReturnType<typeof buildGafcoreMessages>["messages"];
+  gateway: ReturnType<typeof getGafcoreAiGateway>;
+}): Promise<{
+  reply: string;
+  files: Array<{ name: string; language?: string; content: string }>;
+  safeBuild: SafeBuildMeta;
+}> {
+  const delivered = await deliverGafcoreChatFiles(
+    input.instruction,
+    input.contextFiles,
+    input.replyRaw,
+    input.rawFiles,
+  );
+
+  if (!isSubstantiveBuildRequest(input.instruction)) {
+    return {
+      reply: input.replyRaw,
+      files: delivered,
+      safeBuild: { phase: "ready", repaired: false, skipped: true },
+    };
+  }
+
+  const loop = await runSafeBuildQualityLoop({
+    instruction: input.instruction,
+    reply: input.replyRaw,
+    files: delivered as ProjFile[],
+    messages: input.messages,
+    gateway: input.gateway,
+    deepMode: /^\[modo profundo\]/i.test(input.instruction.trim()),
+  });
+
+  return {
+    reply: loop.reply,
+    files: loop.files,
+    safeBuild: loop.meta,
+  };
 }
 
 async function enforceChatGovernanceOrResponse(
@@ -141,29 +213,39 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     return jsonResponse({ error: "ai_not_configured" }, 500);
   }
 
+  const projFiles = data.files as ProjFile[];
+  const persistedSnapshot = await loadProjectCodeSnapshot(data.projectId, userId);
+  void persistProjectCodeSnapshot(data.projectId, userId, projFiles);
+  const recoveryAppend = buildPersistedSnapshotPromptAppend(persistedSnapshot, projFiles);
+  const snapshotPriority = priorityPathsFromPersistedSnapshot(persistedSnapshot);
+
   const memory = await retrieveProjectMemoryContext({
     projectId: data.projectId,
     userId,
     instruction: data.instruction,
-    files: data.files as ProjFile[],
+    files: projFiles,
   });
   const pluginAppend = await buildAiPluginPromptAppend(userId);
-  const promptAppendix = [memory.promptAppendix, pluginAppend].filter(Boolean).join("\n\n");
+  const promptAppendix = [memory.promptAppendix, pluginAppend, recoveryAppend]
+    .filter(Boolean)
+    .join("\n\n");
   const brand = await readProjectBrand(data.projectId);
   const brandBlock = brand ? brandContextBlock(brand) : "";
-  const model = resolveGatewayModel(gateway, {
-    instruction: data.instruction,
-    hasVision: data.files.some((f) => f.content.trim().startsWith("data:image/")),
-  });
+  const hasVision = extractVisionImageParts(projFiles).length > 0;
+  const { model } = resolveModelForGafcoreChat(gateway, data.instruction, { hasVision });
   const { messages, subset, ctxFiles } = buildGafcoreMessages(
     data,
     model,
     promptAppendix,
-    memory.priorityPaths,
+    [...memory.priorityPaths, ...snapshotPriority],
     brandBlock,
   );
   const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}:${brand?.name ?? ""}`;
-  const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
+  let cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
+  if (!cached && !shouldBypassGafcoreChatCache(data.instruction)) {
+    cached = await getPersistedChatCache(cacheKey);
+    if (cached) cacheSet(cacheKey, cached);
+  }
   if (cached) {
     const balance = await fetchBalance(userId);
     auditAiActionCompleted({
@@ -172,13 +254,15 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
       instruction: data.instruction,
       projectId: data.projectId,
       risk: gov.risk,
-      metadata: { cached: true },
+      metadata: { cached: true, source: "cache" },
     });
+    logDev("chat_cache_served", { mode: "stream", credits: 0 });
     return jsonResponse({
       reply: cached.reply,
       files: cached.files,
       balance,
       cached: true,
+      safeBuild: { phase: "ready", repaired: false, skipped: true },
     });
   }
 
@@ -215,25 +299,35 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
           console.warn("[gafcore-chat] stream-fallback non-JSON content len=" + content.length);
         }
         const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
-        const safeFiles = await deliverGafcoreChatFiles(
-          data.instruction,
-          data.files as ProjFile[],
+        const finalized = await finalizeChatDeliveryWithSafeBuild({
+          instruction: data.instruction,
+          contextFiles: data.files as ProjFile[],
           replyRaw,
-          parsedOut.files,
-        );
+          rawFiles: parsedOut.files,
+          messages,
+          gateway,
+        });
         const reply = sanitizeUserFacingAiText(
-          softenRoboticReply(data.instruction, replyRaw),
+          softenRoboticReply(data.instruction, finalized.reply),
         );
-        cacheSet(cacheKey, { reply, files: safeFiles });
+        const payload = { reply, files: finalized.files };
+        cacheSet(cacheKey, payload);
+        void setPersistedChatCache(cacheKey, userId, model, payload);
+        persistSnapshotAfterChat(data.projectId, userId, projFiles, finalized.files);
         auditAiActionCompleted({
           userId,
           action,
           instruction: data.instruction,
           projectId: data.projectId,
           risk: gov.risk,
-          metadata: { fallback: "complete" },
+          metadata: { fallback: "complete", safeBuild: finalized.safeBuild },
         });
-        return jsonResponse({ reply, files: safeFiles, fallback: "complete" });
+        return jsonResponse({
+          reply,
+          files: finalized.files,
+          fallback: "complete",
+          safeBuild: finalized.safeBuild,
+        });
       } catch {
         /* sigue con error upstream */
       }
@@ -241,7 +335,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     return jsonResponse(
       {
         error: fail.code === "rate_limited" ? "rate_limited" : "upstream",
-        detail: fail.detail,
+        detail: sanitizeApiErrorDetail(fail.detail) ?? "Error temporal del asistente.",
       },
       fail.status >= 400 ? fail.status : 502,
     );
@@ -318,31 +412,46 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     return jsonResponse({ error: "ai_not_configured" }, 500);
   }
 
+  const projFilesComplete = data.files as ProjFile[];
+  const persistedSnapshotComplete = await loadProjectCodeSnapshot(data.projectId, userId);
+  void persistProjectCodeSnapshot(data.projectId, userId, projFilesComplete);
+  const recoveryAppendComplete = buildPersistedSnapshotPromptAppend(
+    persistedSnapshotComplete,
+    projFilesComplete,
+  );
+  const snapshotPriorityComplete = priorityPathsFromPersistedSnapshot(persistedSnapshotComplete);
+
   const memory = await retrieveProjectMemoryContext({
     projectId: data.projectId,
     userId,
     instruction: data.instruction,
-    files: data.files as ProjFile[],
+    files: projFilesComplete,
   });
   const pluginAppend = await buildAiPluginPromptAppend(userId);
-  const promptAppendix = [memory.promptAppendix, pluginAppend].filter(Boolean).join("\n\n");
+  const promptAppendix = [memory.promptAppendix, pluginAppend, recoveryAppendComplete]
+    .filter(Boolean)
+    .join("\n\n");
   const brand = await readProjectBrand(data.projectId);
   const brandBlock = brand ? brandContextBlock(brand) : "";
-  const model = resolveGatewayModel(gateway, {
-    instruction: data.instruction,
-    hasVision: extractVisionImageParts(data.files as ProjFile[]).length > 0,
+  const hasVisionComplete = extractVisionImageParts(projFilesComplete).length > 0;
+  const { model } = resolveModelForGafcoreChat(gateway, data.instruction, {
+    hasVision: hasVisionComplete,
   });
   const { messages, subset, ctxFiles } = buildGafcoreMessages(
     data,
     model,
     promptAppendix,
-    memory.priorityPaths,
+    [...memory.priorityPaths, ...snapshotPriorityComplete],
     brandBlock,
   );
 
-  const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}:${brand?.name ?? ""}`;
-  const cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
-  if (cached) {
+  const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(projFilesComplete)}:${brand?.name ?? ""}`;
+  let cachedComplete = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
+  if (!cachedComplete && !shouldBypassGafcoreChatCache(data.instruction)) {
+    cachedComplete = await getPersistedChatCache(cacheKey);
+    if (cachedComplete) cacheSet(cacheKey, cachedComplete);
+  }
+  if (cachedComplete) {
     const bal = await fetchBalance(userId);
     auditAiActionCompleted({
       userId,
@@ -352,10 +461,13 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
       risk: gov.risk,
       metadata: { cached: true, mode: "complete" },
     });
+    logDev("chat_cache_served", { mode: "complete", credits: 0 });
     return jsonResponse({
-      reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, cached.reply)),
-      files: cached.files,
+      reply: sanitizeUserFacingAiText(softenRoboticReply(data.instruction, cachedComplete.reply)),
+      files: cachedComplete.files,
       balance: bal,
+      cached: true,
+      safeBuild: { phase: "ready", repaired: false, skipped: true },
     });
   }
 
@@ -392,7 +504,13 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     if (err.code === "rate_limited") {
       return jsonResponse({ error: "rate_limited" }, 429);
     }
-    return jsonResponse({ error: "upstream", detail: err.message }, 502);
+    return jsonResponse(
+      {
+        error: "upstream",
+        detail: sanitizeApiErrorDetail(err.message) ?? "Error temporal del asistente.",
+      },
+      502,
+    );
   }
 
   const parsedOut = parseJsonLoose<{ reply?: string; files?: unknown }>(content) ?? {};
@@ -403,18 +521,23 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   }
 
   const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
-  const safeFiles = await deliverGafcoreChatFiles(
-    data.instruction,
-    data.files as ProjFile[],
+  const finalized = await finalizeChatDeliveryWithSafeBuild({
+    instruction: data.instruction,
+    contextFiles: projFilesComplete,
     replyRaw,
-    parsedOut.files,
-  );
+    rawFiles: parsedOut.files,
+    messages,
+    gateway,
+  });
 
   const reply = sanitizeUserFacingAiText(
-    softenRoboticReply(data.instruction, replyRaw),
+    softenRoboticReply(data.instruction, finalized.reply),
   );
 
-  cacheSet(cacheKey, { reply, files: safeFiles });
+  const finalPayload = { reply, files: finalized.files };
+  cacheSet(cacheKey, finalPayload);
+  void setPersistedChatCache(cacheKey, userId, model, finalPayload);
+  persistSnapshotAfterChat(data.projectId, userId, projFilesComplete, finalized.files);
 
   auditAiActionCompleted({
     userId,
@@ -422,12 +545,13 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     instruction: data.instruction,
     projectId: data.projectId,
     risk: gov.risk,
-    metadata: { mode: "complete" },
+    metadata: { mode: "complete", safeBuild: finalized.safeBuild },
   });
 
   return jsonResponse({
     reply,
-    files: safeFiles,
+    files: finalized.files,
     balance: balanceAfterConsume,
+    safeBuild: finalized.safeBuild,
   });
 }

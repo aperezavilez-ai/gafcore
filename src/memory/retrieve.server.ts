@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { logDev } from "@/lib/gafcore-logger.server";
 import { formatMemoryHintsForPrompt, type ProjectMemoryRow } from "@/lib/gafcore-ai-memory.shared";
 import {
   buildImportGraph,
@@ -149,7 +150,7 @@ export async function retrieveProjectMemoryContext(
   };
 
   if (projectId && meta.ms > 0) {
-    console.info(JSON.stringify({ event: "gafcore_memory_retrieve", projectId, ...meta }));
+    logDev("gafcore_memory_retrieve", { projectId, ...meta });
   }
 
   return { promptAppendix, priorityPaths, meta };

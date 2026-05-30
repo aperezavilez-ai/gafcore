@@ -3,6 +3,10 @@ import {
   prefersProductMockupHero,
   resolveHeroImageFromInstruction,
 } from "@/lib/gafcore-hero-image.shared";
+import {
+  LISTA_PROCESADA_MAP_SNIPPET,
+  RESOLVE_TASK_TEXTO_HELPER_SNIPPET,
+} from "@/lib/gafcore-task-text-resolve.shared";
 
 /** Mapa nombre de archivo → data URL o https para resolver rutas en preview. */
 export function buildAssetUrlMap(files: ProjFile[]): Record<string, string> {
@@ -948,8 +952,27 @@ function neutralizeReactRouterForPreview(source: string): string {
   return out;
 }
 
+/** Inyecta helper + map limpio si el modelo dejó ternarios typeof en listaProcesada. */
+function repairListaProcesadaMap(source: string): string {
+  let out = source;
+  const needsHelper = /listaProcesada|tasks\.map\s*\(/.test(out) && !/function resolveTaskTexto/.test(out);
+  if (needsHelper) {
+    const importEnd = out.lastIndexOf("\nimport ");
+    const insertAt =
+      importEnd >= 0 ? out.indexOf("\n", importEnd + 1) + 1 : out.indexOf("\n") + 1;
+    if (insertAt > 0) {
+      out = `${out.slice(0, insertAt)}\n${RESOLVE_TASK_TEXTO_HELPER_SNIPPET}\n${out.slice(insertAt)}`;
+    }
+  }
+  if (/const\s+listaProcesada\s*=\s*tasks\.map/.test(out) && /typeof\s+/.test(out)) {
+    out = out.replace(/const\s+listaProcesada\s*=\s*tasks\.map\([\s\S]*?\);/, LISTA_PROCESADA_MAP_SNIPPET);
+  }
+  return out;
+}
+
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
-  let out = source.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
+  let out = repairListaProcesadaMap(source);
+  out = out.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
   out = out.replace(/\s+(https?:\/\/[^\s"'<>]+)(?=\s+[a-zA-Z_][\w-]*=)/g, " ");
   out = out.replace(/(\w)="([^"]*)"\s+"(\s+[a-zA-Z_][\w-]*=)/g, '$1="$2"$3');

@@ -2,6 +2,34 @@
 
 export const GAFCORE_AUTOFIX_SESSION_MAX = 10;
 
+/** Tras restaurar historial (reloj), no disparar auto-fix IA durante este margen. */
+export const GAFCORE_AUTOFIX_SUPPRESS_AFTER_RESTORE_MS = 45_000;
+
+export const GAFCORE_CANCEL_PREVIEW_AUTOFIX_EVENT = "gafcore:cancel-preview-autofix";
+
+/** El chat aborta envíos/auto-fix en curso al escuchar esto. */
+export const GAFCORE_VERSION_RESTORED_EVENT = "gafcore:version-restored";
+
+let previewAutofixSuppressedUntil = 0;
+
+export function suppressPreviewAutofix(
+  ms: number = GAFCORE_AUTOFIX_SUPPRESS_AFTER_RESTORE_MS,
+): void {
+  previewAutofixSuppressedUntil = Date.now() + ms;
+}
+
+export function isPreviewAutofixSuppressed(): boolean {
+  return Date.now() < previewAutofixSuppressedUntil;
+}
+
+/** Cancela auto-fix en curso y pausa nuevos intentos (p. ej. al restaurar una versión). */
+export function dispatchCancelPreviewAutofix(): void {
+  suppressPreviewAutofix();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(GAFCORE_CANCEL_PREVIEW_AUTOFIX_EVENT));
+  }
+}
+
 export function isNonAutofixablePreviewError(message: string): boolean {
   return /No se pudo cargar:|Failed to load|404|net::ERR|jsx shim|__gafcoreInstallJsxGuard|Cannot assign to property ['"]jsx['"]/i.test(
     message,
@@ -38,7 +66,7 @@ export function buildRuntimeAutoFixInstruction(errorMessage: string): string {
     "```",
     "",
     "Reglas obligatorias:",
-    "- React error #31: NUNCA renderices objetos en JSX. Usa campos (.title, .label) o JSX en .map.",
+    "- Brain V2: pre-procesa datos antes del return; listas planas de strings; .map((text, idx) => <li key={idx}>{text}</li>). Sin typeof, Array.isArray ni ternarios en return().",
     "- Sintaxis JSX válida: cierra paréntesis/llaves; no dejes `)}` sueltos.",
     "- Navegación interna: usa #inicio/#contacto o estado React. PROHIBIDO href a gafcore.com o /gafcore/app.",
     "- Prohibido iframe o capturas del IDE GafCore dentro del proyecto.",

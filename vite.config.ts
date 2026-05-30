@@ -2,6 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
 import { defineConfig, loadEnv, type Plugin } from "vite";
+import { assertSafeClientEnvKey } from "./src/lib/gafcore-env-guard.shared";
 import viteReact from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 
@@ -53,14 +54,43 @@ export default defineConfig(({ mode }) => {
   }
   const envDefine: Record<string, string> = {};
   for (const [key, value] of Object.entries(viteEnv)) {
+    assertSafeClientEnvKey(key);
     envDefine[`import.meta.env.${key}`] = JSON.stringify(value);
   }
 
+  const isProd = mode === "production";
+
   return {
     define: envDefine,
+    esbuild: {
+      drop: isProd ? ["console", "debugger"] : [],
+    },
     build: {
+      cssCodeSplit: true,
+      sourcemap: false,
       rollupOptions: {
         output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (
+              id.includes("react-dom") ||
+              id.includes("/react/") ||
+              id.includes("@tanstack/react-router") ||
+              id.includes("@tanstack/react-query")
+            ) {
+              return "vendor-core";
+            }
+            if (id.includes("@supabase")) return "vendor-supabase";
+            if (id.includes("framer-motion") || id.includes("motion-dom")) return "vendor-motion";
+            if (
+              id.includes("recharts") ||
+              id.includes("monaco") ||
+              id.includes("@monaco-editor")
+            ) {
+              return "vendor-heavy";
+            }
+            return "vendor";
+          },
           // Mismo nombre en client y SSR (evita HTTPError 500 en Vercel por hash distinto).
           assetFileNames: (assetInfo) => {
             const names = assetInfo.names ?? (assetInfo.name ? [assetInfo.name] : []);

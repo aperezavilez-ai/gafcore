@@ -34,7 +34,22 @@ export default tseslint.config(
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      "no-console": [
+        "warn",
+        {
+          allow: ["warn", "error"],
+        },
+      ],
     },
+  },
+  {
+    files: [
+      "scripts/**/*",
+      "src/lib/gafcore-logger.server.ts",
+      "src/lib/gafcore-client-logger.ts",
+      "src/components/ide/LivePreview.tsx",
+    ],
+    rules: { "no-console": "off" },
   },
   eslintPluginPrettier,
 );

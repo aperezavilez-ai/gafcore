@@ -23,6 +23,12 @@ import { GafcoreLogo } from "@/components/GafcoreLogo";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getPublicSiteOrigin } from "@/lib/public-site-url";
+import {
+  buildGafcoreSeoMeta,
+  GAFCORE_LANDING_DESCRIPTION,
+  GAFCORE_LANDING_TITLE,
+  gafcoreSeoHeadLinks,
+} from "@/lib/gafcore-seo.shared";
 import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
 type ThemeKey = "black" | "white" | "blue" | "gray";
@@ -688,9 +694,11 @@ export const Route = createFileRoute("/gafcore")({
   }),
   component: GafCoreLanding,
   head: () => ({
-    meta: [
-      { title: "GafCore — Construye cualquier app o sitio web con IA" },
-      { name: "description", content: "Describe tu idea en lenguaje natural y GafCore se encarga del código, diseño, base de datos y despliegue." },
-    ],
+    meta: buildGafcoreSeoMeta({
+      title: GAFCORE_LANDING_TITLE,
+      description: GAFCORE_LANDING_DESCRIPTION,
+      path: "/gafcore",
+    }),
+    links: gafcoreSeoHeadLinks("/gafcore"),
   }),
 });

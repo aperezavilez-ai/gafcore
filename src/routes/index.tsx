@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { buildGafcoreSeoMeta, gafcoreSeoHeadLinks } from "@/lib/gafcore-seo.shared";
 function RootGate() {
   useEffect(() => {
     const pendingRedirect = sessionStorage.getItem("gafcore_post_login_redirect");
@@ -27,13 +28,7 @@ function RootGate() {
 export const Route = createFileRoute("/")({
   component: RootGate,
   head: () => ({
-    meta: [
-      { title: "GafCore — Crea con IA" },
-      {
-        name: "description",
-        content:
-          "Plataforma GafCore: chat, preview en vivo y editor para construir con IA.",
-      },
-    ],
+    meta: buildGafcoreSeoMeta({ path: "/" }),
+    links: gafcoreSeoHeadLinks("/"),
   }),
 });

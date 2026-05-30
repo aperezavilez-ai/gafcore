@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { logClientDev } from "@/lib/gafcore-client-logger";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -174,7 +175,7 @@ export function DiagnosticsOpsPanel() {
     try {
       const res = await execute({ data: { id: selectedId } });
       toast.success("Fix ejecutado (sandbox + trazabilidad)");
-      console.info("[diagnostics execute]", res);
+      logClientDev("diagnostics execute", { ok: res.ok });
       await loadDetail(selectedId);
       await reloadList();
     } catch (e) {

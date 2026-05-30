@@ -74,6 +74,12 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
+import { logClientError, logClientWarn } from "@/lib/gafcore-client-logger";
+import {
+  createCodeSnapshot,
+  validateAndHealBeforePreview,
+} from "@/lib/gafcore-incremental-edit.shared";
+import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import {
   FUNCTIONAL_FIRST_BUILD_PREFIX,
   buildPreserveExistingPrefix,
@@ -88,7 +94,10 @@ import {
 } from "@/lib/gafcore-ai-validation.shared";
 import {
   GAFCORE_AUTOFIX_SESSION_MAX,
+  GAFCORE_CANCEL_PREVIEW_AUTOFIX_EVENT,
+  GAFCORE_VERSION_RESTORED_EVENT,
   buildRuntimeAutoFixInstruction,
+  isPreviewAutofixSuppressed,
   shouldAttemptAiAutofix,
 } from "@/lib/gafcore-chat-autofix.shared";
 import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
@@ -109,6 +118,12 @@ import {
 } from "@/lib/gafcore-workflow.functions";
 import { getGafcoreFactoryStatus, runGafcoreFactory } from "@/lib/gafcore-factory.functions";
 import { FACTORY_BUILD_PREFIX } from "@/lib/gafcore-factory.shared";
+import { HealthStatus } from "@/components/HealthStatus";
+import {
+  mapSafeBuildToHealthPhase,
+  type HealthStatusPhase,
+  type SafeBuildMeta,
+} from "@/services/ai/safe-build.shared";
 import type { FactoryRunResult } from "@/lib/gafcore-factory.shared";
 import {
   FACTORY_PROFILE_AUTO_ID,
@@ -412,6 +427,7 @@ export function ChatPanel({
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const recognitionRef = useRef<any>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerSectionRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContentRef = useRef<HTMLDivElement | null>(null);
@@ -490,6 +506,7 @@ export function ChatPanel({
     }
   });
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
+  const [healthPhase, setHealthPhase] = useState<HealthStatusPhase | null>(null);
   const freeCreditsRescueDone = useRef(false);
   const freeCreditsRescueUserId = useRef<string | null>(null);
   const callAiPlugins = useServerFn(listGafcoreActiveAiPlugins);
@@ -758,17 +775,46 @@ export function ChatPanel({
     return () => window.removeEventListener("gafcore:credits-applied", onCreditsApplied);
   }, [refreshCredits]);
 
+  const cancelPreviewAutofixInFlight = useCallback(() => {
+    if (autofixDebounceRef.current) clearTimeout(autofixDebounceRef.current);
+    autofixDebounceRef.current = null;
+    abortControllerRef.current?.abort();
+    autoFixInFlightRef.current = false;
+    setAutoFixActive(false);
+    if (autoFixToastIdRef.current != null) {
+      toast.dismiss(autoFixToastIdRef.current);
+      autoFixToastIdRef.current = null;
+    }
+  }, []);
+
+  const resetAfterVersionRestore = useCallback(() => {
+    cancelPreviewAutofixInFlight();
+    autoFixAttemptedErrorsRef.current.clear();
+    autoFixSessionCountRef.current = 0;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    sendInFlightRef.current = false;
+    setLoading(false);
+    setAutoFixActive(false);
+    setLastError(null);
+  }, [cancelPreviewAutofixInFlight]);
+
+  useEffect(() => {
+    const onCancelAutofix = () => cancelPreviewAutofixInFlight();
+    const onVersionRestored = () => resetAfterVersionRestore();
+    window.addEventListener(GAFCORE_CANCEL_PREVIEW_AUTOFIX_EVENT, onCancelAutofix);
+    window.addEventListener(GAFCORE_VERSION_RESTORED_EVENT, onVersionRestored);
+    return () => {
+      window.removeEventListener(GAFCORE_CANCEL_PREVIEW_AUTOFIX_EVENT, onCancelAutofix);
+      window.removeEventListener(GAFCORE_VERSION_RESTORED_EVENT, onVersionRestored);
+    };
+  }, [cancelPreviewAutofixInFlight, resetAfterVersionRestore]);
+
   useEffect(() => {
     return () => {
-      if (autofixDebounceRef.current) clearTimeout(autofixDebounceRef.current);
-      abortControllerRef.current?.abort();
-      autoFixInFlightRef.current = false;
-      if (autoFixToastIdRef.current != null) {
-        toast.dismiss(autoFixToastIdRef.current);
-        autoFixToastIdRef.current = null;
-      }
+      cancelPreviewAutofixInFlight();
     };
-  }, []);
+  }, [cancelPreviewAutofixInFlight]);
 
   useEffect(() => {
     if (user?.id) return;
@@ -1529,10 +1575,15 @@ export function ChatPanel({
     userRaw: string,
     options: { runFunctionalAudit: boolean; snapshotLabel?: string },
   ): Promise<{ merged: FileItem[]; issues: ProjectValidationIssue[] }> => {
-    if (options.snapshotLabel) {
+    const snapLabel = options.snapshotLabel?.trim();
+    if (
+      snapLabel &&
+      !snapLabel.toLowerCase().startsWith("auto-fix:") &&
+      !snapLabel.toLowerCase().startsWith("auto:")
+    ) {
       try {
         const { createSnapshot } = await import("@/lib/userSupabase");
-        void createSnapshot(baseFiles, options.snapshotLabel);
+        void createSnapshot(baseFiles, snapLabel, projectId ?? undefined);
       } catch {
         /* */
       }
@@ -1558,9 +1609,39 @@ export function ChatPanel({
     } catch {
       /* reparación local ya aplicada */
     }
-    const merged = ensureReactPackageJson(
+    let merged = ensureReactPackageJson(
       sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles)),
     );
+    const snapshot = createCodeSnapshot(
+      baseFiles.map((f) => ({
+        name: f.name,
+        content: f.content,
+        language: f.language,
+      })),
+    );
+    const baselineProj = baseFiles.map((f) => ({
+      name: f.name,
+      content: f.content,
+      language: f.language,
+    }));
+    const mergedProj = merged.map((f) => ({
+      name: f.name,
+      content: f.content,
+      language: f.language,
+    }));
+    const heal = validateAndHealBeforePreview(baselineProj, mergedProj, snapshot);
+    const shield = runIntegrityShield(baselineProj, heal.files, snapshot, {
+      deltaPaths: outFiles.map((f) => f.name),
+      instruction: userInstruction,
+    });
+    const finalHeal = shield.healed || heal.healed ? shield.files : heal.files;
+    if (shield.healed || heal.healed) {
+      merged = finalHeal.map((f) => ({
+        name: f.name,
+        content: f.content,
+        language: f.language ?? "typescript",
+      }));
+    }
     setFiles(merged);
     filesRef.current = merged;
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
@@ -1676,7 +1757,7 @@ export function ChatPanel({
       const snap = await callGetWorkflowStatus({ data: { workflowRunId: runId } });
       if (snap.ok) setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
     } catch (e) {
-      console.error("[workflow] cancel:", e);
+      logClientError("workflow cancel", e);
       toast.error("Error al cancelar");
     } finally {
       setWorkflowCancelPending(false);
@@ -1815,7 +1896,7 @@ export function ChatPanel({
           data: { workflowRunId: runId, projectId, files: [] },
         });
       } catch (e) {
-        console.error("[workflow-bg] poll:", e);
+        logClientError("workflow-bg poll", e);
       } finally {
         inFlight = false;
       }
@@ -1848,6 +1929,7 @@ export function ChatPanel({
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
+    safeBuild?: SafeBuildMeta;
   }> => {
     const res = await fetch("/api/gafcore/chat/complete", {
       method: "POST",
@@ -1887,10 +1969,15 @@ export function ChatPanel({
     const j = (await res.json()) as {
       reply?: string;
       files?: Array<{ name: string; language?: string; content: string }>;
+      safeBuild?: SafeBuildMeta;
     };
+    if (j.safeBuild?.phase) {
+      setHealthPhase(mapSafeBuildToHealthPhase(j.safeBuild.phase));
+    }
     return {
       reply: softenRoboticReply(userTextForTone, typeof j.reply === "string" ? j.reply : "Listo."),
       files: Array.isArray(j.files) ? j.files : [],
+      safeBuild: j.safeBuild,
     };
   };
 
@@ -1906,6 +1993,7 @@ export function ChatPanel({
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
+    safeBuild?: SafeBuildMeta;
   }> => {
     if (options?.preferReliableJson) {
       return fetchGafcoreChatComplete(
@@ -1975,11 +2063,16 @@ export function ChatPanel({
         const j = (await res.json()) as {
           reply?: string;
           files?: Array<{ name: string; language?: string; content: string }>;
+          safeBuild?: SafeBuildMeta;
         };
         const replyRaw = typeof j.reply === "string" ? j.reply : "Listo.";
+        if (j.safeBuild?.phase) {
+          setHealthPhase(mapSafeBuildToHealthPhase(j.safeBuild.phase));
+        }
         return {
           reply: softenRoboticReply(userTextForTone, replyRaw),
           files: Array.isArray(j.files) ? j.files : [],
+          safeBuild: j.safeBuild,
         };
       }
 
@@ -2034,6 +2127,7 @@ export function ChatPanel({
   const runPreviewAutofixWithAi = useCallback(
     async (errorMessage: string) => {
       const msg = errorMessage.trim();
+      if (isPreviewAutofixSuppressed()) return;
       if (!shouldAttemptAiAutofix(msg)) return;
       if (!projectId || filesRef.current.length === 0) return;
       if (autoFixInFlightRef.current) return;
@@ -2100,7 +2194,7 @@ export function ChatPanel({
           repairGeneratedSourceFiles(result.files),
           fixInstruction,
           fixInstruction,
-          { runFunctionalAudit: true, snapshotLabel: `auto-fix: ${msg.slice(0, 40)}` },
+          { runFunctionalAudit: true },
         );
         filesRef.current = applied.merged;
 
@@ -2125,7 +2219,7 @@ export function ChatPanel({
           onCodeGenerated?.();
         });
       } catch (e) {
-        console.warn("[gafcore-autofix-preview]", e);
+        logClientWarn("gafcore-autofix-preview", e);
         autoFixAttemptedErrorsRef.current.delete(attemptKey);
         toast.dismiss(toastId);
         const errMsg = String((e as Error)?.message || "");
@@ -2152,6 +2246,7 @@ export function ChatPanel({
   runPreviewAutofixRef.current = runPreviewAutofixWithAi;
 
   const scheduleRuntimeAutofix = useCallback((msg: string) => {
+    if (isPreviewAutofixSuppressed()) return;
     if (!shouldAttemptAiAutofix(msg)) return;
     if (autofixDebounceRef.current) clearTimeout(autofixDebounceRef.current);
     const delay = sendInFlightRef.current ? 900 : 400;
@@ -2734,6 +2829,13 @@ export function ChatPanel({
     if (!instruction.trim() || loading || sendInFlightRef.current) return;
     sendInFlightRef.current = true;
     setLoading(true);
+    if (effectiveBuild) {
+      setHealthPhase(
+        deepModel || isSubstantiveBuildRequest(raw) ? "optimizing_design" : "designing",
+      );
+    } else {
+      setHealthPhase(null);
+    }
     const myEpoch = ++requestEpochRef.current;
     setInput("");
     setPendingComposerImages([]);
@@ -2752,7 +2854,11 @@ export function ChatPanel({
       void (async () => {
         try {
           const { createSnapshot } = await import("@/lib/userSupabase");
-          await createSnapshot(buildContextFiles, `antes: ${(raw || "build").slice(0, 48)}`);
+          await createSnapshot(
+            buildContextFiles,
+            `antes: ${(raw || "build").slice(0, 48)}`,
+            projectId ?? undefined,
+          );
         } catch {
           /* best-effort */
         }
@@ -2825,6 +2931,12 @@ export function ChatPanel({
         softenRoboticReply(raw, result.reply || "Listo."),
       );
       setStreamChars(null);
+      if (effectiveBuild) {
+        const sbPhase = result.safeBuild?.phase;
+        setHealthPhase(
+          sbPhase ? mapSafeBuildToHealthPhase(sbPhase) : "validating",
+        );
+      }
 
       const contextForDelivery = buildContextFiles.map((f) => ({
         name: f.name,
@@ -2968,6 +3080,7 @@ export function ChatPanel({
             toast.error("Sin créditos para el reintento automático de corrección.");
           } else {
             toast.message("Corrigiendo validación (1 reintento automático)…", { duration: 5000 });
+            setHealthPhase("fixing_error");
             await advancePipeline("retry", "retrying");
             const fixInstruction =
               FUNCTIONAL_FIRST_BUILD_PREFIX +
@@ -3049,6 +3162,7 @@ export function ChatPanel({
         (error instanceof DOMException && error.name === "AbortError")
       ) {
         setStreamChars(null);
+        setHealthPhase(null);
         setPipelineStatus(null);
         pipelineRunIdRef.current = null;
         toast.message("Solicitud detenida o cancelada por tiempo.");
@@ -3080,7 +3194,7 @@ export function ChatPanel({
           : (streamHint ?? "No pude responder en este momento. Inténtalo de nuevo.");
         if (aiCfg) {
           // Loguear detalle para devs sin mostrarlo al usuario.
-          console.warn("[gafcore-chat] ai_not_configured:", errMsg);
+          logClientWarn("gafcore-chat ai_not_configured", errMsg);
           toast.error("Asistente IA no disponible", { duration: 8_000 });
         }
         appendMessageDeduped("ai", sanitizeUserFacingAiText(friendly));
@@ -3093,6 +3207,7 @@ export function ChatPanel({
       sendInFlightRef.current = false;
       if (myEpoch === requestEpochRef.current) {
         setLoading(false);
+        setHealthPhase(null);
       }
       refreshCredits();
     }
@@ -3134,7 +3249,7 @@ export function ChatPanel({
   };
 
   return (
-    <div className="grid h-full min-h-0 w-full max-w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-background">
+    <div className="grid h-full min-h-0 w-full max-w-full grid-rows-[auto_minmax(0,1fr)_auto_auto] overflow-hidden bg-background">
       <FixConventionDialog
         open={pinConventionOpen}
         onOpenChange={setPinConventionOpen}
@@ -3190,6 +3305,11 @@ export function ChatPanel({
             </span>
           </button>
         </div>
+        {healthPhase && !loading ? (
+          <div className="mt-1.5">
+            <HealthStatus phase={healthPhase} />
+          </div>
+        ) : null}
         {pipelineStatus || validationLabel || (factoryMode && factoryProfileId) ? (
           <p
             className="mt-1 truncate text-[10px] text-muted-foreground"
@@ -3312,11 +3432,14 @@ export function ChatPanel({
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary" />
                     </div>
                   </div>
-                  {streamChars != null && streamChars > 0 && (
-                    <p className="pl-9 text-[11px] text-foreground/75">
-                      Recibiendo respuesta… ~{Math.max(1, Math.round(streamChars / 1024))} KB texto
-                    </p>
-                  )}
+                  <div className="flex flex-col gap-1.5 pl-9">
+                    <HealthStatus phase={healthPhase} />
+                    {streamChars != null && streamChars > 0 && (
+                      <p className="text-[11px] text-foreground/75">
+                        Recibiendo respuesta… ~{Math.max(1, Math.round(streamChars / 1024))} KB texto
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -3327,13 +3450,34 @@ export function ChatPanel({
 
       {/* Composer */}
       <div
-        className="z-10 w-full min-w-0 max-w-full shrink-0 border-t border-border/40 bg-background px-2 pt-2 sm:px-3"
+        ref={composerSectionRef}
+        className="z-10 w-full min-w-0 max-w-full shrink-0 border-t border-border/40 bg-background"
         style={{
           paddingBottom: isMobile
             ? "max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.875rem))"
             : "max(0.75rem, env(safe-area-inset-bottom, 0px))",
         }}
       >
+        <ChatNextStepSuggestions
+          steps={nextSteps}
+          disabled={loading}
+          onSelect={(step) => {
+            if (loading) return;
+            setInput(step.prompt);
+            setComposerHighlight(true);
+            window.setTimeout(() => setComposerHighlight(false), 2200);
+            requestAnimationFrame(() => {
+              composerSectionRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+              taRef.current?.focus();
+              const el = taRef.current;
+              if (el) {
+                el.selectionStart = el.selectionEnd = step.prompt.length;
+                el.scrollTop = el.scrollHeight;
+              }
+            });
+          }}
+        />
+        <div className="px-2 pt-2 sm:px-3">
         {lastError && (
           <div
             className={
@@ -3404,24 +3548,6 @@ export function ChatPanel({
             )}
           </div>
         )}
-        <ChatNextStepSuggestions
-          steps={nextSteps}
-          disabled={loading}
-          onSelect={(step) => {
-            if (loading) return;
-            setInput(step.prompt);
-            setComposerHighlight(true);
-            window.setTimeout(() => setComposerHighlight(false), 1600);
-            taRef.current?.focus();
-            requestAnimationFrame(() => {
-              const el = taRef.current;
-              if (el) {
-                el.selectionStart = el.selectionEnd = step.prompt.length;
-                el.scrollTop = el.scrollHeight;
-              }
-            });
-          }}
-        />
         {pendingComposerImages.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-border bg-muted/30 px-2 py-2">
             {pendingComposerImages.map((img) => (
@@ -3960,6 +4086,7 @@ export function ChatPanel({
               </Button>
             </div>
           </div>
+        </div>
         </div>
       </div>
       <CreditsOutModal

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
+import { logClientError } from "@/lib/gafcore-client-logger";
 
 type Props = { children: ReactNode; fallback?: (error: Error, reset: () => void) => ReactNode };
 type State = { error: Error | null };
@@ -13,8 +14,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // eslint-disable-next-line no-console
-    console.error("[ErrorBoundary]", error, info);
+    logClientError("ErrorBoundary", { error, info });
   }
 
   reset = () => this.setState({ error: null });

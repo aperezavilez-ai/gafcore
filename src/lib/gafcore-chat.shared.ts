@@ -8,6 +8,22 @@ import {
 import { instructionNeedsLayoutModel } from "@/lib/gafcore-layout-instruction.shared";
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { GAFCORE_DESIGN_SYSTEM } from "@/lib/gafcore-design-system.shared";
+import { buildGafcoreBrainV2SystemContent } from "@/lib/gafcore-brain-v2";
+import {
+  buildAgentModeAppend,
+  buildAgentProjectContext,
+  isGafcoreBrainV2Only,
+} from "@/lib/gafcore-brain-agent.shared";
+import {
+  GAFCORE_DESIGN_CONDENSED,
+  GAFCORE_SYSTEM_CONDENSED,
+} from "@/lib/gafcore-system-prompt-condensed.shared";
+import {
+  buildDesignMotorPromptAppend,
+  inferAiBrainTaskFromInstruction,
+} from "@/services/ai/design-engine.shared";
+import { prepareIncrementalEditSession } from "@/lib/gafcore-incremental-edit.shared";
+import { buildIntegrityShieldPromptAppend } from "@/lib/gafcore-integrity-shield.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -56,6 +72,7 @@ Pilares (aplícalos en cada cambio):
    - **Robustez**: anticipa fallos habituales (imports inexistentes, JSON mal cerrado, rutas de archivo inválidas) y evítalos en la primera respuesta.
    - **UI**: contraste legible, estados hover/focus visibles, \`aria-*\` en controles interactivos cuando aporten; formularios con \`label\` asociado a \`input\`.
    - **JSX válido**: cada atributo separado (\`htmlFor="from" className="…"\`). **Nunca** pegues URLs (\`https://…\`) dentro de un atributo ni entre comillas de otro (prohibido \`htmlFor="from"https://…\`).
+   - **Brain V2**: ver \`gafcore-brain-v2\` — listas planas, pre-procesamiento antes del \`return\`, sin lógica defensiva en JSX.
    - **Iconos lucide-react**: por cada \`<Sparkles />\`, \`<Star />\`, etc. incluye \`import { Sparkles, Star } from "lucide-react"\` en el mismo archivo. Sin import = preview roto.
    - **Prohibido react-router / react-router-dom** en proyectos del IDE: el preview es una sola página. Usa \`useState\` para cambiar vistas (inicio, admin, chat). No BrowserRouter ni Routes.
    - **Salida**: el razonamiento detallado no debe aparecer fuera del campo \`reply\`; nunca texto antes o después del objeto JSON raíz.
@@ -71,7 +88,14 @@ Pilares (aplícalos en cada cambio):
    - Si el usuario pidió build/deploy, \`package.json\` coherente con imports npm usados.
    - **Consistencia de salida**: un solo objeto JSON raíz; \`files\` con rutas relativas sin \`/\` inicial; \`content\` completo por archivo (no truncar con \`...\`).
 
-10) **FUNCTIONAL-FIRST (obligatorio en modo Construir — Capa 0 GafCore)**:
+10) **ESCUDO DE INTEGRIDAD (ediciones sucesivas — obligatorio)**:
+   - Antes de editar: analiza el árbol de imports/componentes; identifica impacto en padres e hijos.
+   - PROHIBIDO eliminar imports, \`import type\`, hooks (useState, useEffect, etc.) o tipos existentes salvo petición explícita de borrado.
+   - Cambios INCREMENTALES: extiende código; no sustituyas el layout padre (App.tsx) si solo pidieron un componente hijo.
+   - Antes de cerrar la respuesta: verifica cierre de \`{\`, \`(\` y cada tag JSX \`<\` — la mayoría de Script errors vienen de tags sin cerrar.
+   - Ningún componente debe \`return undefined\`; usa \`null\` o JSX de fallback.
+
+11) **FUNCTIONAL-FIRST (obligatorio en modo Construir — Capa 0 GafCore)**:
    - **Prioridad absoluta**: Funcionalidad > UI > estética. Nada es “solo UI”.
    - **Cada feature nueva debe incluir**: (1) UI, (2) estado React + handlers, (3) capa de datos (ver abajo), (4) manejo de error, (5) loading/éxito visible, (6) flujo de usuario cerrado.
    - **Flujo de generación** (sigue este orden mental antes de escribir archivos):
@@ -96,7 +120,8 @@ Responde SIEMPRE en JSON puro con esta forma exacta:
   "files": [ { "name": "...", "language": "...", "content": "..." } ]
 }
 Reglas de **archivos (eficiencia)**:
-- En "files" incluye **solo** archivos **nuevos, creados o modificados** (delta). No repitas archivos sin cambios.
+   - En "files" incluye **solo** archivos **nuevos, creados o modificados** (delta). No repitas archivos sin cambios.
+   - **Preservación de estructura**: NUNCA elimines componentes/archivos existentes salvo petición explícita; reescritura incremental obligatoria.
 - Si no hay cambios de código, devuelve "files": [].
 - Si el usuario pide **cambiar código/UI** (fondo, hero, App.tsx, formulario, etc.), **files NO puede estar vacío**: incluye al menos el archivo modificado (p. ej. App.tsx) con el contenido completo actualizado.
 - No incluyas markdown ni triple backtick. Solo JSON válido.`;
@@ -203,6 +228,12 @@ export function selectContextFiles(
   }
   if (pick.size < 5) {
     files.slice(0, 16).forEach((f) => pick.add(f.name));
+  }
+  for (const f of files) {
+    const n = f.name.toLowerCase();
+    if (/^app\.(tsx|jsx)$/i.test(n) || /components\//i.test(n)) {
+      pick.add(f.name);
+    }
   }
   let out = files.filter((f) => pick.has(f.name));
   out = out.map((f) => truncateForContext(f, PER_FILE_CONTEXT_CAP));
@@ -351,11 +382,16 @@ export function buildGafcoreMessages(
   ctxFiles: ProjFile[];
 } {
   const allFiles = data.files as ProjFile[];
+  const incremental = prepareIncrementalEditSession(allFiles, data.instruction);
+  const mergedPriority = [...new Set([...priorityPaths, ...incremental.priorityPaths])];
+  const incrementalNote = incremental.active
+    ? `${incremental.promptAppend}${buildIntegrityShieldPromptAppend(allFiles, data.instruction)}`
+    : "";
   const visionImages = extractVisionImageParts(allFiles);
   const hasVision = visionImages.length > 0;
   const model =
     resolvedModel ?? pickModel(data.instruction, MODEL_FAST, MODEL_DEEP, hasVision);
-  const ctxFiles = selectContextFiles(data.instruction, allFiles, priorityPaths);
+  const ctxFiles = selectContextFiles(data.instruction, allFiles, mergedPriority);
   const subset =
     ctxFiles.length < allFiles.length ||
     totalChars(ctxFiles) < totalChars(allFiles) * 0.88;
@@ -376,10 +412,40 @@ export function buildGafcoreMessages(
         ]
       : textBlock;
 
-  const baseSystem = `${GAFCORE_SYSTEM}${GAFCORE_DESIGN_SYSTEM}${brandBlock}`;
-  const systemContent = memoryHints.trim()
-    ? `${baseSystem}${memoryHints}`
-    : baseSystem;
+  const v2Only = isGafcoreBrainV2Only();
+  let legacyAppend: string;
+  if (v2Only) {
+    legacyAppend = [
+      buildAgentProjectContext(ctxFiles),
+      buildAgentModeAppend(data.instruction),
+      brandBlock,
+      incrementalNote,
+      memoryHints,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  } else {
+    const useFullPrompts =
+      typeof process !== "undefined" &&
+      process.env?.GAFCORE_FULL_PROMPTS === "1";
+    const coreSystem = useFullPrompts ? GAFCORE_SYSTEM : GAFCORE_SYSTEM_CONDENSED;
+    const inferredTask = inferAiBrainTaskFromInstruction(data.instruction);
+    const designMotor = buildDesignMotorPromptAppend(inferredTask, data.instruction);
+    const designLayer = designMotor
+      ? ""
+      : useFullPrompts
+        ? GAFCORE_DESIGN_SYSTEM
+        : GAFCORE_DESIGN_CONDENSED;
+    const safeBuildHint =
+      isSubstantiveBuildRequest(data.instruction) && designMotor
+        ? "\n[SAFE-BUILD] Validación automática post-generación.\n"
+        : "";
+    legacyAppend = `${coreSystem}${designLayer}${designMotor}${safeBuildHint}${brandBlock}${incrementalNote}${memoryHints}`;
+  }
+  const systemContent = buildGafcoreBrainV2SystemContent({
+    legacyAppend,
+    model,
+  });
 
   const messages: GafcoreChatMessage[] = [
     { role: "system", content: systemContent },

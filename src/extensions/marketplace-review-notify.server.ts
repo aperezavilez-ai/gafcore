@@ -2,6 +2,7 @@
  * Avisos cuando un creador envía un listing a revisión (sin depender de email transaccional).
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { logDev } from "@/lib/gafcore-logger.server";
 
 export type MarketplaceReviewNotice = {
   listingId: string;
@@ -42,7 +43,7 @@ export async function notifyMarketplaceReviewSubmitted(
     at: new Date().toISOString(),
   };
 
-  console.info("[marketplace-review]", JSON.stringify(payload));
+  logDev("marketplace_review", payload as Record<string, unknown>);
 
   void enqueueReviewEmailToAdmins(payload);
   void sendReviewEmailViaResend(payload);

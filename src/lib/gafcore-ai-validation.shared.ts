@@ -7,6 +7,8 @@ import {
   formatFunctionalAuditForUser,
   hasFunctionalBlockingIssues,
 } from "@/lib/gafcore-functional-first.shared";
+import { auditJsxTagBalance } from "@/lib/gafcore-incremental-edit.shared";
+import { auditSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 
 export type ValidationSeverity = "error" | "warn";
 export type ValidationCategory = "syntax" | "import" | "build" | "functional";
@@ -171,6 +173,25 @@ function auditBuildReadiness(files: Array<{ name: string; content: string }>): P
 
   for (const f of files) {
     if (!/\.(tsx|jsx)$/i.test(f.name)) continue;
+    const closure = auditSyntaxClosure(f.content);
+    if (!closure.ok) {
+      issues.push({
+        severity: "error",
+        category: "syntax",
+        file: f.name,
+        message: `Cierre sintáctico: ${closure.messages.join("; ")}.`,
+      });
+    } else {
+      const tagBalance = auditJsxTagBalance(f.content);
+      if (tagBalance !== 0) {
+        issues.push({
+          severity: "error",
+          category: "syntax",
+          file: f.name,
+          message: `Tags JSX desbalanceados (${tagBalance > 0 ? "faltan cierres" : "sobran cierres"}).`,
+        });
+      }
+    }
     const open = (f.content.match(/\{/g) || []).length;
     const close = (f.content.match(/\}/g) || []).length;
     const openParen = (f.content.match(/\(/g) || []).length;

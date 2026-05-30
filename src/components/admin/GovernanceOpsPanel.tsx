@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -20,7 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Shield, ShieldAlert, Download } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Shield, ShieldAlert, Download } from "lucide-react";
 
 function formatTime(iso: string): string {
   try {
@@ -53,6 +54,7 @@ export function GovernanceOpsPanel() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [messages, setMessages] = useState<Record<string, string>>({});
+  const [auditTableReady, setAuditTableReady] = useState(true);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -63,6 +65,7 @@ export function GovernanceOpsPanel() {
       ]);
       setControls(ctrlRes.controls as GafcoreSystemControlRow[]);
       setAudit(auditRes.events as GafcoreAuditEventRow[]);
+      setAuditTableReady(auditRes.auditTableReady !== false);
       const msgMap: Record<string, string> = {};
       for (const c of ctrlRes.controls as GafcoreSystemControlRow[]) {
         if (c.message) msgMap[c.key] = c.message;
@@ -161,11 +164,31 @@ export function GovernanceOpsPanel() {
             Kill switches, permisos IA y auditoría. No afecta usuarios si todo está activo.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void reload()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Actualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/gafcore/app">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Ir a GafCore
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void reload()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Actualizar
+          </Button>
+        </div>
       </div>
+
+      {!auditTableReady ? (
+        <div className="rounded-lg border border-warning/50 bg-warning/15 px-4 py-3 text-sm text-foreground">
+          <p className="font-medium">Migración pendiente en Supabase</p>
+          <p className="mt-1 text-muted-foreground">
+            Falta la tabla <code className="text-xs">audit_events</code>. Aplica la migración{" "}
+            <code className="text-xs">20260529140000_gafcore_governance.sql</code> en el panel de
+            Supabase → SQL, o con <code className="text-xs">supabase db push</code>. El resto del
+            panel Ops sigue funcionando.
+          </p>
+        </div>
+      ) : null}
 
       {maintenanceOn ? (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -255,7 +278,11 @@ export function GovernanceOpsPanel() {
         </CardHeader>
         <CardContent>
           {audit.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin eventos aún.</p>
+            <p className="text-sm text-muted-foreground">
+              {!auditTableReady
+                ? "Auditoría no disponible hasta aplicar la migración."
+                : "Sin eventos aún."}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

@@ -1,6 +1,10 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { getPublicSiteOrigin } from "@/lib/public-site-url";
+import {
+  buildGafcoreJsonLd,
+  buildGafcoreSeoMeta,
+  gafcoreSeoHeadLinks,
+} from "@/lib/gafcore-seo.shared";
 import {
   GAFCORE_APPLE_TOUCH_ICON_PATH,
   GAFCORE_FAVICON_INLINE,
@@ -49,31 +53,20 @@ function NotFoundComponent() {
 
 export const Route = createRootRoute({
   head: () => {
-    const site = getPublicSiteOrigin();
+    const jsonLd = buildGafcoreJsonLd();
     return {
-    meta: [
-      { charSet: "utf-8" },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1, viewport-fit=cover",
-      },
-      { title: "GafCore — Plataforma de creación con IA" },
-      { name: "description", content: "GafCore: crea apps y prototipos con chat, preview en vivo y editor integrado." },
-      { name: "author", content: "GafCore" },
-      { property: "og:title", content: "GafCore — Plataforma de creación con IA" },
-      { property: "og:description", content: "GafCore: crea apps y prototipos con chat, preview en vivo y editor integrado." },
-      { property: "og:type", content: "website" },
-      { property: "og:url", content: site },
-      { property: "og:site_name", content: "GafCore" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "GafCore — Plataforma de creación con IA" },
-      { name: "twitter:description", content: "GafCore: crea apps y prototipos con chat, preview en vivo y editor integrado." },
-      { property: "og:image", content: `${site}/og-image.png` },
-      { name: "twitter:image", content: `${site}/og-image.png` },
-      { name: "theme-color", content: GAFCORE_PWA_THEME_COLOR },
-      ...gafcorePwaMetaTags(),
-    ],
-    links: [{ rel: "canonical", href: site }, ...gafcoreHeadIconLinks()],
+      meta: [
+        ...buildGafcoreSeoMeta(),
+        { name: "theme-color", content: GAFCORE_PWA_THEME_COLOR },
+        ...gafcorePwaMetaTags(),
+      ],
+      links: [...gafcoreSeoHeadLinks(), ...gafcoreHeadIconLinks()],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(jsonLd),
+        },
+      ],
     };
   },
   shellComponent: RootShell,

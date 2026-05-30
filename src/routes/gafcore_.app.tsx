@@ -1,11 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Loader2, Lock, ArrowRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth, forceAuthLoadingComplete } from "@/hooks/useAuth";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { supabase } from "@/integrations/supabase/client";
-import { GafCoreIDE } from "@/components/gafcore/GafCoreIDE";
+import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
+
+const GafCoreIDE = lazy(() =>
+  import("@/components/gafcore/GafCoreIDE").then((m) => ({ default: m.GafCoreIDE })),
+);
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
@@ -13,7 +17,13 @@ import { clearPlanChoicePending, isPlanChoicePending } from "@/lib/gafcore-plan-
 
 export const Route = createFileRoute("/gafcore_/app")({
   component: GafCoreAppPage,
-  head: () => ({ meta: [{ title: "Plataforma — GafCore" }] }),
+  head: () => ({
+    meta: buildGafcoreSeoMeta({
+      title: "Plataforma — GafCore",
+      description: "Editor y chat con IA — sesión privada.",
+      noindex: true,
+    }),
+  }),
 });
 
 function GafCoreAppPage() {
@@ -181,7 +191,15 @@ function GafCoreAppPage() {
   return (
     <ErrorBoundary>
       <DevPortBanner />
-      <GafCoreIDE />
+      <Suspense
+        fallback={
+          <div className="flex min-h-[50vh] flex-1 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
+          </div>
+        }
+      >
+        <GafCoreIDE />
+      </Suspense>
     </ErrorBoundary>
   );
 }

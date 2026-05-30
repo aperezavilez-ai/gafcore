@@ -7,6 +7,7 @@ import {
   resolveGatewayModel,
   streamChatCompletions,
 } from "@/lib/gafcore-ai-gateway.server";
+import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 
 const SYSTEM_PROMPT = `Eres GafCore AI, asistente de la plataforma de creación con IA. Responde en español de forma clara, breve y útil. Usa markdown cuando ayude.`;
 
@@ -23,10 +24,13 @@ export const Route = createFileRoute("/api/chat")({
         try {
           gateway = getGafcoreAiGateway();
         } catch {
-          return new Response(JSON.stringify({ error: "AI not configured" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              error: "ai_not_configured",
+              detail: sanitizeUserFacingAiText("ai_not_configured"),
+            }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
         }
 
         let body: { messages?: Array<{ role: string; content: string }>; mode?: Mode };

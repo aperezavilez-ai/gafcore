@@ -185,6 +185,18 @@ export function hashInstructionForAudit(instruction: string): string {
   return createHash("sha256").update(instruction).digest("hex").slice(0, 16);
 }
 
+/** Tabla de migración `20260529140000_gafcore_governance.sql` aún no aplicada en Supabase. */
+export function isAuditEventsTableMissing(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("audit_events") &&
+    (m.includes("schema cache") ||
+      m.includes("does not exist") ||
+      m.includes("could not find") ||
+      m.includes("relation") && m.includes("not exist"))
+  );
+}
+
 /** Fire-and-forget — no bloquea la respuesta al usuario. */
 export function appendAuditEvent(args: {
   actorId?: string | null;
@@ -301,7 +313,11 @@ export function auditAiActionCompleted(args: {
 export async function listAuditEvents(args: {
   limit?: number;
   offset?: number;
-}): Promise<{ events: Record<string, unknown>[]; total: number }> {
+}): Promise<{
+  events: Record<string, unknown>[];
+  total: number;
+  auditTableReady: boolean;
+}> {
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
   const offset = Math.max(args.offset ?? 0, 0);
 
@@ -311,8 +327,14 @@ export async function listAuditEvents(args: {
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  if (error) throw new Error(error.message);
-  return { events: data ?? [], total: count ?? 0 };
+  if (error) {
+    if (isAuditEventsTableMissing(error.message)) {
+      console.warn("[governance] audit_events missing — apply migration 20260529140000_gafcore_governance.sql");
+      return { events: [], total: 0, auditTableReady: false };
+    }
+    throw new Error(error.message);
+  }
+  return { events: data ?? [], total: count ?? 0, auditTableReady: true };
 }
 
 function csvEscape(value: unknown): string {
@@ -347,6 +369,11 @@ export async function exportAuditEventsCsv(limit = 5000): Promise<string> {
     .select("*")
     .order("created_at", { ascending: false })
     .limit(capped);
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isAuditEventsTableMissing(error.message)) {
+      return auditEventsToCsv([]);
+    }
+    throw new Error(error.message);
+  }
   return auditEventsToCsv(data ?? []);
 }

@@ -12,7 +12,8 @@ import {
   resolveAiRoute,
   resolveAllAiRoutes,
   type ResolvedRoute,
-} from "@/lib/gafcore-model-routing.shared";
+} from "@/lib/gafcore-model-routing.server";
+import { logDev } from "@/lib/gafcore-logger.server";
 
 export type AiChatConfig = {
   url: string;
@@ -213,14 +214,11 @@ export async function postChatCompletions(body: ChatCompletionsBody): Promise<Re
       /* noop */
     }
     lastRes = res;
-    console.warn(
-      JSON.stringify({
-        event: "gafcore_ai_fallback",
-        from: route.provider,
-        status: res.status,
-        model: route.modelSlug,
-      }),
-    );
+    logDev("gafcore_ai_fallback", {
+      from: route.provider,
+      status: res.status,
+      model: route.modelSlug,
+    });
   }
   // Defensivo: si por alguna razón se sale del loop sin return, devuelve último.
   return (

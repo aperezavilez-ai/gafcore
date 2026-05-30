@@ -1,14 +1,19 @@
 /**
- * Sugerencias «siguiente paso» del chat IDE (estilo Lovable): chips contextuales
- * según el proyecto, el último mensaje del usuario y el historial.
+ * Guía de pasos del chat IDE: checklist completa según avance del proyecto.
+ * Al elegir un chip, el prompt va al compositor (el usuario pulsa Construir).
  */
-
 import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
+import { auditFunctionalFirst } from "@/lib/gafcore-functional-first.shared";
+
+export type GafcoreChatStepStatus = "completed" | "current" | "upcoming";
 
 export type GafcoreChatNextStep = {
   id: string;
   label: string;
   prompt: string;
+  status: GafcoreChatStepStatus;
+  /** Orden en la guía (1 = primero). */
+  order: number;
 };
 
 export type GafcoreChatSuggestionContext = {
@@ -24,13 +29,8 @@ export type GafcoreChatSuggestionContext = {
   validationLabel: string | null;
 };
 
-const MAX_STEPS = 4;
-
-/** Mínimo de intención en el chat antes de mostrar chips (proyecto aún no construido). */
-const MIN_USER_INTENT_CHARS = 28;
-
 const USER_INTENT_RE =
-  /\b(quiero|necesito|crea|crear|genera|generar|construye|construir|app|aplicaci[oó]n|sitio|web|landing|taxi|tienda|dashboard|plataforma|formulario|reservas|ecommerce|saas)\b/i;
+  /\b(quiero|necesito|crea|crear|genera|generar|construye|construir|app|aplicaci[oó]n|sitio|web|landing|taxi|tienda|dashboard|plataforma|formulario|reservas|ecommerce|saas|valuaci[oó]n|seguros|login|registro)\b/i;
 
 function lastMessage(
   messages: GafcoreChatSuggestionContext["messages"],
@@ -49,10 +49,6 @@ function allUserMessagesText(messages: GafcoreChatSuggestionContext["messages"])
     .join("\n");
 }
 
-function fileNames(files: GafcoreChatSuggestionContext["files"]): string {
-  return files.map((f) => f.name).join("\n").toLowerCase();
-}
-
 function allContent(files: GafcoreChatSuggestionContext["files"]): string {
   return files.map((f) => f.content).join("\n");
 }
@@ -65,7 +61,6 @@ function corpus(ctx: GafcoreChatSuggestionContext): string {
   return `${msgs}\n${allContent(ctx.files)}`.toLowerCase();
 }
 
-/** Área de trabajo aún en plantilla de bienvenida (preview «Bienvenidos a GafCore»). */
 function isWelcomeWorkspace(ctx: GafcoreChatSuggestionContext): boolean {
   const app = ctx.files.find((f) => /^app\.(jsx|tsx?)$/i.test(f.name));
   if (!app) return ctx.files.length === 0;
@@ -77,57 +72,17 @@ function isWelcomeWorkspace(ctx: GafcoreChatSuggestionContext): boolean {
   return false;
 }
 
-/** Proyecto real ya generado en el IDE (no pantalla de bienvenida). */
 export function projectHasStarted(ctx: GafcoreChatSuggestionContext): boolean {
   return !isWelcomeWorkspace(ctx);
 }
 
-/** El usuario ya explicó en el chat de qué va el proyecto (antes del primer build). */
 export function hasSubstantiveUserIntent(
   messages: GafcoreChatSuggestionContext["messages"],
 ): boolean {
   const text = allUserMessagesText(messages).trim();
-  if (text.length < MIN_USER_INTENT_CHARS) return false;
+  if (text.length < 20) return false;
   if (/^(hola|hi|hey|buenas|ok|vale|gracias)[!.?\s]*$/i.test(text)) return false;
-  return USER_INTENT_RE.test(text) || text.length >= 72;
-}
-
-function isErrorRecoveryContext(ctx: GafcoreChatSuggestionContext): boolean {
-  const err = (ctx.lastError ?? "").trim();
-  if (!err) return false;
-  return /objects are not valid|react error #31|error #31|syntaxerror|preview-error|failed to resolve|cannot assign to property|construcción fallida|unexpected token/i.test(
-    err,
-  );
-}
-
-function pushStep(
-  out: GafcoreChatNextStep[],
-  id: string,
-  label: string,
-  prompt: string,
-): void {
-  if (out.length >= MAX_STEPS) return;
-  if (out.some((s) => s.id === id)) return;
-  const shortLabel = label.length > 36 ? `${label.slice(0, 33)}…` : label;
-  out.push({ id, label: shortLabel, prompt });
-}
-
-/** Extrae viñetas accionables del último mensaje de la IA (como Lovable). */
-function stepsFromAiBullets(aiText: string): GafcoreChatNextStep[] {
-  const out: GafcoreChatNextStep[] = [];
-  const lines = aiText.split(/\n/);
-  for (const line of lines) {
-    const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)$/);
-    if (!m) continue;
-    let text = m[1].trim();
-    if (text.length < 12 || text.length > 140) continue;
-    if (/^(listo|hecho|ok|perfecto|resumen)/i.test(text)) continue;
-    text = text.replace(/\*\*/g, "").trim();
-    const id = `ai-${out.length}-${text.slice(0, 12).replace(/\W/g, "")}`;
-    pushStep(out, id, text.slice(0, 40), text.endsWith(".") ? text : `${text}.`);
-    if (out.length >= 2) break;
-  }
-  return out;
+  return USER_INTENT_RE.test(text) || text.length >= 48;
 }
 
 type ProjectKind =
@@ -154,263 +109,213 @@ function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
     return "restaurant";
   }
   if (/checkout|carrito|producto|tienda|ecommerce|shop|catálogo/i.test(t)) return "ecommerce";
-  if (/dashboard|saas|suscripción|subscription|kpi/i.test(t)) return "saas";
+  if (/dashboard|saas|suscripción|subscription|kpi|autoesimate|valuaci[oó]n|seguros|daños vehiculares/i.test(t)) {
+    return "saas";
+  }
   if (/portfolio|portafolio|proyectos destacados/i.test(t)) return "portfolio";
   return "generic";
 }
 
 type ProjectCapabilities = {
+  hasRealUi: boolean;
   hasInternalNav: boolean;
   hasWorkingForm: boolean;
+  hasLoginFlow: boolean;
   hasCartFlow: boolean;
+  hasPersistence: boolean;
   hasResponsiveHints: boolean;
+  hasLoadingStates: boolean;
 };
 
 function inferProjectCapabilities(ctx: GafcoreChatSuggestionContext): ProjectCapabilities {
   const code = allContent(ctx.files);
   return {
+    hasRealUi: ctx.files.length >= 2 && !isWelcomeWorkspace(ctx) && code.length > 800,
     hasInternalNav:
-      /#inicio|#contacto|id=["']contacto|id=["']inicio|setSection|setPage|activeSection/i.test(
+      /#inicio|#contacto|id=["']contacto|id=["']inicio|setSection|setPage|activeSection|setView/i.test(
         code,
       ) || /href=["']#[^"']+["']/.test(code),
     hasWorkingForm:
-      /onSubmit|preventDefault\(\)|type=["']email|guardado|gracias|sent/i.test(code),
+      /<form[\s\S]*?onSubmit/i.test(code) ||
+      (/onSubmit\s*=\s*\{/.test(code) && /preventDefault/.test(code)),
+    hasLoginFlow:
+      /iniciar sesi[oó]n|login|registrarse|signup|ingresar/i.test(code) &&
+      (/type=["']password/i.test(code) || /correo|email/i.test(code)),
     hasCartFlow: /carrito|cart|addToCart|añadir al carrito|total.*precio/i.test(code),
+    hasPersistence: /localStorage|sessionStorage/.test(code),
     hasResponsiveHints: /sm:|md:|lg:|max-w-|grid-cols-/i.test(code),
+    hasLoadingStates: /loading|spinner|skeleton|isLoading|isSubmitting/i.test(code),
   };
 }
 
-/** Pasos según el tipo de app (taxi, tienda, etc.) — requieren intención conocida. */
-function projectKindSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  const steps: GafcoreChatNextStep[] = [];
-  const kind = detectProjectKind(ctx);
-
-  if (kind === "taxi") {
-    pushStep(
-      steps,
-      "taxi-911",
-      "Llamada 911 desde pánico",
-      "Activa la opción de llamar al 911 desde el botón de pánico e integra la acción con el registro de la alerta y el estado del viaje activo.",
-    );
-    pushStep(
-      steps,
-      "taxi-live-location",
-      "Ubicación en vivo",
-      "Añade compartir ubicación en vivo del viaje para pasajero y conductor con estado visible en la UI.",
-    );
-    pushStep(
-      steps,
-      "taxi-driver-panel",
-      "Panel conductor",
-      "Crea el panel del conductor: viajes disponibles, aceptar viaje, navegación simulada y estado en línea.",
-    );
-    pushStep(
-      steps,
-      "taxi-passenger-flow",
-      "Flujo pedir taxi",
-      "Completa el flujo de pedir taxi: origen, destino, estimación, confirmación y seguimiento del viaje.",
-    );
-    return steps;
-  }
-
-  if (kind === "restaurant") {
-    pushStep(steps, "rest-menu", "Carta y platos", "Mejora la carta digital con categorías, fotos y precios.");
-    pushStep(steps, "rest-reserve", "Reservar mesa", "Añade reserva de mesa con fecha, hora y confirmación.");
-    return steps;
-  }
-
-  if (kind === "ecommerce") {
-    pushStep(steps, "shop-catalog", "Catálogo productos", "Mejora el catálogo con filtros, fichas de producto y CTA comprar.");
-    pushStep(steps, "shop-cart", "Carrito checkout", "Implementa carrito y checkout con resumen de pedido.");
-    return steps;
-  }
-
-  if (kind === "saas") {
-    pushStep(steps, "saas-dashboard", "Dashboard KPIs", "Refina el dashboard con KPIs, gráfico y tabla de actividad reciente.");
-    pushStep(steps, "saas-onboarding", "Onboarding", "Añade onboarding de 3 pasos para nuevos usuarios.");
-    return steps;
-  }
-
-  return steps;
+function assignStepStatuses(
+  items: Array<{ id: string; label: string; prompt: string; done: boolean }>,
+): GafcoreChatNextStep[] {
+  let currentAssigned = false;
+  return items.map((item, index) => {
+    let status: GafcoreChatStepStatus;
+    if (item.done) {
+      status = "completed";
+    } else if (!currentAssigned) {
+      status = "current";
+      currentAssigned = true;
+    } else {
+      status = "upcoming";
+    }
+    return {
+      id: item.id,
+      label: item.label,
+      prompt: item.prompt,
+      status,
+      order: index + 1,
+    };
+  });
 }
 
-/** Enriquecimiento solo cuando el proyecto ya tiene código real generado. */
-function operationalEnrichmentSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  const steps: GafcoreChatNextStep[] = [];
-  const code = allContent(ctx.files);
-  const names = fileNames(ctx.files);
-  const kind = detectProjectKind(ctx);
-
-  if (!/useState|onClick|onSubmit|fetch\(|async\s+function/i.test(code)) {
-    pushStep(
-      steps,
-      "op-interactivity",
-      "Lógica interactiva",
-      "Conecta botones y formularios con estado real (useState), validación y feedback al usuario.",
-    );
-  }
-  if (!/loading|spinner|skeleton|isLoading/i.test(code)) {
-    pushStep(
-      steps,
-      "op-loading",
-      "Estados de carga",
-      "Añade estados de carga y vacío en listas y formularios para que la app se sienta terminada.",
-    );
-  }
-  if (!/nav|router|pathname|#\/|tabs|menu/i.test(names + code) && ctx.files.length >= 2) {
-    pushStep(
-      steps,
-      "op-navigation",
-      "Navegación completa",
-      "Implementa navegación entre pantallas o secciones con rutas claras y menú coherente.",
-    );
-  }
-  if (
-    (kind === "generic" || kind === "portfolio") &&
-    !/contact|contacto|form/i.test(names + code) &&
-    /landing|sitio web|página web|contacto/i.test(corpus(ctx))
-  ) {
-    pushStep(
-      steps,
-      "add-contact",
-      "Formulario contacto",
-      "Añade formulario de contacto funcional con validación y mensaje de éxito o error.",
-    );
-  }
-  if (!/responsive|sm:|md:|lg:/i.test(code)) {
-    pushStep(
-      steps,
-      "responsive",
-      "Responsive móvil",
-      "Haz el layout totalmente responsive en móvil, tablet y desktop.",
-    );
-  }
-  if (kind === "taxi" && !/911|pánico|panico|alerta/i.test(code)) {
-    pushStep(
-      steps,
-      "taxi-safety",
-      "Seguridad y alertas",
-      "Completa flujo de seguridad: botón de pánico, registro de alerta y estado del viaje activo.",
-    );
-  }
-
-  return steps;
+function liveFunctionalGaps(ctx: GafcoreChatSuggestionContext): string[] {
+  const tsx = ctx.files.filter((f) => /\.(tsx|jsx)$/i.test(f.name));
+  if (tsx.length === 0) return [];
+  const audit = auditFunctionalFirst(tsx);
+  return audit.issues.filter((i) => i.severity === "error").map((i) => i.message);
 }
 
-function projectContextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  const steps = projectKindSteps(ctx);
-  for (const s of operationalEnrichmentSteps(ctx)) {
-    pushStep(steps, s.id, s.label, s.prompt);
+function promptForValidationError(err: string): string | null {
+  const e = err.toLowerCase();
+  if (/formulario sin onsubmit|onsubmit conectado/i.test(e)) {
+    return (
+      "Corrige el error de validación en App.tsx. Conecta onSubmit en cada formulario (login, registro, contacto) con una función que haga e.preventDefault(), validación mínima y feedback visible. No elimines el diseño existente."
+    );
   }
-  return steps;
+  if (/onclick vacío|sin onsubmit|enlace con href/i.test(e)) {
+    return (
+      "Corrige handlers: cada botón con onClick real o type submit dentro de form con onSubmit; sin onClick vacío ni href=\"#\" sin acción. Mantén el UI actual."
+    );
+  }
+  if (/objects are not valid|react error #31|error #31|\{feature\}|\{stat\}/i.test(e)) {
+    return (
+      "Arregla los .map() en JSX: usa arrays planos de strings y elements.map((text, idx) => <li key={idx}>{text}</li>). Sin typeof, sin {item} ni objetos como hijos."
+    );
+  }
+  if (/import roto|tags jsx|sintaxis|syntaxerror|unexpected token|script error/i.test(e)) {
+    return `Corrige sintaxis e imports sin romper lo ya construido. Error detectado:\n\n${err.slice(0, 600)}`;
+  }
+  if (/validación|construcción fallida|functional|error/i.test(e)) {
+    return `Corrige solo lo necesario para pasar la validación. Mantén el diseño actual.\n\n${err.slice(0, 700)}`;
+  }
+  return null;
 }
 
-function buildFunctionalRoadmapSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+/** Checklist completa visible siempre (6 pasos estándar de creación de proyecto). */
+function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
   const kind = detectProjectKind(ctx);
   const caps = inferProjectCapabilities(ctx);
-  const labels =
-    kind === "landing"
-      ? {
-          a: caps.hasInternalNav ? "A) Navegación lista" : "A) Navegación interna",
-          b: caps.hasWorkingForm ? "B) Formulario listo" : "B) Formulario funcional",
-          c: caps.hasResponsiveHints ? "C) QA y publicar" : "C) Responsive + publicar",
-        }
-      : kind === "restaurant"
-      ? {
-          a: "A) Flujo core restaurante",
-          b: "B) Reserva/pedido funcional",
-          c: "C) QA y publicar",
-        }
-      : kind === "ecommerce"
-        ? {
-            a: "A) Catálogo y carrito",
-            b: "B) Checkout funcional",
-            c: "C) QA y publicar",
-          }
-        : kind === "saas"
-          ? {
-              a: "A) Dashboard funcional",
-              b: "B) Flujo de datos real",
-              c: "C) QA y publicar",
-            }
-          : {
-              a: "A) Base funcional",
-              b: "B) Flujo principal completo",
-              c: "C) QA y publicar",
-            };
+  const gaps = liveFunctionalGaps(ctx);
+  const err = (ctx.lastError ?? "").trim();
+  const hasIntent = hasSubstantiveUserIntent(ctx.messages);
+  const started = projectHasStarted(ctx);
+  const hasAiBuild = ctx.messages.some((m) => m.role === "ai" && m.content.length > 80);
 
-  const prompts =
-    kind === "landing"
-      ? {
-          a: caps.hasInternalNav
-            ? "Refina la navegación interna: botones Inicio y Contacto deben usar anclas (#inicio, #contacto) o estado React, NUNCA href a /gafcore ni rutas absolutas del IDE."
-            : "Implementa navegación interna real del sitio: secciones inicio y contacto con anclas (#inicio, #contacto) o estado React. Prohibido enlazar a gafcore.com o /gafcore/app.",
-          b: caps.hasWorkingForm
-            ? "Mejora el formulario de contacto: validación, estados loading/éxito/error y persistencia en localStorage."
-            : "Haz funcional el formulario de contacto/CTA: onSubmit con preventDefault, validación de email y feedback visible al usuario.",
-          c: "Corrige errores del preview si existen, ajusta responsive móvil/tablet/desktop y deja listo para publicar.",
-        }
-      : kind === "restaurant"
-      ? {
-          a: "Implementa la base funcional del restaurante: navegación real entre secciones (inicio, menú, reservas/contacto) y estado de la UI conectado.",
-          b: "Construye el flujo principal del negocio: formulario de reserva o pedido con validación, loading, éxito/error y persistencia local.",
-          c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
-        }
-      : kind === "ecommerce"
-        ? {
-            a: "Implementa catálogo + carrito funcional: añadir/quitar productos, cantidades y total en tiempo real con persistencia local.",
-            b: "Completa checkout funcional: formulario de datos, validación, estado de envío, feedback de éxito/error y resumen final.",
-            c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
-          }
-        : kind === "saas"
-          ? {
-              a: "Implementa dashboard funcional con KPIs y módulos conectados a estado real (sin tarjetas estáticas vacías).",
-              b: "Completa flujo principal del producto: alta/edición/listado o acción core con validación, loading, error y confirmación.",
-              c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
-            }
-          : {
-              a: "Construye la base funcional del proyecto: navegación real, secciones conectadas y acciones sin placeholders.",
-              b: "Completa el flujo principal end-to-end con estado, validación, manejo de error y persistencia local.",
-              c: "Ejecuta QA funcional completo: corrige errores del preview, revisa responsive móvil/tablet/desktop y deja el proyecto listo para publicar.",
-            };
+  const needsForms = /formulario|login|registr|contacto|ingresar|email|password/i.test(
+    corpus(ctx),
+  );
+  const formGap =
+    gaps.some((g) => /onsubmit|formulario/i.test(g)) ||
+    /formulario sin onsubmit/i.test(err.toLowerCase());
 
-  return [
-    { id: "roadmap-a", label: labels.a, prompt: prompts.a },
-    { id: "roadmap-b", label: labels.b, prompt: prompts.b },
-    { id: "roadmap-c", label: labels.c, prompt: prompts.c },
+  const defaultFormPrompt =
+    "En todos los formularios (login, registro, contacto): añade onSubmit con e.preventDefault(), validación mínima y mensaje de éxito o error visible. No elimines el diseño actual.";
+
+  const flowPrompt =
+    kind === "ecommerce"
+      ? "Implementa catálogo + carrito con estado, totales, addToCart y persistencia en localStorage."
+      : kind === "saas" || caps.hasLoginFlow
+        ? "Conecta login/registro/dashboard con useState: navegación interna, pantallas y handlers en botones."
+        : "Conecta navegación y flujo principal: secciones con useState o anchors con acción, botones con handlers reales.";
+
+  const items: Array<{ id: string; label: string; prompt: string; done: boolean }> = [
+    {
+      id: "guide-1",
+      label: "1. Describe tu proyecto",
+      done: hasIntent,
+      prompt:
+        lastMessage(ctx.messages, "user").trim().length >= 20
+          ? lastMessage(ctx.messages, "user").trim()
+          : "Quiero crear una aplicación web para [negocio, usuarios y pantallas principales]. Incluye login, dashboard y diseño premium en dark mode.",
+    },
+    {
+      id: "guide-2",
+      label: "2. Generar base (App + preview)",
+      done: started && caps.hasRealUi && hasAiBuild,
+      prompt:
+        "Construye la base completa del proyecto: App.tsx export default, main.tsx, index.html, diseño premium y flujo visible en el preview. Respeta lo que ya pedí en el chat.",
+    },
+    {
+      id: "guide-3",
+      label: "3. Formularios con onSubmit",
+      done: needsForms ? caps.hasWorkingForm && !formGap : started && caps.hasRealUi,
+      prompt: promptForValidationError(err) ?? defaultFormPrompt,
+    },
+    {
+      id: "guide-4",
+      label: "4. Flujo y navegación",
+      done:
+        caps.hasInternalNav ||
+        (caps.hasLoginFlow && caps.hasPersistence) ||
+        (started && !needsForms),
+      prompt: flowPrompt,
+    },
+    {
+      id: "guide-5",
+      label: "5. Estados, loading y persistencia",
+      done: caps.hasPersistence && caps.hasLoadingStates,
+      prompt:
+        "Añade useState + handlers en acciones clave; loading/isSubmitting en envíos; persiste datos en localStorage donde aplique.",
+    },
+    {
+      id: "guide-6",
+      label: "6. Responsive y publicar",
+      done:
+        caps.hasResponsiveHints &&
+        (ctx.validationLabel?.includes("100") ||
+          ctx.validationLabel?.includes("aprobado") ||
+          (!formGap && gaps.length === 0 && caps.hasWorkingForm)),
+      prompt:
+        "QA final: responsive móvil/tablet/desktop, corrige errores del preview y deja el proyecto listo para publicar.",
+    },
   ];
-}
 
-export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  /** Sin chips hasta que el preview deje de ser la plantilla de bienvenida. */
-  if (!projectHasStarted(ctx)) return [];
-
-  const steps: GafcoreChatNextStep[] = [];
-  const lastAi = lastMessage(ctx.messages, "ai");
-
-  if (isErrorRecoveryContext(ctx)) {
-    const err = (ctx.lastError ?? lastAi).slice(0, 500);
-    pushStep(
-      steps,
-      "fix-runtime",
-      "Arreglar error preview",
-      `Arregla este error de preview sin romper lo ya construido. NUNCA renderices objetos en JSX — usa campos (.title, .label) o JSX dentro del .map:\n\n\`\`\`\n${err}\n\`\`\``,
-    );
-    pushStep(
-      steps,
-      "fix-jsx-map",
-      "Corregir map JSX",
-      "Revisa todos los .map(): devuelve JSX con campos del objeto (p. ej. item.title), nunca {item} ni {item.icon} sin componente.",
-    );
-    pushStep(steps, "explain-error", "Explicar el error", "Explica en español qué causa este error y qué archivos tocar.");
-    pushStep(
-      steps,
-      "continue-feature",
-      "Seguir con la app",
-      "Cuando el error esté corregido, continúa con la siguiente función que pedí en el chat.",
-    );
-    return steps.slice(0, MAX_STEPS);
+  if (formGap && err) {
+    const fix = promptForValidationError(err);
+    if (fix) {
+      const formStep = items.find((i) => i.id === "guide-3");
+      if (formStep) formStep.prompt = fix;
+    }
   }
 
-  return buildFunctionalRoadmapSteps(ctx).slice(0, 3);
+  if (/syntax|import|script error|react error/i.test(err)) {
+    const fix = promptForValidationError(err);
+    if (fix) {
+      const syntaxInsert = {
+        id: "guide-fix-now",
+        label: "⚠ Corregir error ahora",
+        prompt: fix,
+        done: false,
+      };
+      return assignStepStatuses([syntaxInsert, ...items]);
+    }
+  }
+
+  return assignStepStatuses(items);
+}
+
+/**
+ * Guía completa visible en el IDE: checklist de creación + siguiente paso marcado.
+ */
+export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  return buildFullProjectChecklist(ctx);
+}
+
+/** Paso recomendado (chip resaltado). */
+export function getRecommendedNextStep(steps: GafcoreChatNextStep[]): GafcoreChatNextStep | null {
+  return steps.find((s) => s.status === "current") ?? steps.find((s) => s.status === "upcoming") ?? null;
 }

@@ -1,0 +1,35 @@
+/**
+ * Tokens plantilla Movilidad — dark premium + acento naranja (scoped).
+ */
+.mobility-shell {
+  --mobility-bg: oklch(0.09 0.01 265);
+  --mobility-surface: oklch(0.14 0.012 265);
+  --mobility-card: oklch(0.17 0.015 265);
+  --mobility-foreground: oklch(0.96 0.01 265);
+  --mobility-muted: oklch(0.62 0.02 265);
+  --mobility-accent: oklch(0.72 0.19 45);
+  --mobility-accent-dim: oklch(0.55 0.14 45);
+  --mobility-border: oklch(0.28 0.02 265);
+  --mobility-glass: oklch(0.2 0.02 265 / 0.55);
+  color: var(--mobility-foreground);
+  background: var(--mobility-bg);
+  min-height: 100%;
+  font-family: var(--font-body, "Inter", system-ui, sans-serif);
+}
+
+.mobility-glass-panel {
+  background: var(--mobility-glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  box-shadow:
+    0 1px 0 0 oklch(1 0 0 / 0.06) inset,
+    0 20px 50px -20px oklch(0 0 0 / 0.55);
+}
+
+.mobility-accent-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--mobility-accent) 0%,
+    oklch(0.62 0.16 35) 100%
+  );
+}

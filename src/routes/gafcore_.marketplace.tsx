@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Bot, CreditCard, Download, Package, Sparkles, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { logClientDev } from "@/lib/gafcore-client-logger";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -219,7 +220,7 @@ function MarketplacePage() {
       toast.success("Webhook respondió", {
         description: `HTTP ${res.status} — revisa la consola del servidor si usas echo local.`,
       });
-      console.info("[agent-test]", res.body);
+      logClientDev("agent-test", { status: res.status });
     } catch {
       toast.error("Error al probar webhook");
     } finally {

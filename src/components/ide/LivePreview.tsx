@@ -486,7 +486,28 @@ export function LivePreview({ files }: { files: FileItem[] }) {
           }
         }
 
-        const Comp = pickComponent(Entry);
+        function gafcoreSafeRender(Component) {
+          if (!Component || typeof Component !== "function") {
+            return function GafcoreMissing() { return null; };
+          }
+          return function GafcoreSafeWrapper(props) {
+            try {
+              var out = Component(props);
+              if (out === undefined) {
+                return React.createElement(
+                  "div",
+                  { style: { padding: "24px", borderRadius: "12px", border: "1px solid #e5e7eb", background: "#f9fafb", color: "#6b7280", fontSize: "14px", fontFamily: "system-ui,sans-serif" }},
+                  "Vista no disponible (undefined). Pide a GafCore que corrija este componente."
+                );
+              }
+              return out;
+            } catch (err) {
+              throw err;
+            }
+          };
+        }
+
+        const Comp = gafcoreSafeRender(pickComponent(Entry));
         const el = document.getElementById('root');
         if (Comp) {
           try {

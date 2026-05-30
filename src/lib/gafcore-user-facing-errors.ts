@@ -48,6 +48,28 @@ function stripMisleadingStepChecklist(text: string): string {
   return out.trim();
 }
 
+/** Diagnóstico IA visible al usuario (sin rootCause técnico ni parches internos). */
+export function sanitizeDiagnosisForUser(input: {
+  userFriendlyMessage?: string;
+  rootCause?: string;
+  actionableFix?: unknown;
+}): string {
+  const msg = sanitizeUserFacingAiText(
+    input.userFriendlyMessage?.trim() ||
+      "Estamos revisando un detalle técnico. Inténtalo de nuevo en un momento.",
+  );
+  return msg;
+}
+
+/** Detalle HTTP/API para respuestas JSON (marca blanca). */
+export function sanitizeApiErrorDetail(detail: unknown): string | undefined {
+  if (detail == null) return undefined;
+  const text = typeof detail === "string" ? detail : JSON.stringify(detail);
+  const sanitized = sanitizeUserFacingAiText(text);
+  if (sanitized.length > 280) return `${sanitized.slice(0, 277)}…`;
+  return sanitized;
+}
+
 export function sanitizeUserFacingAiText(text: string): string {
   const raw = String(text ?? "");
   if (!raw.trim()) return raw;

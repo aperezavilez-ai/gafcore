@@ -28,6 +28,7 @@ import {
   type ProjectRow,
 } from "@/core/project";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
+import { logClientError, logClientWarn } from "@/lib/gafcore-client-logger";
 import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
 import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
 import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
@@ -35,6 +36,10 @@ import {
   isGithubDeployConfigured,
   type GafcoreDeployResult,
 } from "@/lib/gafcore-deploy.shared";
+import {
+  dispatchVersionRestored,
+  prepareFilesForEditorRestore,
+} from "@/lib/gafcore-snapshot-restore.shared";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
 import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
 import { isRemoteProjectStale } from "@/lib/gafcore-project-stale.shared";
@@ -380,11 +385,11 @@ export function GafCoreIDE() {
             });
             if (!res.ok) {
               const body = (await res.json().catch(() => ({}))) as { error?: string };
-              console.warn("[checkout-confirm]", body.error ?? res.status);
+              logClientWarn("checkout-confirm", body.error ?? res.status);
             }
           }
         } catch (e) {
-          console.warn("[checkout-confirm]", e);
+          logClientWarn("checkout-confirm", e);
         }
       }
 
@@ -521,7 +526,7 @@ export function GafCoreIDE() {
       setDeployGithubRepo(deploy.githubRepo);
       toast.success(`Proyecto «${p.name}»`);
     } catch (e) {
-      console.error(e);
+      logClientError("GafCoreIDE", e);
       toast.error("No se pudo cambiar de proyecto");
     } finally {
       setSwitchingProject(false);
@@ -1152,7 +1157,7 @@ export function GafCoreIDE() {
                 } catch (err) {
                   setUsersError("No se pudieron cargar las estadísticas");
                   toast.error("No se pudieron cargar las estadísticas");
-                  console.error(err);
+                  logClientError("GafCoreIDE publish", err);
                 } finally {
                   setUsersLoading(false);
                 }
@@ -1964,11 +1969,26 @@ export function GafCoreIDE() {
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         files={files}
-        onRestore={(restored) => {
-          setFiles(restored);
-          setOpenTabs([restored[0]?.name].filter(Boolean) as string[]);
+        projectId={currentProjectId}
+        onRestore={async (restored) => {
+          dispatchVersionRestored();
+          const sanitized = prepareFilesForEditorRestore(restored);
+          setFiles(sanitized);
+          setOpenTabs([sanitized[0]?.name].filter(Boolean) as string[]);
           setActiveIndex(0);
+          setView("preview");
           setPreviewKey((k) => k + 1);
+          if (currentProjectId) {
+            const result = await saveProjectFilesDetailed(sanitized, currentProjectId);
+            if (!result.ok) {
+              toast.warning("Código restaurado en el editor; no se guardó en la nube", {
+                description: String(result.reason ?? "revisa la sesión"),
+              });
+            }
+          }
+          queueMicrotask(() => {
+            window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
+          });
         }}
       />
       {isAdmin ? <SecretsDialog open={secretsOpen} onOpenChange={setSecretsOpen} /> : null}

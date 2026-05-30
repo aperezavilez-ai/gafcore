@@ -6,6 +6,7 @@ import {
   applyGafcorePlanSubscription,
 } from "@/lib/stripe-subscription-sync.server";
 import { fulfillExtensionCheckoutFromWebhook } from "@/extensions/marketplace-payments.server";
+import { logDev } from "@/lib/gafcore-logger.server";
 
 type QueryChain = PromiseLike<unknown> & {
   eq: (column: string, value: unknown) => QueryChain;
@@ -253,7 +254,7 @@ async function handleWebhook(req: Request, env: StripeEnv) {
       )
       .select("id");
     if (res?.data && Array.isArray(res.data) && res.data.length === 0) {
-      console.log("Duplicate webhook event ignored:", eventId);
+      logDev("stripe_webhook_duplicate", { eventId });
       return;
     }
   }
@@ -277,7 +278,7 @@ async function handleWebhook(req: Request, env: StripeEnv) {
       await handleCheckoutCompleted(event.data.object, env);
       break;
     default:
-      console.log("Unhandled event:", event.type);
+      logDev("stripe_webhook_unhandled", { type: event.type });
   }
 }
 

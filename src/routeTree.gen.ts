@@ -26,7 +26,9 @@ import { Route as GafcoreMarketplaceRouteImport } from './routes/gafcore_.market
 import { Route as GafcoreLoginRouteImport } from './routes/gafcore_.login'
 import { Route as GafcoreAppRouteImport } from './routes/gafcore_.app'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as GafcoreTemplatesMobilityRouteImport } from './routes/gafcore_.templates.mobility'
 import { Route as GafcoreSettingsProjectRouteImport } from './routes/gafcore_.settings.project'
+import { Route as GafcoreDebugHealthRouteImport } from './routes/gafcore_.debug.health'
 import { Route as GafcoreAdminOpsRouteImport } from './routes/gafcore_.admin.ops'
 import { Route as GafcoreAdminMarketplaceRouteImport } from './routes/gafcore_.admin.marketplace'
 import { Route as ApiV1MeRouteImport } from './routes/api/v1/me'
@@ -145,9 +147,20 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GafcoreTemplatesMobilityRoute =
+  GafcoreTemplatesMobilityRouteImport.update({
+    id: '/gafcore_/templates/mobility',
+    path: '/gafcore/templates/mobility',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const GafcoreSettingsProjectRoute = GafcoreSettingsProjectRouteImport.update({
   id: '/gafcore_/settings/project',
   path: '/gafcore/settings/project',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GafcoreDebugHealthRoute = GafcoreDebugHealthRouteImport.update({
+  id: '/gafcore_/debug/health',
+  path: '/gafcore/debug/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GafcoreAdminOpsRoute = GafcoreAdminOpsRouteImport.update({
@@ -356,7 +369,9 @@ export interface FileRoutesByFullPath {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/admin/marketplace': typeof GafcoreAdminMarketplaceRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
+  '/gafcore/debug/health': typeof GafcoreDebugHealthRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/gafcore/templates/mobility': typeof GafcoreTemplatesMobilityRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
   '/api/extensions/v1/checkout-session': typeof ApiExtensionsV1CheckoutSessionRoute
@@ -408,7 +423,9 @@ export interface FileRoutesByTo {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore/admin/marketplace': typeof GafcoreAdminMarketplaceRoute
   '/gafcore/admin/ops': typeof GafcoreAdminOpsRoute
+  '/gafcore/debug/health': typeof GafcoreDebugHealthRoute
   '/gafcore/settings/project': typeof GafcoreSettingsProjectRoute
+  '/gafcore/templates/mobility': typeof GafcoreTemplatesMobilityRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
   '/api/extensions/v1/checkout-session': typeof ApiExtensionsV1CheckoutSessionRoute
@@ -461,7 +478,9 @@ export interface FileRoutesById {
   '/api/v1/me': typeof ApiV1MeRoute
   '/gafcore_/admin/marketplace': typeof GafcoreAdminMarketplaceRoute
   '/gafcore_/admin/ops': typeof GafcoreAdminOpsRoute
+  '/gafcore_/debug/health': typeof GafcoreDebugHealthRoute
   '/gafcore_/settings/project': typeof GafcoreSettingsProjectRoute
+  '/gafcore_/templates/mobility': typeof GafcoreTemplatesMobilityRoute
   '/api/extensions/v1/agent-echo': typeof ApiExtensionsV1AgentEchoRoute
   '/api/extensions/v1/catalog': typeof ApiExtensionsV1CatalogRoute
   '/api/extensions/v1/checkout-session': typeof ApiExtensionsV1CheckoutSessionRoute
@@ -515,7 +534,9 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore/admin/marketplace'
     | '/gafcore/admin/ops'
+    | '/gafcore/debug/health'
     | '/gafcore/settings/project'
+    | '/gafcore/templates/mobility'
     | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
     | '/api/extensions/v1/checkout-session'
@@ -567,7 +588,9 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore/admin/marketplace'
     | '/gafcore/admin/ops'
+    | '/gafcore/debug/health'
     | '/gafcore/settings/project'
+    | '/gafcore/templates/mobility'
     | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
     | '/api/extensions/v1/checkout-session'
@@ -619,7 +642,9 @@ export interface FileRouteTypes {
     | '/api/v1/me'
     | '/gafcore_/admin/marketplace'
     | '/gafcore_/admin/ops'
+    | '/gafcore_/debug/health'
     | '/gafcore_/settings/project'
+    | '/gafcore_/templates/mobility'
     | '/api/extensions/v1/agent-echo'
     | '/api/extensions/v1/catalog'
     | '/api/extensions/v1/checkout-session'
@@ -672,7 +697,9 @@ export interface RootRouteChildren {
   ApiV1MeRoute: typeof ApiV1MeRoute
   GafcoreAdminMarketplaceRoute: typeof GafcoreAdminMarketplaceRoute
   GafcoreAdminOpsRoute: typeof GafcoreAdminOpsRoute
+  GafcoreDebugHealthRoute: typeof GafcoreDebugHealthRoute
   GafcoreSettingsProjectRoute: typeof GafcoreSettingsProjectRoute
+  GafcoreTemplatesMobilityRoute: typeof GafcoreTemplatesMobilityRoute
   ApiExtensionsV1AgentEchoRoute: typeof ApiExtensionsV1AgentEchoRoute
   ApiExtensionsV1CatalogRoute: typeof ApiExtensionsV1CatalogRoute
   ApiExtensionsV1CheckoutSessionRoute: typeof ApiExtensionsV1CheckoutSessionRoute
@@ -812,11 +839,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gafcore_/templates/mobility': {
+      id: '/gafcore_/templates/mobility'
+      path: '/gafcore/templates/mobility'
+      fullPath: '/gafcore/templates/mobility'
+      preLoaderRoute: typeof GafcoreTemplatesMobilityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gafcore_/settings/project': {
       id: '/gafcore_/settings/project'
       path: '/gafcore/settings/project'
       fullPath: '/gafcore/settings/project'
       preLoaderRoute: typeof GafcoreSettingsProjectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gafcore_/debug/health': {
+      id: '/gafcore_/debug/health'
+      path: '/gafcore/debug/health'
+      fullPath: '/gafcore/debug/health'
+      preLoaderRoute: typeof GafcoreDebugHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gafcore_/admin/ops': {
@@ -1091,7 +1132,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1MeRoute: ApiV1MeRoute,
   GafcoreAdminMarketplaceRoute: GafcoreAdminMarketplaceRoute,
   GafcoreAdminOpsRoute: GafcoreAdminOpsRoute,
+  GafcoreDebugHealthRoute: GafcoreDebugHealthRoute,
   GafcoreSettingsProjectRoute: GafcoreSettingsProjectRoute,
+  GafcoreTemplatesMobilityRoute: GafcoreTemplatesMobilityRoute,
   ApiExtensionsV1AgentEchoRoute: ApiExtensionsV1AgentEchoRoute,
   ApiExtensionsV1CatalogRoute: ApiExtensionsV1CatalogRoute,
   ApiExtensionsV1CheckoutSessionRoute: ApiExtensionsV1CheckoutSessionRoute,
