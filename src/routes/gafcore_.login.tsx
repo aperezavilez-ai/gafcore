@@ -82,10 +82,13 @@ function GafCoreLoginPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    stripSecretsFromLoginUrl();
-    const params = new URLSearchParams(window.location.search);
-    const hadPasswordInUrl = params.has("password") || params.has("pwd") || params.has("pass");
-    if (params.has("email") || hadPasswordInUrl) {
+    const url = new URL(window.location.href);
+    const hadPasswordInUrl =
+      url.searchParams.has("password") ||
+      url.searchParams.has("pwd") ||
+      url.searchParams.has("pass") ||
+      url.searchParams.has("gafcore_password");
+    if (stripSecretsFromLoginUrl() || loginUrlHasForbiddenParams(url)) {
       if (hadPasswordInUrl) {
         setUrlPasswordWarning(true);
         setPassword("");
@@ -346,14 +349,12 @@ function GafCoreLoginPage() {
                     ref={loginFormRef}
                     id="gc-login-form"
                     className="space-y-4"
+                    method="post"
+                    action="/gafcore/login"
                     onSubmit={handleSubmit}
                     autoComplete="off"
                     noValidate
                   >
-                    <div className="sr-only" aria-hidden>
-                      <input type="text" name="username" tabIndex={-1} autoComplete="username" />
-                      <input type="password" name="password" tabIndex={-1} autoComplete="current-password" />
-                    </div>
                     <div>
                       <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-email">
                         Correo electrónico
@@ -384,7 +385,6 @@ function GafCoreLoginPage() {
                         <input
                           ref={passwordInputRef}
                           id="gc-pw"
-                          name="gafcore_password"
                           type={showPw ? "text" : "password"}
                           autoComplete="off"
                           data-1p-ignore

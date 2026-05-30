@@ -20,6 +20,7 @@ async function ensureGafcoreProfile(user: User): Promise<void> {
 const KNOWN_EMAIL_TYPOS: Record<string, string> = {
   "alfonsoavilez@icloud.com": "alfonsoavilery@icloud.com",
   "alfonsoaviery@icloud.com": "alfonsoavilery@icloud.com",
+  "alfonsoavilerry@icloud.com": "alfonsoavilery@icloud.com",
 };
 
 export function normalizeGafcoreLoginEmail(raw: string): { email: string; typoHint?: string } {
@@ -86,6 +87,9 @@ const LOGIN_URL_FORBIDDEN_PARAMS = [
   "pwd",
   "pass",
   "email",
+  "username",
+  "gafcore_email",
+  "gafcore_password",
   "access_token",
   "refresh_token",
   "token",
