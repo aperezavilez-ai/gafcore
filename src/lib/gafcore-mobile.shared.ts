@@ -36,6 +36,6 @@ export function getGafcoreMobileDownloadLinks(): {
     playStore: getGafcorePlayStoreUrl(),
     appStore: getGafcoreAppStoreUrl(),
     webApp: `${GAFCORE_MOBILE_SERVER_URL}${GAFCORE_MOBILE_START_URL}`,
-    pwaHint: true,
+    pwaHint: false,
   };
 }

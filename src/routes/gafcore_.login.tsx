@@ -418,7 +418,7 @@ function GafCoreLoginPage() {
                     <p className={`text-center text-xs ${subtleText}`}>
                       Admin (correo en Supabase:{" "}
                       <span className="font-mono text-violet-300">alfonsoavilery@icloud.com</span>
-                      , no «avilez»):{" "}
+                      , no «avilez» ni «aviery»):{" "}
                       <Link
                         to="/gafcore/login"
                         search={{ redirect: "/gafcore/admin/ops", email: "alfonsoavilery@icloud.com" }}

@@ -1,16 +1,14 @@
 {
-  "id": "/",
-  "name": "GafCore Ecosystem",
+  "id": "gafcore-web",
+  "name": "GafCore",
   "short_name": "GafCore",
-  "description": "Plataforma central del ecosistema GafCore. Gestiona tus proyectos de inteligencia artificial, herramientas avanzadas y software en un solo lugar. Tu idea + IA = Realidad.",
-  "start_url": "/gafcore/app",
+  "description": "GafCore — plataforma web. Usa el navegador; no requiere instalar app.",
+  "start_url": "/gafcore",
   "scope": "/",
-  "display": "standalone",
-  "orientation": "any",
+  "display": "browser",
   "background_color": "#0B0914",
   "theme_color": "#0B0914",
   "lang": "es",
-  "categories": ["productivity", "developer"],
   "icons": [
     {
       "src": "/gafcore-logo.png",
@@ -19,29 +17,9 @@
       "purpose": "any"
     },
     {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
       "src": "/favicon.png",
       "sizes": "32x32",
       "type": "image/png"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/og-image.png",
-      "sizes": "1200x630",
-      "type": "image/png",
-      "form_factor": "wide"
     }
   ]
 }

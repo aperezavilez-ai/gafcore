@@ -16,8 +16,7 @@ import {
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
-import { GafcorePwaRegister } from "@/components/GafcorePwaRegister";
-import { InstallPrompt } from "@/components/InstallPrompt";
+import { GafcoreWebOnly } from "@/components/GafcoreWebOnly";
 import { GAFCORE_PWA_THEME_COLOR } from "@/lib/gafcore-pwa.shared";
 import { installServerFnAuth } from "@/lib/server-fn-auth";
 
@@ -99,8 +98,7 @@ function RootComponent() {
       <MobileViewportGuard />
       <Outlet />
       <ClientOnly>
-        <GafcorePwaRegister />
-        <InstallPrompt />
+        <GafcoreWebOnly />
         <ClientRootWidgets />
       </ClientOnly>
     </I18nProvider>

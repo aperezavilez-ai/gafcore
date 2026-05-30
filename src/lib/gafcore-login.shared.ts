@@ -19,6 +19,7 @@ async function ensureGafcoreProfile(user: User): Promise<void> {
 /** Correos que se confunden en el panel (avilez vs avilery). La cuenta real en Auth es avilery. */
 const KNOWN_EMAIL_TYPOS: Record<string, string> = {
   "alfonsoavilez@icloud.com": "alfonsoavilery@icloud.com",
+  "alfonsoaviery@icloud.com": "alfonsoavilery@icloud.com",
 };
 
 export function normalizeGafcoreLoginEmail(raw: string): { email: string; typoHint?: string } {

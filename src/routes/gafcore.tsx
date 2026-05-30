@@ -18,7 +18,6 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { toast } from "sonner";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
-import { GafcoreInstallApp } from "@/components/GafcoreInstallApp";
 import { GafcoreLogo } from "@/components/GafcoreLogo";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -394,7 +393,13 @@ function GafCoreLanding() {
       </section>
 
       <section id="descargar-app" className="scroll-mt-24 mx-auto max-w-5xl px-4 pb-4 sm:px-6">
-        <GafcoreInstallApp />
+        <p className="text-center text-sm gc-muted">
+          GafCore funciona en el navegador en{" "}
+          <a href="https://gafcore.com/gafcore" className="text-primary underline">
+            gafcore.com
+          </a>
+          . No hace falta instalar app.
+        </p>
       </section>
 
       {/* Plans — justo tras el hero; ancla #plan-free para CTA "Comenzar gratis" */}

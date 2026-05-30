@@ -58,7 +58,6 @@ import {
 } from "@/components/ui/resizable";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import { Toaster } from "@/components/ui/sonner";
-import { GafcoreInstallApp } from "@/components/GafcoreInstallApp";
 import { GafcoreLogo } from "@/components/GafcoreLogo";
 import {
   LayoutGrid,
@@ -1704,8 +1703,6 @@ export function GafCoreIDE() {
           </DropdownMenu>
         </div>
       </header>
-
-      <GafcoreInstallApp variant="compact" />
 
       <div className="relative min-h-0 flex-1">
         <main className="h-full overflow-hidden">
