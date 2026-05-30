@@ -1,8 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
+import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
 export const Route = createFileRoute("/gafcore_/login")({
   validateSearch: (
@@ -68,6 +70,8 @@ function GafCoreLoginPage() {
   const { redirect, signedOut, email: emailFromUrl } = search;
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const supabaseReady = isSupabaseConfigured();
 
   const cleanLoginUrl = useCallback(
     (prefillEmail?: string) => {
@@ -115,11 +119,20 @@ function GafCoreLoginPage() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (active && data.user) setActiveSessionEmail(data.user.email ?? "");
-    });
-    return () => { active = false; };
-  }, []);
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      if (data.session?.user) {
+        window.location.replace(redirectTo);
+        return;
+      }
+      const { data: userData } = await supabase.auth.getUser();
+      if (active && userData.user?.email) setActiveSessionEmail(userData.user.email);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [redirectTo]);
 
   const openCredentialFields = () => {
     setBlockAutofillUntilFocus(false);
@@ -137,7 +150,10 @@ function GafCoreLoginPage() {
 
   const toggleShowPassword = () => {
     setBlockAutofillUntilFocus(false);
-    setShowPw((v) => !v);
+    const el = passwordRef.current;
+    const next = !showPw;
+    if (el) el.type = next ? "text" : "password";
+    setShowPw(next);
   };
 
   const switchAccount = async () => {
@@ -158,51 +174,75 @@ function GafCoreLoginPage() {
     const normalizedEmail = (emailEl?.value ?? email).trim().toLowerCase();
     const currentPassword = passwordEl?.value ?? password;
 
-    setError(""); setMessage("");
+    setError("");
+    setMessage("");
+    if (!supabaseReady) {
+      const msg =
+        "Falta configurar Supabase en el servidor (VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel).";
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
     if (!normalizedEmail || !currentPassword) {
-      setError("Escribe tu correo y contraseña para iniciar sesión.");
+      const msg = "Escribe tu correo y contraseña para iniciar sesión.";
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
     setLoading(true);
     try {
-      const signInPromise = supabase.auth.signInWithPassword({
+      const signInTask = supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password: currentPassword,
       });
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        window.setTimeout(() => reject(new Error("La conexión tardó demasiado. Revisa tu internet e intenta de nuevo.")), 18000);
+      const timeoutTask = new Promise<never>((_, reject) => {
+        window.setTimeout(
+          () => reject(new Error("La conexión tardó demasiado. Revisa tu internet e intenta de nuevo.")),
+          18_000,
+        );
       });
-      const { data: signInData, error: authError } = await Promise.race([signInPromise, timeoutPromise]);
+      const { data: signInData, error: authError } = await Promise.race([signInTask, timeoutTask]);
+
       if (authError) {
-        setLoading(false);
-        setError(formatGafcoreSignInError(authError.message));
+        const msg = formatGafcoreSignInError(authError.message);
+        setError(msg);
+        toast.error(msg);
         return;
       }
-      // Confirmar que la sesión está realmente persistida antes de redirigir,
-      // así /gafcore/app no aparece como "no autenticado" tras la recarga.
+
+      if (signInData.session) {
+        toast.success("Sesión iniciada. Entrando…");
+        window.location.assign(redirectTo);
+        return;
+      }
+
       let sessionOk = false;
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 40; i++) {
         const { data } = await supabase.auth.getSession();
         if (data.session?.user) {
           sessionOk = true;
           break;
         }
-        await new Promise((r) => setTimeout(r, 80));
+        await new Promise((r) => setTimeout(r, 100));
       }
-      void signInData;
+
       if (!sessionOk) {
-        setLoading(false);
-        setError(
-          "El inicio de sesión respondió bien pero no se guardó la sesión en este navegador. " +
-            "Revisa que las cookies y el almacenamiento no estén bloqueados para este sitio, o prueba en ventana privada.",
-        );
+        const msg =
+          "El inicio de sesión respondió pero no se guardó la sesión. Permite cookies/almacenamiento para gafcore.com o prueba otro navegador.";
+        setError(msg);
+        toast.error(msg);
         return;
       }
-      window.location.replace(redirectTo);
+
+      toast.success("Sesión iniciada. Entrando…");
+      window.location.assign(redirectTo);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
       setLoading(false);
-      setError(err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.");
     }
   };
 
@@ -312,6 +352,12 @@ function GafCoreLoginPage() {
               </p>
             </div>
 
+            {!supabaseReady ? (
+              <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-red-300">
+                Supabase no está configurado en este despliegue. Revisa las variables VITE_SUPABASE_* en Vercel y
+                vuelve a desplegar.
+              </div>
+            ) : null}
             {urlPasswordWarning ? (
               <div className="mb-4 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
                 <p>
@@ -421,6 +467,7 @@ function GafCoreLoginPage() {
                     className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`}
                   />
                   <input
+                    ref={passwordRef}
                     id="gc-pw"
                     name="password"
                     type={showPw ? "text" : "password"}
