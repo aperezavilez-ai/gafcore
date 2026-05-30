@@ -26,6 +26,7 @@ import {
   refundAiCredits,
   streamChatCompletions,
 } from "@/lib/gafcore-ai-gateway.server";
+import { runGafcoreAgentChatCompletion } from "@/lib/gafcore-chat-agent.server";
 import { resolveModelForGafcoreChat } from "@/services/ai/chat-brain.server";
 import { runSafeBuildQualityLoop } from "@/services/ai/safe-build.server";
 import type { SafeBuildMeta } from "@/services/ai/safe-build.shared";
@@ -133,6 +134,7 @@ async function finalizeChatDeliveryWithSafeBuild(input: {
     instruction: input.instruction,
     reply: input.replyRaw,
     files: delivered as ProjFile[],
+    contextFiles: input.contextFiles,
     messages: input.messages,
     gateway: input.gateway,
     deepMode: /^\[modo profundo\]/i.test(input.instruction.trim()),
@@ -487,10 +489,15 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     balanceAfterConsume = credit.balance;
   }
 
-  let content: string;
+  let agentResult: Awaited<ReturnType<typeof runGafcoreAgentChatCompletion>>;
   try {
-    const completed = await completeChatMessage({ model, messages, json: true });
-    content = completed.content || "{}";
+    agentResult = await runGafcoreAgentChatCompletion({
+      model,
+      messages,
+      instruction: data.instruction,
+      contextFiles: projFilesComplete,
+      enrichContext: data.files as ProjFile[],
+    });
   } catch (e: unknown) {
     if (!skipCredits) {
       await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_refund", {
@@ -513,19 +520,11 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     );
   }
 
-  const parsedOut = parseJsonLoose<{ reply?: string; files?: unknown }>(content) ?? {};
-  if (!parsedOut.reply && !parsedOut.files) {
-    console.warn(
-      "[gafcore-chat] complete non-JSON content len=" + content.length + " preview=" + content.slice(0, 120),
-    );
-  }
-
-  const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
   const finalized = await finalizeChatDeliveryWithSafeBuild({
     instruction: data.instruction,
     contextFiles: projFilesComplete,
-    replyRaw,
-    rawFiles: parsedOut.files,
+    replyRaw: agentResult.reply,
+    rawFiles: agentResult.files,
     messages,
     gateway,
   });

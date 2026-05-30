@@ -28,11 +28,14 @@ import {
 import type { StructuredActionableFix } from "@/services/health/gafcoreSystemicFix.shared";
 import { resolveSafeBuildRepairModel } from "@/services/ai/chat-brain.server";
 import type { SafeBuildMeta, SafeBuildPhase } from "@/services/ai/safe-build.shared";
+import { gateDeliveredFiles } from "@/lib/gafcore-chat-delivery-gate.shared";
+import { mergeContextWithDelta } from "@/lib/gafcore-brain-agent.shared";
 
 export type SafeBuildLoopInput = {
   instruction: string;
   reply: string;
   files: ProjFile[];
+  contextFiles: ProjFile[];
   messages: GafcoreChatMessage[];
   gateway: GafcoreAiGateway;
   deepMode?: boolean;
@@ -157,12 +160,27 @@ export async function runSafeBuildQualityLoop(
     );
   }
 
-  const finalAudit = auditProjectLocally(files);
-  const repaired = !hasBlockingValidationIssues(finalAudit.issues) && files.length > 0;
+  const mergedProject = mergeContextWithDelta(input.contextFiles, files);
+  const gate = gateDeliveredFiles(
+    input.contextFiles,
+    files,
+    input.instruction,
+  );
+  if (!gate.ok && files.length > 0) {
+    return {
+      reply: `${reply}\n\nNo se aplicaron cambios: ${gate.userMessage}`,
+      files: [],
+      meta: { phase: "repairing", repaired: false, skipped: false },
+      issues: gate.issues,
+    };
+  }
+
+  const finalAudit = auditProjectLocally(mergedProject);
+  const repaired = !hasBlockingValidationIssues(finalAudit.issues) && gate.files.length > 0;
 
   return {
     reply,
-    files,
+    files: gate.files,
     meta: {
       phase: repaired ? "ready" : phase,
       repaired: repaired || repairedDelta.length > 0,
