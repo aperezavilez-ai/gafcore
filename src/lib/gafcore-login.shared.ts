@@ -16,12 +16,29 @@ async function ensureGafcoreProfile(user: User): Promise<void> {
   );
 }
 
-export function formatGafcoreSignInError(raw: string): string {
+/** Correos que se confunden en el panel (avilez vs avilery). La cuenta real en Auth es avilery. */
+const KNOWN_EMAIL_TYPOS: Record<string, string> = {
+  "alfonsoavilez@icloud.com": "alfonsoavilery@icloud.com",
+};
+
+export function normalizeGafcoreLoginEmail(raw: string): { email: string; typoHint?: string } {
+  const email = raw.trim().toLowerCase();
+  const corrected = KNOWN_EMAIL_TYPOS[email];
+  if (corrected) return { email: corrected, typoHint: `Se usará ${corrected} (correo registrado en Supabase).` };
+  return { email };
+}
+
+export function formatGafcoreSignInError(raw: string, attemptedEmail?: string): string {
   const m = raw.trim();
   if (m === "Invalid login credentials") {
+    const typo = attemptedEmail ? KNOWN_EMAIL_TYPOS[attemptedEmail.trim().toLowerCase()] : undefined;
+    const typoLine = typo
+      ? ` En Authentication el correo registrado es ${typo}, no ${attemptedEmail?.trim().toLowerCase()}.`
+      : "";
     return (
-      "El correo o la contraseña no coinciden con una cuenta con contraseña en este proyecto. " +
-      "Si no recuerdas la contraseña, usa «¿Olvidaste tu contraseña?»."
+      "El correo o la contraseña no coinciden con una cuenta con contraseña en este proyecto." +
+      typoLine +
+      " Si no recuerdas la contraseña, usa «¿Olvidaste tu contraseña?»."
     );
   }
   if (/email not confirmed|confirm.*email|not.*verified|email.*confirm/i.test(m)) {
@@ -83,15 +100,16 @@ export async function gafcoreLoginWithPassword(input: {
     };
   }
 
-  const email = input.email.trim().toLowerCase();
+  const { email: normalized, typoHint } = normalizeGafcoreLoginEmail(input.email);
   const password = input.password;
-  if (!email || !password) {
+  if (!normalized || !password) {
     return { ok: false, error: "Escribe tu correo y contraseña para iniciar sesión." };
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: normalized, password });
   if (error) {
-    return { ok: false, error: formatGafcoreSignInError(error.message) };
+    const base = formatGafcoreSignInError(error.message, input.email);
+    return { ok: false, error: typoHint ? `${typoHint} ${base}` : base };
   }
 
   if (data.session?.user) {

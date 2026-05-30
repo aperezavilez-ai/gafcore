@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ADMIN_EMAIL = (process.env.GAFCORE_ADMIN_EMAIL || "alfonsoavilery@icloud.com").trim().toLowerCase();
+const COMMON_TYPO = "alfonsoavilez@icloud.com";
 
 function loadEnvFiles() {
   for (const name of [".env.local", ".env", ".env.production"]) {
@@ -52,6 +53,9 @@ async function main() {
 
   if (match.length === 0) {
     console.log("RESULTADO: NO existe usuario Auth con ese email exacto.");
+    if (ADMIN_EMAIL === COMMON_TYPO) {
+      console.log("NOTA: En el panel a veces se lee «avilez»; en Auth el admin es alfonsoavilery@icloud.com (con r).");
+    }
     if (similar.length) {
       console.log("Correos parecidos en Auth:");
       for (const u of similar) console.log(" -", u.email, "| id:", u.id);

@@ -6,6 +6,7 @@ import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 import {
   gafcoreLoginRedirectNow,
   gafcoreLoginWithPassword,
+  normalizeGafcoreLoginEmail,
   readLoginCredentials,
 } from "@/lib/gafcore-login.shared";
 import { initAuthOnce } from "@/hooks/useAuth";
@@ -144,10 +145,12 @@ function GafCoreLoginPage() {
       setError("Escribe tu correo y contraseña (si usas autofill, haz clic en el campo contraseña antes de Entrar).");
       return;
     }
+    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(creds.email);
+    if (typoHint) setMessage(typoHint);
     setLoading(true);
     try {
       const result = await gafcoreLoginWithPassword({
-        email: creds.email,
+        email: loginEmail,
         password: passwordValue,
         redirectTo,
       });
@@ -413,7 +416,9 @@ function GafCoreLoginPage() {
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
                     <p className={`text-center text-xs ${subtleText}`}>
-                      Admin:{" "}
+                      Admin (correo en Supabase:{" "}
+                      <span className="font-mono text-violet-300">alfonsoavilery@icloud.com</span>
+                      , no «avilez»):{" "}
                       <Link
                         to="/gafcore/login"
                         search={{ redirect: "/gafcore/admin/ops", email: "alfonsoavilery@icloud.com" }}
