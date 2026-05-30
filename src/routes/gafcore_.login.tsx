@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,13 +9,14 @@ import {
   normalizeGafcoreLoginEmail,
   readLoginCredentials,
   stripSecretsFromLoginUrl,
+  loginUrlHasForbiddenParams,
 } from "@/lib/gafcore-login.shared";
+import { initAuthOnce } from "@/hooks/useAuth";
+import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
 if (typeof window !== "undefined") {
   stripSecretsFromLoginUrl();
 }
-import { initAuthOnce } from "@/hooks/useAuth";
-import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
 export const Route = createFileRoute("/gafcore_/login")({
   validateSearch: (
@@ -37,6 +38,16 @@ export const Route = createFileRoute("/gafcore_/login")({
     if (signedOut) out.signedOut = true;
     if (email) out.email = email;
     return out;
+  },
+  beforeLoad: ({ search }) => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!loginUrlHasForbiddenParams(url)) return;
+    const nextSearch: { redirect?: string; email?: string; signedOut?: boolean } = {};
+    if (search.redirect) nextSearch.redirect = search.redirect;
+    if (search.email) nextSearch.email = search.email;
+    if (search.signedOut) nextSearch.signedOut = true;
+    throw redirect({ to: "/gafcore/login", search: nextSearch, replace: true });
   },
   component: GafCoreLoginPage,
   head: () => ({ meta: [{ title: "Entrar — GafCore" }] }),

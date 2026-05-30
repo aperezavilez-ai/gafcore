@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Loader2, Lock, ArrowRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth, forceAuthLoadingComplete } from "@/hooks/useAuth";
+import { useSubscription } from "@/hooks/useSubscription";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { supabase } from "@/integrations/supabase/client";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
@@ -28,6 +29,7 @@ export const Route = createFileRoute("/gafcore_/app")({
 
 function GafCoreAppPage() {
   const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading: roleLoading } = useSubscription(user?.id);
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   // Reintento defensivo: tras un login con full reload, getSession puede tardar
   // unos ms en hidratar desde localStorage. Hasta confirmar, mostramos loader.
@@ -38,7 +40,7 @@ function GafCoreAppPage() {
   const [authSlow, setAuthSlow] = useState(false);
   const [forceContinue, setForceContinue] = useState(false);
 
-  const accessPending = (authLoading || graceChecking) && !forceContinue;
+  const accessPending = (authLoading || graceChecking || roleLoading) && !forceContinue;
 
   /** Asegura créditos de bienvenida si el backend los dejó en 0 (p. ej. cuenta ya existía). */
   useEffect(() => {
@@ -119,7 +121,8 @@ function GafCoreAppPage() {
           url?.searchParams.get("checkout") === "success" ||
           url?.searchParams.get("credits") === "success";
         if (checkoutOk) clearPlanChoicePending(uid);
-        if (!checkoutOk && isPlanChoicePending(uid)) {
+        if (isAdmin) clearPlanChoicePending(uid);
+        if (!checkoutOk && !isAdmin && isPlanChoicePending(uid)) {
           window.location.replace(`${window.location.origin}/gafcore?pick_plan=1#planes`);
           return;
         }
@@ -129,7 +132,7 @@ function GafCoreAppPage() {
       setPlanGateChecked(true);
     })();
     return () => window.clearTimeout(planTimeout);
-  }, [authLoading, graceChecking, user?.id, hasSession]);
+  }, [authLoading, graceChecking, user?.id, hasSession, isAdmin]);
 
   if (accessPending) {
     return (
