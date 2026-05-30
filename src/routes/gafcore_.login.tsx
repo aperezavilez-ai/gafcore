@@ -125,6 +125,21 @@ function GafCoreLoginPage() {
     setBlockAutofillUntilFocus(false);
   };
 
+  const syncEmailFromInput = (value: string) => {
+    setBlockAutofillUntilFocus(false);
+    setEmail(value);
+  };
+
+  const syncPasswordFromInput = (value: string) => {
+    setBlockAutofillUntilFocus(false);
+    setPassword(value);
+  };
+
+  const toggleShowPassword = () => {
+    setBlockAutofillUntilFocus(false);
+    setShowPw((v) => !v);
+  };
+
   const switchAccount = async () => {
     setSwitching(true);
     await supabase.auth.signOut();
@@ -137,9 +152,11 @@ function GafCoreLoginPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const normalizedEmail = String(formData.get("email") ?? email).trim().toLowerCase();
-    const currentPassword = String(formData.get("password") ?? password);
+    const form = e.currentTarget;
+    const emailEl = form.elements.namedItem("email") as HTMLInputElement | null;
+    const passwordEl = form.elements.namedItem("password") as HTMLInputElement | null;
+    const normalizedEmail = (emailEl?.value ?? email).trim().toLowerCase();
+    const currentPassword = passwordEl?.value ?? password;
 
     setError(""); setMessage("");
     if (!normalizedEmail || !currentPassword) {
@@ -355,11 +372,17 @@ function GafCoreLoginPage() {
               <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
             </div>
 
-            <form className="space-y-4" onSubmit={handleSubmit} autoComplete="on">
+            <form
+              className="space-y-4"
+              method="post"
+              action="#"
+              onSubmit={handleSubmit}
+              autoComplete="on"
+              noValidate
+            >
               {blockAutofillUntilFocus && (
                 <p className={`text-xs ${subtleText}`}>
-                  Tras cerrar sesión, vuelve a escribir tu correo y contraseña. Si el navegador las
-                  guardó, puede seguir sugeriéndolas al pulsar en el campo: eso lo controla tu navegador, no GafCore.
+                  Tras cerrar sesión, vuelve a escribir tu correo y contraseña en los campos de abajo.
                 </p>
               )}
               <div>
@@ -367,19 +390,23 @@ function GafCoreLoginPage() {
                   Correo electrónico
                 </label>
                 <div className="relative">
-                  <Mail size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
+                  <Mail
+                    size={17}
+                    aria-hidden
+                    className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`}
+                  />
                   <input
                     id="gc-email"
                     name="email"
                     type="email"
                     autoComplete="username"
                     value={email}
-                    readOnly={blockAutofillUntilFocus}
                     onFocus={openCredentialFields}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => syncEmailFromInput(e.target.value)}
+                    onInput={(e) => syncEmailFromInput(e.currentTarget.value)}
                     required
                     placeholder="tu@correo.com"
-                    className={`h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
+                    className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                   />
                 </div>
               </div>
@@ -388,33 +415,40 @@ function GafCoreLoginPage() {
                   Contraseña
                 </label>
                 <div className="relative">
-                  <Lock size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
+                  <Lock
+                    size={17}
+                    aria-hidden
+                    className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`}
+                  />
                   <input
                     id="gc-pw"
                     name="password"
                     type={showPw ? "text" : "password"}
                     autoComplete="current-password"
                     value={password}
-                    readOnly={blockAutofillUntilFocus}
                     onFocus={openCredentialFields}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => syncPasswordFromInput(e.target.value)}
+                    onInput={(e) => syncPasswordFromInput(e.currentTarget.value)}
                     required
                     placeholder="••••••••"
-                    className={`h-12 w-full rounded-xl border pl-11 pr-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
+                    className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                   />
                   <button
                     type="button"
-                    tabIndex={-1}
-                    onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setShowPw((v) => !v);
+                      toggleShowPassword();
                     }}
-                    className={`absolute right-3 top-1/2 z-10 -translate-y-1/2 cursor-pointer p-1 ${subtleText} hover:opacity-80`}
+                    className={`absolute right-2 top-1/2 z-[3] flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-slate-100`}
                     aria-label={showPw ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    aria-pressed={showPw}
                   >
-                    {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                    {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
