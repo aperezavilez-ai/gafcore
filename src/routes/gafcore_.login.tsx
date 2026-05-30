@@ -5,7 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 
 export const Route = createFileRoute("/gafcore_/login")({
-  validateSearch: (search: Record<string, unknown>): { redirect?: string; signedOut?: boolean } => {
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { redirect?: string; signedOut?: boolean; email?: string; unsafeUrlPassword?: boolean } => {
     const redirect =
       typeof search.redirect === "string" && search.redirect.startsWith("/") && !search.redirect.startsWith("//")
         ? search.redirect
@@ -13,9 +15,22 @@ export const Route = createFileRoute("/gafcore_/login")({
     const raw = search.signedOut;
     const signedOut =
       raw === true || raw === "true" || raw === "1" || raw === 1 || raw === "yes";
-    const out: { redirect?: string; signedOut?: boolean } = {};
+    const email =
+      typeof search.email === "string" && search.email.includes("@")
+        ? search.email.trim().toLowerCase().slice(0, 320)
+        : undefined;
+    const unsafeUrlPassword =
+      typeof search.password === "string" && search.password.length > 0;
+    const out: {
+      redirect?: string;
+      signedOut?: boolean;
+      email?: string;
+      unsafeUrlPassword?: boolean;
+    } = {};
     if (redirect) out.redirect = redirect;
     if (signedOut) out.signedOut = true;
+    if (email) out.email = email;
+    if (unsafeUrlPassword) out.unsafeUrlPassword = true;
     return out;
   },
   component: GafCoreLoginPage,
@@ -58,8 +73,24 @@ function GafCoreLoginPage() {
   /** Tras cerrar sesión: evita que el gestor del navegador rellene al instante; se quita al enfocar un campo. */
   const [blockAutofillUntilFocus, setBlockAutofillUntilFocus] = useState(() => Boolean(search.signedOut));
   const light = false;
-  const { redirect, signedOut } = search;
+  const { redirect, signedOut, email: emailFromUrl, unsafeUrlPassword } = search;
   const redirectTo = redirect || "/gafcore/app";
+
+  useEffect(() => {
+    if (unsafeUrlPassword && typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("password");
+      if (emailFromUrl) url.searchParams.set("email", emailFromUrl);
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+      setError(
+        "Por seguridad la contraseña no puede ir en la URL. Escríbela en el campo y pulsa «Entrar».",
+      );
+    }
+    if (emailFromUrl && !signedOut) {
+      setEmail(emailFromUrl);
+      setBlockAutofillUntilFocus(false);
+    }
+  }, [emailFromUrl, signedOut, unsafeUrlPassword]);
 
   useEffect(() => {
     if (!signedOut) return;
@@ -257,6 +288,12 @@ function GafCoreLoginPage() {
               </p>
             </div>
 
+            {unsafeUrlPassword ? (
+              <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
+                La contraseña en la barra de direcciones no inicia sesión. Usa el formulario y pulsa{" "}
+                <strong>Entrar</strong>.
+              </div>
+            ) : null}
             {error && (
               <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
                 {error}
