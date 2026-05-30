@@ -115,5 +115,6 @@ bun run format
 - Si un comando falla: leer el error, corregir y reintentar cuando el fallo sea local al proyecto.
 - **Deploy automático (regla del usuario):** al terminar un cambio o ajuste sustantivo, hacer **build → commit → `git push origin main`** sin preguntar. Vercel despliega `main` → **gafcore.com**. Informar que el deploy está en curso. No preguntar «¿hago push?». Excepción: el usuario pide explícitamente no subir, o la tarea fue solo consulta sin editar código.
 - **Límites:** no iniciar sesión en cuentas del usuario (Supabase/Vercel/GitHub/OpenAI); no escribir secretos en `.env` / `.env.*`; no force-push a `main`.
+- **Login blindado:** la lógica de inicio de sesión vive en `src/lib/gafcore-login.shared.ts` (`@locked`). No refactorizar salvo bug en `/gafcore/login`; cambios de UI ok, no tocar `signInWithPassword` + redirect disperso.
 
 > **Cómo persisten estas reglas:** Cursor carga `.cursorrules` en cada chat de este workspace. Para instrucciones **globales** (todos los proyectos): *Cursor Settings → Rules for AI / User Rules*.
