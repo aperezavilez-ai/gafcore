@@ -102,7 +102,7 @@ function LoginPage() {
             <div className="relative flex justify-center text-xs"><span className="bg-card px-2 text-muted-foreground">correo y contraseña</span></div>
           </div>
 
-          <form className="space-y-4" onSubmit={handleSubmit} autoComplete="on">
+          <form className="space-y-4" method="post" action="/login" onSubmit={handleSubmit} autoComplete="on">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground" htmlFor="login-email">{t("auth.email")}</label>
               <input id="login-email" name="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required className="auth-input" placeholder="you@example.com" />

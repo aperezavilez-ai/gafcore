@@ -5,6 +5,7 @@ import { ensureSupabaseSsrEnv } from "./lib/supabase-ssr-env.server";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { servePublicStatic } from "./lib/public-static.server";
+import { buildSanitizedLoginUrl, loginUrlHasForbiddenParams } from "./lib/gafcore-login.shared";
 import { spaFallbackResponse, wantsHtmlDocument } from "./lib/spa-fallback.server";
 
 type ServerEntry = {
@@ -164,6 +165,16 @@ export default {
     ensureSupabaseSsrEnv();
     const url = new URL(request.url);
     const path = url.pathname;
+
+    if (path.includes("/gafcore/login")) {
+      if (request.method === "POST") {
+        return Response.redirect(buildSanitizedLoginUrl(url), 303);
+      }
+      if (loginUrlHasForbiddenParams(url)) {
+        return Response.redirect(buildSanitizedLoginUrl(url), 302);
+      }
+    }
+
     if (request.method === "GET" && path === "/") {
       return Response.redirect(`${url.origin}/gafcore`, 307);
     }

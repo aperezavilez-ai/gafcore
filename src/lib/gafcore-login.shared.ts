@@ -80,6 +80,47 @@ export function readLoginCredentials(
   return { email, password };
 }
 
+/** Parámetros que nunca deben aparecer en la barra de direcciones. */
+const LOGIN_URL_FORBIDDEN_PARAMS = [
+  "password",
+  "pwd",
+  "pass",
+  "access_token",
+  "refresh_token",
+  "token",
+] as const;
+
+/** Quita secretos de ?password=… en /gafcore/login (historial, referrers, capturas). */
+export function stripSecretsFromLoginUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  const url = new URL(window.location.href);
+  if (!url.pathname.includes("/gafcore/login")) return false;
+  let changed = false;
+  for (const key of LOGIN_URL_FORBIDDEN_PARAMS) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) return false;
+  const qs = url.searchParams.toString();
+  const next = `${url.pathname}${qs ? `?${qs}` : ""}${url.hash}`;
+  window.history.replaceState(null, "", next);
+  return true;
+}
+
+export function loginUrlHasForbiddenParams(url: URL): boolean {
+  if (!url.pathname.includes("/gafcore/login")) return false;
+  return LOGIN_URL_FORBIDDEN_PARAMS.some((key) => url.searchParams.has(key));
+}
+
+export function buildSanitizedLoginUrl(url: URL): string {
+  const clean = new URL(url.toString());
+  for (const key of LOGIN_URL_FORBIDDEN_PARAMS) clean.searchParams.delete(key);
+  const qs = clean.searchParams.toString();
+  return `${clean.origin}${clean.pathname}${qs ? `?${qs}` : ""}${clean.hash}`;
+}
+
 export function resolveGafcoreLoginRedirect(redirectTo: string): string {
   if (redirectTo.startsWith("http")) return redirectTo;
   const path = redirectTo.startsWith("/") ? redirectTo : `/${redirectTo}`;

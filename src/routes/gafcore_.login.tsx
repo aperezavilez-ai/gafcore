@@ -8,7 +8,12 @@ import {
   gafcoreLoginWithPassword,
   normalizeGafcoreLoginEmail,
   readLoginCredentials,
+  stripSecretsFromLoginUrl,
 } from "@/lib/gafcore-login.shared";
+
+if (typeof window !== "undefined") {
+  stripSecretsFromLoginUrl();
+}
 import { initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
 
@@ -77,7 +82,8 @@ function GafCoreLoginPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.has("password")) {
+    const hadPasswordInUrl = params.has("password") || stripSecretsFromLoginUrl();
+    if (hadPasswordInUrl) {
       setUrlPasswordWarning(true);
       setPassword("");
       const mail = params.get("email")?.trim().toLowerCase() ?? emailFromUrl ?? "";
@@ -291,8 +297,9 @@ function GafCoreLoginPage() {
                   {urlPasswordWarning ? (
                     <div className="mb-4 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
                       <p>
-                        La contraseña en la barra de direcciones <strong>no inicia sesión</strong>. Escríbela abajo y
-                        pulsa <strong>Entrar</strong>.
+                        Tu contraseña apareció en la URL (grave). Ya la quitamos de la barra.{" "}
+                        <strong>Cámbiala ya</strong> con «¿Olvidaste tu contraseña?» y escríbela solo en el campo de
+                        abajo.
                       </p>
                       <button
                         type="button"
@@ -351,6 +358,8 @@ function GafCoreLoginPage() {
                     ref={loginFormRef}
                     id="gc-login-form"
                     className="space-y-4"
+                    method="post"
+                    action="/gafcore/login"
                     onSubmit={handleSubmit}
                     autoComplete="on"
                     noValidate
