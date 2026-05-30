@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
@@ -7,7 +7,7 @@ import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 export const Route = createFileRoute("/gafcore_/login")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { redirect?: string; signedOut?: boolean; email?: string; unsafeUrlPassword?: boolean } => {
+  ): { redirect?: string; signedOut?: boolean; email?: string } => {
     const redirect =
       typeof search.redirect === "string" && search.redirect.startsWith("/") && !search.redirect.startsWith("//")
         ? search.redirect
@@ -19,18 +19,10 @@ export const Route = createFileRoute("/gafcore_/login")({
       typeof search.email === "string" && search.email.includes("@")
         ? search.email.trim().toLowerCase().slice(0, 320)
         : undefined;
-    const unsafeUrlPassword =
-      typeof search.password === "string" && search.password.length > 0;
-    const out: {
-      redirect?: string;
-      signedOut?: boolean;
-      email?: string;
-      unsafeUrlPassword?: boolean;
-    } = {};
+    const out: { redirect?: string; signedOut?: boolean; email?: string } = {};
     if (redirect) out.redirect = redirect;
     if (signedOut) out.signedOut = true;
     if (email) out.email = email;
-    if (unsafeUrlPassword) out.unsafeUrlPassword = true;
     return out;
   },
   component: GafCoreLoginPage,
@@ -73,24 +65,39 @@ function GafCoreLoginPage() {
   /** Tras cerrar sesión: evita que el gestor del navegador rellene al instante; se quita al enfocar un campo. */
   const [blockAutofillUntilFocus, setBlockAutofillUntilFocus] = useState(() => Boolean(search.signedOut));
   const light = false;
-  const { redirect, signedOut, email: emailFromUrl, unsafeUrlPassword } = search;
+  const { redirect, signedOut, email: emailFromUrl } = search;
   const redirectTo = redirect || "/gafcore/app";
+  const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
+
+  const cleanLoginUrl = useCallback(
+    (prefillEmail?: string) => {
+      const nextSearch: { redirect?: string; email?: string } = {};
+      if (redirect) nextSearch.redirect = redirect;
+      const e = (prefillEmail ?? emailFromUrl ?? "").trim().toLowerCase();
+      if (e.includes("@")) nextSearch.email = e;
+      void navigate({ to: "/gafcore/login", replace: true, search: nextSearch });
+    },
+    [emailFromUrl, navigate, redirect],
+  );
 
   useEffect(() => {
-    if (unsafeUrlPassword && typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("password");
-      if (emailFromUrl) url.searchParams.set("email", emailFromUrl);
-      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
-      setError(
-        "Por seguridad la contraseña no puede ir en la URL. Escríbela en el campo y pulsa «Entrar».",
-      );
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const hadPasswordInUrl = params.has("password");
+    if (hadPasswordInUrl) {
+      setUrlPasswordWarning(true);
+      setPassword("");
+      setBlockAutofillUntilFocus(false);
+      const mail = params.get("email")?.trim().toLowerCase() ?? emailFromUrl ?? "";
+      if (mail.includes("@")) setEmail(mail);
+      cleanLoginUrl(mail);
+      return;
     }
     if (emailFromUrl && !signedOut) {
       setEmail(emailFromUrl);
       setBlockAutofillUntilFocus(false);
     }
-  }, [emailFromUrl, signedOut, unsafeUrlPassword]);
+  }, [emailFromUrl, signedOut, cleanLoginUrl]);
 
   useEffect(() => {
     if (!signedOut) return;
@@ -288,10 +295,22 @@ function GafCoreLoginPage() {
               </p>
             </div>
 
-            {unsafeUrlPassword ? (
-              <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
-                La contraseña en la barra de direcciones no inicia sesión. Usa el formulario y pulsa{" "}
-                <strong>Entrar</strong>.
+            {urlPasswordWarning ? (
+              <div className="mb-4 space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
+                <p>
+                  La contraseña en la barra de direcciones <strong>no inicia sesión</strong>. Escribe la
+                  contraseña en el campo de abajo y pulsa <strong>Entrar</strong>.
+                </p>
+                <button
+                  type="button"
+                  className="text-xs font-medium underline underline-offset-2 hover:opacity-90"
+                  onClick={() => {
+                    setUrlPasswordWarning(false);
+                    cleanLoginUrl();
+                  }}
+                >
+                  Limpiar enlace seguro
+                </button>
               </div>
             ) : null}
             {error && (
