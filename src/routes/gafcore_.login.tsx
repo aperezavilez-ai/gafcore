@@ -64,7 +64,8 @@ function GafCoreLoginPage() {
   const { redirect, signedOut } = search;
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
-  const supabaseReady = isSupabaseConfigured();
+  const [clientReady, setClientReady] = useState(false);
+  const supabaseReady = clientReady && isSupabaseConfigured();
   /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
 
@@ -75,6 +76,7 @@ function GafCoreLoginPage() {
   }, [navigate, redirect]);
 
   useEffect(() => {
+    setClientReady(true);
     void initAuthOnce();
   }, []);
 
@@ -127,6 +129,10 @@ function GafCoreLoginPage() {
   const runLogin = async () => {
     setError("");
     setMessage("");
+    if (!isSupabaseConfigured()) {
+      setError("Supabase no está configurado en este sitio. Espera 2 min al deploy o contacta soporte.");
+      return;
+    }
     const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(email);
     if (typoHint) setMessage(typoHint);
     if (!loginEmail || !password) {
@@ -385,8 +391,8 @@ function GafCoreLoginPage() {
 
                     <button
                       type="button"
-                      disabled={loading || !supabaseReady}
-                      className="auth-grad-btn mt-2"
+                      disabled={loading}
+                      className="auth-grad-btn mt-2 cursor-pointer disabled:cursor-not-allowed"
                       onClick={() => void runLogin()}
                     >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
