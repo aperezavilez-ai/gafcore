@@ -31,7 +31,7 @@ const PROMPT =
   "Diseña una landing page profesional para una marca SaaS B2B de gestión de inventario llamada 'StockFlow'. Hero centrado, 3 features con icono, sección de pricing con 3 planes, testimonios, CTA final y footer. Usa Tailwind v4 con tokens semánticos, mobile-first y un par tipográfico Inter+Space Grotesk. Color base violeta. Devuelve App.tsx, main.tsx, index.html y styles.css.";
 
 async function callBrain(model) {
-  const route = await import("../src/lib/gafcore-model-routing.shared.ts").then((m) =>
+  const route = await import("../src/lib/gafcore-model-routing.server.ts").then((m) =>
     m.resolveAiRoute(model),
   );
   console.log(`\n[${model}] → provider=${route.provider} slug=${route.modelSlug}`);

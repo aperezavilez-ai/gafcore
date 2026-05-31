@@ -88,6 +88,21 @@ export async function runGafcoreAgentChatCompletion(input: {
     });
 
     if (attempt >= MAX_ATTEMPTS) {
+      if (safeFiles.length > 0) {
+        logDev("gafcore_agent_chat_best_effort", {
+          attempt,
+          files: safeFiles.length,
+          issues: gate.issues.length,
+        });
+        return {
+          reply: gate.userMessage
+            ? `${replyRaw}\n\n${gate.userMessage}`
+            : replyRaw,
+          files: safeFiles,
+          attempts: attempt,
+          validationBlocked: false,
+        };
+      }
       return {
         reply: `${replyRaw}\n\nNo se aplicaron cambios: ${gate.userMessage}`,
         files: [],

@@ -1989,139 +1989,21 @@ export function ChatPanel({
     ac: AbortSignal,
     myEpoch: number,
     userTextForTone: string,
-    options?: { preferReliableJson?: boolean },
+    _options?: { preferReliableJson?: boolean },
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
     safeBuild?: SafeBuildMeta;
   }> => {
-    if (options?.preferReliableJson) {
-      return fetchGafcoreChatComplete(
-        tok,
-        history,
-        instruction,
-        contextFiles,
-        ac,
-        userTextForTone,
-      );
-    }
-    const chatPayload = {
+    /** Cerebro: siempre /complete (agente 3 intentos + Safe-Build). El stream no reintenta y dejaba el preview vacío. */
+    return fetchGafcoreChatComplete(
+      tok,
       history,
       instruction,
-      files: contextFiles,
-      ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
-    };
-    try {
-      const res = await fetch("/api/gafcore/chat/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json, text/event-stream",
-          Authorization: `Bearer ${tok}`,
-        },
-        body: JSON.stringify(chatPayload),
-        signal: ac.signal,
-      });
-
-      const ct = res.headers.get("content-type") || "";
-
-      if (ct.includes("text/html")) {
-        return fetchGafcoreChatComplete(
-          tok,
-          history,
-          instruction,
-          contextFiles,
-          ac,
-          userTextForTone,
-        );
-      }
-
-      if (!res.ok) {
-        let errCode = `HTTP ${res.status}`;
-        try {
-          const ej = (await res.json()) as { error?: string; detail?: string };
-          if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
-          else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
-          else if (ej?.error === "rate_limited") errCode = "rate_limited";
-          else if (ej?.error === "project_not_found") errCode = "project_not_found";
-          else if (ej?.error === "invalid_body")
-            errCode = "Petición inválida (revisa el texto o archivos).";
-          else if (ej?.error === "upstream") errCode = `UPSTREAM:${res.status}`;
-          else if (ej?.error === "credits_error") errCode = "CREDITS_VERIFY_FAILED";
-          else if (ej?.error === "no_stream_body") errCode = "NO_STREAM_BODY";
-          else if (res.status === 429) errCode = "rate_limited";
-          else if (typeof ej?.error === "string") errCode = ej.error;
-          else if (res.status === 500 && ej?.detail)
-            errCode = `Error del servidor: ${String(ej.detail).slice(0, 200)}`;
-        } catch {
-          /* */
-        }
-        throw new Error(errCode);
-      }
-
-      if (ct.includes("application/json")) {
-        const j = (await res.json()) as {
-          reply?: string;
-          files?: Array<{ name: string; language?: string; content: string }>;
-          safeBuild?: SafeBuildMeta;
-        };
-        const replyRaw = typeof j.reply === "string" ? j.reply : "Listo.";
-        if (j.safeBuild?.phase) {
-          setHealthPhase(mapSafeBuildToHealthPhase(j.safeBuild.phase));
-        }
-        return {
-          reply: softenRoboticReply(userTextForTone, replyRaw),
-          files: Array.isArray(j.files) ? j.files : [],
-          safeBuild: j.safeBuild,
-        };
-      }
-
-      const text = await readSseJsonPayload(res, ac?.signal, (n) => {
-        if (myEpoch === requestEpochRef.current) setStreamChars(n);
-      });
-      // Tolerante: el modelo a veces envuelve el JSON en ```json ... ``` o prepone texto.
-      const parsed = parseJsonLoose<{ reply?: string; files?: unknown }>(text || "{}") ?? {};
-      const rawFiles = Array.isArray(parsed.files) ? parsed.files : [];
-      const replyRaw = typeof parsed.reply === "string" ? parsed.reply : "Listo.";
-      return {
-        reply: softenRoboticReply(userTextForTone, replyRaw),
-        files: rawFiles as Array<{ name: string; language?: string; content: string }>,
-      };
-    } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") throw err;
-      if ((err as Error)?.name === "AbortError") throw err;
-      const msg = String((err as Error)?.message || "");
-      if (
-        msg.includes("Failed to fetch") ||
-        msg.includes("NetworkError") ||
-        msg.includes("HTML_RESPONSE") ||
-        msg.startsWith("HTTP 5")
-      ) {
-        try {
-          return await fetchGafcoreChatComplete(
-            tok,
-            history,
-            instruction,
-            contextFiles,
-            ac,
-            userTextForTone,
-          );
-        } catch (fallbackErr) {
-          if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-            return callGafcoreChat({
-              data: {
-                history,
-                instruction,
-                files: contextFiles as any,
-                ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
-              },
-            });
-          }
-          throw fallbackErr;
-        }
-      }
-      throw err;
-    }
+      contextFiles,
+      ac,
+      userTextForTone,
+    );
   };
 
   const runPreviewAutofixWithAi = useCallback(
@@ -3098,6 +2980,7 @@ export function ChatPanel({
               ac.signal,
               myEpoch,
               raw || coreText,
+              { preferReliableJson: true },
             );
             if (myEpoch === requestEpochRef.current && retryResult.files?.length) {
               const retryReply = sanitizeUserFacingAiText(retryResult.reply || "Corregido.");
