@@ -17,7 +17,10 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
 import { GafcoreWebOnly } from "@/components/GafcoreWebOnly";
-import { stripSecretsFromLoginUrl } from "@/lib/gafcore-login.shared";
+import {
+  GAFCORE_LOGIN_URL_STRIP_SCRIPT,
+  stripSecretsFromLoginUrl,
+} from "@/lib/gafcore-login.shared";
 import { GAFCORE_PWA_THEME_COLOR } from "@/lib/gafcore-pwa.shared";
 import { installServerFnAuth } from "@/lib/server-fn-auth";
 
@@ -78,6 +81,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: GAFCORE_LOGIN_URL_STRIP_SCRIPT }} />
         <link rel="icon" href={GAFCORE_FAVICON_INLINE} />
         <link rel="shortcut icon" href={GAFCORE_FAVICON_INLINE} />
         <link rel="icon" type="image/svg+xml" href={GAFCORE_FAVICON_SVG_PATH} />

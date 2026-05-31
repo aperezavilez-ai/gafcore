@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 import {
@@ -50,6 +50,22 @@ export const Route = createFileRoute("/gafcore_/login")({
 });
 
 function GafCoreLoginPage() {
+  const [blockingUrlSanitize, setBlockingUrlSanitize] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return loginUrlHasForbiddenParams(new URL(window.location.href));
+  });
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (loginUrlHasForbiddenParams(url)) {
+      window.location.replace(buildSanitizedLoginUrl(url));
+      return;
+    }
+    stripSecretsFromLoginUrl();
+    setBlockingUrlSanitize(false);
+  }, []);
+
   const navigate = useNavigate();
   const search = Route.useSearch();
   const [showPw, setShowPw] = useState(false);
@@ -94,19 +110,6 @@ function GafCoreLoginPage() {
   }, [signedOut, clearCredentialFields]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (!loginUrlHasForbiddenParams(url)) return;
-    const hadPasswordInUrl =
-      url.searchParams.has("password") ||
-      url.searchParams.has("pwd") ||
-      url.searchParams.has("pass") ||
-      url.searchParams.has("gafcore_password");
-    if (hadPasswordInUrl) setUrlPasswordWarning(true);
-    window.location.replace(buildSanitizedLoginUrl(url));
-  }, []);
-
-  useEffect(() => {
     if (!signedOut) return;
     setEmail("");
     setPassword("");
@@ -125,12 +128,13 @@ function GafCoreLoginPage() {
       .then((sb) => sb.auth.getSession())
       .then(({ data }) => {
         if (!active) return;
-        const sessionEmail = data.session?.user?.email;
-        if (sessionEmail) {
-          setActiveSessionEmail(sessionEmail);
-          if (!signedOut) {
-            gafcoreLoginRedirectNow(`${window.location.origin}${redirectTo}`);
-          }
+        const session = data.session;
+        const sessionEmail = session?.user?.email;
+        const expiresAt = session?.expires_at ?? 0;
+        const sessionLive = Boolean(sessionEmail && expiresAt * 1000 > Date.now() + 30_000);
+        if (sessionEmail) setActiveSessionEmail(sessionEmail);
+        if (sessionLive && !signedOut) {
+          gafcoreLoginRedirectNow(`${window.location.origin}${redirectTo}`);
         }
       })
       .catch(() => {
@@ -214,6 +218,14 @@ function GafCoreLoginPage() {
   const inputBg = light
     ? "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
     : "bg-[#141828] border-white/10 text-slate-100 placeholder:text-slate-500";
+
+  if (blockingUrlSanitize) {
+    return (
+      <div className={`flex min-h-dvh items-center justify-center ${bg}`}>
+        <p className={`text-sm ${subtleText}`}>Preparando inicio de sesión seguro…</p>
+      </div>
+    );
+  }
 
   return (
     <div className={`relative flex min-h-dvh w-full flex-col ${bg} transition-colors`}>
@@ -363,14 +375,15 @@ function GafCoreLoginPage() {
                     <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
                   </div>
 
-                  <div
+                  <form
                     key={formKey}
                     className="space-y-4"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void runLogin();
-                      }
+                    noValidate
+                    action="/gafcore/login"
+                    method="post"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void runLogin();
                     }}
                   >
                     <div>
@@ -381,7 +394,6 @@ function GafCoreLoginPage() {
                         <Mail size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-login-email"
-                          name="email"
                           type="email"
                           autoComplete="email"
                           value={email}
@@ -399,7 +411,6 @@ function GafCoreLoginPage() {
                         <Lock size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-login-pw"
-                          name="password"
                           type={showPw ? "text" : "password"}
                           autoComplete="current-password"
                           value={password}
@@ -420,14 +431,13 @@ function GafCoreLoginPage() {
                     </div>
 
                     <button
-                      type="button"
+                      type="submit"
                       disabled={loading}
                       className="auth-grad-btn mt-2 cursor-pointer disabled:cursor-not-allowed"
-                      onClick={() => void runLogin()}
                     >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
-                  </div>
+                  </form>
 
                   <button
                     type="button"

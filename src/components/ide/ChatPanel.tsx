@@ -99,6 +99,7 @@ import {
   buildRuntimeAutoFixInstruction,
   isPreviewAutofixSuppressed,
   shouldAttemptAiAutofix,
+  isPreviewAutofixAiEnabled,
 } from "@/lib/gafcore-chat-autofix.shared";
 import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
 import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
@@ -1377,18 +1378,18 @@ export function ChatPanel({
         if (repairedLocally) return;
         if (looksLikeObjectChild || looksLikeUndefined || looksLikeReactHooksDup) {
           setLastError(msg);
-          scheduleRuntimeAutofixRef.current(msg);
+          if (isPreviewAutofixAiEnabled()) scheduleRuntimeAutofixRef.current(msg);
           return;
         }
         if (looksLikeJsxGlue) {
           setLastError(msg);
-          scheduleRuntimeAutofixRef.current(msg);
+          if (isPreviewAutofixAiEnabled()) scheduleRuntimeAutofixRef.current(msg);
           return;
         }
       }
 
       setLastError(msg);
-      if (shouldAttemptAiAutofix(msg)) {
+      if (isPreviewAutofixAiEnabled() && shouldAttemptAiAutofix(msg)) {
         scheduleRuntimeAutofixRef.current(msg);
       }
     };
@@ -1655,7 +1656,7 @@ export function ChatPanel({
       if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
         const sourceErr = v.errors.map((e) => `${e.name}: ${e.message}`).join("\n");
         setLastError(sourceErr);
-        if (shouldAttemptAiAutofix(sourceErr)) {
+        if (isPreviewAutofixAiEnabled() && shouldAttemptAiAutofix(sourceErr)) {
           scheduleRuntimeAutofixRef.current(sourceErr);
         }
       }
@@ -1688,7 +1689,7 @@ export function ChatPanel({
           setLastError((prev) =>
             prev ? `${prev}\n\n[Validación GafCore]\n${text}` : `[Validación GafCore]\n${text}`,
           );
-          scheduleRuntimeAutofixRef.current(text);
+          if (isPreviewAutofixAiEnabled()) scheduleRuntimeAutofixRef.current(text);
         } else if (warnings.length > 0) {
           toast.message("Listo con avisos menores", {
             description: formatValidationForUser(warnings).slice(0, 240),
@@ -2009,6 +2010,7 @@ export function ChatPanel({
   const runPreviewAutofixWithAi = useCallback(
     async (errorMessage: string) => {
       const msg = errorMessage.trim();
+      if (!isPreviewAutofixAiEnabled()) return;
       if (isPreviewAutofixSuppressed()) return;
       if (!shouldAttemptAiAutofix(msg)) return;
       if (!projectId || filesRef.current.length === 0) return;
@@ -2085,10 +2087,11 @@ export function ChatPanel({
             applied.issues.filter((i) => i.severity === "error"),
           );
           setLastError(blockText);
-          autoFixAttemptedErrorsRef.current.delete(attemptKey);
-          scheduleRuntimeAutofixRef.current(blockText);
           toast.dismiss(toastId);
-          toast.message("Auto-corrección parcial; reintentando validación…", { duration: 5000 });
+          toast.warning(
+            "Auto-corrección detenida para no seguir modificando archivos. Usa el historial (reloj) o describe el cambio en el chat.",
+            { duration: 10_000 },
+          );
           return;
         }
 
@@ -2942,10 +2945,17 @@ export function ChatPanel({
           isGafcoreDefaultTemplateApp(appAfterBuild.content) &&
           isSubstantiveBuildRequest(raw)
         ) {
-          toast.message("Reemplazando pantalla de bienvenida por tu proyecto…", { duration: 8000 });
-          scheduleRuntimeAutofixRef.current(
-            `App.tsx sigue mostrando «Bienvenidos a GafCore». Reemplázala por el proyecto pedido: ${raw.slice(0, 300)}`,
-          );
+          if (isPreviewAutofixAiEnabled()) {
+            toast.message("Reemplazando pantalla de bienvenida por tu proyecto…", { duration: 8000 });
+            scheduleRuntimeAutofixRef.current(
+              `App.tsx sigue mostrando «Bienvenidos a GafCore». Reemplázala por el proyecto pedido: ${raw.slice(0, 300)}`,
+            );
+          } else {
+            toast.message(
+              "El preview sigue en plantilla de bienvenida. Escribe de nuevo qué proyecto quieres en el chat.",
+              { duration: 10_000 },
+            );
+          }
         }
 
         if (
@@ -3010,11 +3020,18 @@ export function ChatPanel({
                 const blockText = formatValidationForUser(
                   issues.filter((i) => i.severity === "error"),
                 );
-                scheduleRuntimeAutofixRef.current(blockText);
-                toast.message("Aún hay errores; la IA está corrigiendo automáticamente…", {
-                  description: issues[0]?.message,
-                  duration: 8000,
-                });
+                if (isPreviewAutofixAiEnabled()) {
+                  scheduleRuntimeAutofixRef.current(blockText);
+                  toast.message("Aún hay errores; la IA está corrigiendo automáticamente…", {
+                    description: issues[0]?.message,
+                    duration: 8000,
+                  });
+                } else {
+                  setLastError(blockText);
+                  toast.warning("Hay errores de validación. Corrígelos en el chat o restaura una versión (reloj).", {
+                    duration: 10_000,
+                  });
+                }
               }
             }
           }
@@ -3022,11 +3039,15 @@ export function ChatPanel({
           const blockText = formatValidationForUser(
             issues.filter((i) => i.severity === "error"),
           );
-          scheduleRuntimeAutofixRef.current(blockText);
-          toast.message("Corrigiendo validación automáticamente…", {
-            description: issues.find((i) => i.severity === "error")?.message,
-            duration: 8000,
-          });
+          if (isPreviewAutofixAiEnabled()) {
+            scheduleRuntimeAutofixRef.current(blockText);
+            toast.message("Corrigiendo validación automáticamente…", {
+              description: issues.find((i) => i.severity === "error")?.message,
+              duration: 8000,
+            });
+          } else {
+            setLastError(blockText);
+          }
         } else if (effectiveBuild) {
           if (!issues.some((i) => i.severity === "error")) {
             setLastError(null);

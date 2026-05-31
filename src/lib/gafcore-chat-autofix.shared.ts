@@ -1,6 +1,22 @@
 /** Instrucciones y heurísticas para auto-corrección del preview (ChatPanel). */
 
-export const GAFCORE_AUTOFIX_SESSION_MAX = 10;
+/** Máximo de auto-correcciones IA por sesión (evita bucles que reescriben todo el proyecto). */
+export const GAFCORE_AUTOFIX_SESSION_MAX = 2;
+
+/** Auto-fix IA del preview desactivado por defecto; activar con VITE_GAFCORE_PREVIEW_AUTOFIX=1 en build. */
+export function isPreviewAutofixAiEnabled(): boolean {
+  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_GAFCORE_PREVIEW_AUTOFIX === "1") {
+    return true;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      return localStorage.getItem("gafcore_preview_autofix") === "1";
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
 
 /** Tras restaurar historial (reloj), no disparar auto-fix IA durante este margen. */
 export const GAFCORE_AUTOFIX_SUPPRESS_AFTER_RESTORE_MS = 45_000;
