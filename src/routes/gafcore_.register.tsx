@@ -1,8 +1,8 @@
 /** Confirmación por correo: solo en Supabase (Auth → Email → “Confirm email”). El cliente no la apaga. */
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, Check } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { getGafcoreSupabaseBrowser, isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { assertGafcoreSignupAllowed } from "@/lib/gafcore-register.functions";
@@ -35,7 +35,12 @@ function GafCoreRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileMountKey, setTurnstileMountKey] = useState(0);
+  const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null);
   const light = false;
+
+  useEffect(() => {
+    void isSupabaseReadyOnClient().then(setSupabaseReady);
+  }, []);
   const { plan, redirect } = Route.useSearch();
   /** Tras crear cuenta o verificar correo: siempre a planes primero; solo si eligieron plan de pago → URL con ?plan= para abrir checkout. */
   const postRegisterPath = (() => {
@@ -76,9 +81,14 @@ function GafCoreRegisterPage() {
       return;
     }
     setError("");
+    if (!(await isSupabaseReadyOnClient())) {
+      setError("No se pudo conectar con el servidor de cuentas. Recarga la página en unos minutos.");
+      return;
+    }
     setLoading(true);
 
     try {
+      const supabase = await getGafcoreSupabaseBrowser();
       try {
         await assertSignup({
           data: {
@@ -233,8 +243,13 @@ function GafCoreRegisterPage() {
               </p>
             </div>
 
+            {supabaseReady === false ? (
+              <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-red-300">
+                No se pudo conectar con el servidor de cuentas. Espera 2 minutos y recarga la página.
+              </div>
+            ) : null}
             {error && (
-              <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
+              <div role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
                 {error}
               </div>
             )}
@@ -245,14 +260,7 @@ function GafCoreRegisterPage() {
               <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
             </div>
 
-            <form className="space-y-4" onSubmit={handleSubmit} autoComplete="off">
-              <p className={`text-xs ${subtleText}`}>
-                Los campos empiezan vacíos. Si el navegador rellena solo, pulsa{" "}
-                <button type="button" className="text-violet-400 underline" onClick={clearCredentialFields}>
-                  vaciar campos
-                </button>
-                .
-              </p>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-reg-email">
                   Correo electrónico

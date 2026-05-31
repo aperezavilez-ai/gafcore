@@ -121,14 +121,25 @@ function GafCoreLoginPage() {
 
   useEffect(() => {
     let active = true;
-    void getGafcoreSupabaseBrowser().then((sb) => sb.auth.getSession()).then(({ data }) => {
-      if (!active) return;
-      if (data.session?.user?.email) setActiveSessionEmail(data.session.user.email);
-    });
+    void getGafcoreSupabaseBrowser()
+      .then((sb) => sb.auth.getSession())
+      .then(({ data }) => {
+        if (!active) return;
+        const sessionEmail = data.session?.user?.email;
+        if (sessionEmail) {
+          setActiveSessionEmail(sessionEmail);
+          if (!signedOut) {
+            gafcoreLoginRedirectNow(`${window.location.origin}${redirectTo}`);
+          }
+        }
+      })
+      .catch(() => {
+        /* sin sesión o Supabase aún no listo */
+      });
     return () => {
       active = false;
     };
-  }, []);
+  }, [redirectTo, signedOut]);
 
   const switchAccount = async () => {
     setSwitching(true);
