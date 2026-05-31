@@ -3,10 +3,13 @@ import { useEffect, useState, type ReactNode } from "react";
 /**
  * Widgets solo cliente: import() dinámico evita cargar react-markdown/sonner en el bundle SSR de __root.
  */
-function isGafcoreAuthPath(): boolean {
+/** Sin chat flotante en auth/landing — menos JS y nada encima de los clics en móvil. */
+function skipGafcoreChatWidget(): boolean {
   if (typeof window === "undefined") return false;
   const p = window.location.pathname;
-  return p.includes("/gafcore/login") || p.includes("/gafcore/register");
+  if (p.includes("/gafcore/login") || p.includes("/gafcore/register")) return true;
+  if (p === "/gafcore" || p === "/gafcore/") return true;
+  return false;
 }
 
 export function ClientRootWidgets() {
@@ -14,7 +17,7 @@ export function ClientRootWidgets() {
 
   useEffect(() => {
     let cancelled = false;
-    const onAuthScreen = isGafcoreAuthPath();
+    const onAuthScreen = skipGafcoreChatWidget();
     void import("@/components/ui/sonner").then((sonner) => {
       if (cancelled) return;
       const Toaster = sonner.Toaster;

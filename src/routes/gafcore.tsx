@@ -176,8 +176,11 @@ function GafCoreLanding() {
   const { theme, setTheme } = useGafcoreTheme();
   const [checkoutPriceId, setCheckoutPriceId] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const closeMobileNav = () => setMobileNavOpen(false);
+  const panelHref = user?.id
+    ? isAdmin
+      ? "/gafcore/admin/ops"
+      : "/gafcore/app"
+    : "/gafcore/login";
 
   const resolveUserId = useCallback(async (): Promise<string | undefined> => {
     if (user?.id) return user.id;
@@ -369,72 +372,43 @@ function GafCoreLanding() {
               </>
             )}
           </div>
-          {/* Acciones móvil: idioma compacto + hamburguesa */}
+          {/* Móvil: menú nativo <details> — funciona aunque React tarde o falle */}
           <div className="flex items-center gap-1.5 md:hidden">
             <LanguageSwitcher variant="compact" />
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen((v) => !v)}
-              aria-label={mobileNavOpen ? "Cerrar menú" : "Abrir menú"}
-              aria-expanded={mobileNavOpen}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md gc-border border hover:opacity-80"
-              style={{ color: "var(--gc-fg)" }}
-            >
-              {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
+            <details className="group relative">
+              <summary
+                className="inline-flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border gc-border hover:opacity-80 [&::-webkit-details-marker]:hidden"
+                style={{ color: "var(--gc-fg)" }}
+                aria-label="Menú"
+              >
+                <Menu className="h-5 w-5 group-open:hidden" aria-hidden />
+                <X className="hidden h-5 w-5 group-open:block" aria-hidden />
+              </summary>
+              <div
+                className="absolute right-0 top-full z-[200] mt-2 min-w-[min(18rem,calc(100vw-2rem))] rounded-xl border gc-border py-2 shadow-xl"
+                style={{ background: "var(--gc-bg)" }}
+              >
+                <nav className="flex flex-col gap-0.5 px-2 text-sm gc-muted">
+                  <a href="#producto" className="rounded-md px-2 py-2 hover:opacity-80">
+                    {t("gc.nav.product")}
+                  </a>
+                  <a href="#planes" className="rounded-md px-2 py-2 hover:opacity-80">
+                    {t("gc.nav.pricing")}
+                  </a>
+                  <a href="#empresa" className="rounded-md px-2 py-2 hover:opacity-80">
+                    {t("gc.nav.company")}
+                  </a>
+                  <a href="/gafcore/login" className="rounded-md px-2 py-2 hover:opacity-80">
+                    {t("gc.auth.login")}
+                  </a>
+                  <a href="/gafcore/register" className="gc-cta rounded-md px-2 py-2 text-center font-semibold">
+                    {t("gc.auth.register")}
+                  </a>
+                </nav>
+              </div>
+            </details>
           </div>
         </div>
-        {/* Panel desplegable móvil */}
-        {mobileNavOpen && (
-          <div className="border-t gc-border md:hidden" style={{ background: "var(--gc-bg)" }}>
-            <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 text-sm gc-muted">
-              <a href="#producto" onClick={closeMobileNav} className="rounded-md px-2 py-2 hover:opacity-80">
-                {t("gc.nav.product")}
-              </a>
-              <a href="#planes" onClick={closeMobileNav} className="rounded-md px-2 py-2 hover:opacity-80">
-                {t("gc.nav.pricing")}
-              </a>
-              <a href="#empresa" onClick={closeMobileNav} className="rounded-md px-2 py-2 hover:opacity-80">
-                {t("gc.nav.company")}
-              </a>
-              <button
-                type="button"
-                onClick={() => { setContactOpen(true); closeMobileNav(); }}
-                className="rounded-md bg-transparent px-2 py-2 text-left hover:opacity-80"
-              >
-                {t("gc.nav.contact")}
-              </button>
-              <div className="mt-2 flex flex-col gap-2 border-t gc-border pt-3">
-                {user?.id ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="gc-cta rounded-full px-4"
-                    onClick={() => {
-                      closeMobileNav();
-                      void enterGafcoreApp({ adminOps: isAdmin });
-                    }}
-                  >
-                    {isAdmin ? "Panel admin" : "Ir al panel"}
-                  </Button>
-                ) : (
-                  <>
-                    <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
-                      <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }} onClick={closeMobileNav}>
-                        {t("gc.auth.login")}
-                      </Link>
-                    </Button>
-                    <Button asChild size="sm" className="gc-cta rounded-full px-4">
-                      <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }} onClick={closeMobileNav}>
-                        {t("gc.auth.register")}
-                      </Link>
-                    </Button>
-                  </>
-                )}
-              </div>
-            </nav>
-          </div>
-        )}
       </header>
 
       {/* Hero */}
@@ -464,15 +438,18 @@ function GafCoreLanding() {
             {t("gc.hero.subtitle")}
           </p>
           <div className="mx-auto mt-8 flex w-full max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
-            <Button
-              type="button"
-              size="lg"
-              className="gc-cta h-12 w-full rounded-full px-7 text-base font-semibold sm:w-auto"
-              onClick={() => void enterGafcoreApp()}
+            <a
+              href={panelHref}
+              className="gc-cta inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-full px-7 text-base font-semibold sm:w-auto"
+              onClick={(e) => {
+                if (!user?.id) return;
+                e.preventDefault();
+                void enterGafcoreApp({ adminOps: isAdmin });
+              }}
             >
               {t("gc.hero.cta")}
               <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+            </a>
           </div>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
             <span className="gc-chip"><Check className="h-3 w-3" /> {t("gc.hero.trust0")}</span>
@@ -555,23 +532,35 @@ function GafCoreLanding() {
                       </li>
                     ))}
                   </ul>
-                  <Button
-                    type="button"
-                    disabled={authLoading || roleLoading}
-                    onClick={() => {
-                      if (plan.id === "free") {
-                        void enterGafcoreApp();
-                        return;
-                      }
-                      choosePlan(plan.id);
+                  <a
+                    href={
+                      plan.id === "free"
+                        ? panelHref
+                        : `/gafcore/register?plan=${encodeURIComponent(plan.id)}`
+                    }
+                    className={
+                      highlight
+                        ? "gc-cta inline-flex w-full cursor-pointer items-center justify-center rounded-md px-4 py-2.5 text-sm font-semibold"
+                        : "inline-flex w-full cursor-pointer items-center justify-center rounded-md border px-4 py-2.5 text-sm font-semibold"
+                    }
+                    style={
+                      highlight
+                        ? undefined
+                        : {
+                            borderColor: "color-mix(in oklab, var(--gc-border) 35%, transparent)",
+                            color: "var(--gc-fg)",
+                            background: "transparent",
+                          }
+                    }
+                    onClick={(e) => {
+                      if (plan.id !== "free" || !user?.id) return;
+                      e.preventDefault();
+                      void enterGafcoreApp();
                     }}
-                    className={highlight ? "w-full gc-cta" : "w-full"}
-                    variant={highlight ? "default" : "outline"}
-                    style={highlight ? undefined : { borderColor: "color-mix(in oklab, var(--gc-border) 35%, transparent)", color: "var(--gc-fg)", background: "transparent" }}
                   >
                     {plan.id === "free" ? t("gc.plan.ctaFree") : t("gc.plan.ctaPaid")}
                     <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
+                  </a>
                 </div>
               );
             })}
