@@ -66,17 +66,12 @@ function GafCoreLoginPage() {
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null);
-  /** Evita que Chrome rellene hasta que el usuario toque el campo. */
-  const [emailEditable, setEmailEditable] = useState(false);
-  const [passwordEditable, setPasswordEditable] = useState(false);
   /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
 
   const clearCredentialFields = useCallback(() => {
     setEmail("");
     setPassword("");
-    setEmailEditable(false);
-    setPasswordEditable(false);
   }, []);
 
   const cleanLoginUrl = useCallback(() => {
@@ -148,8 +143,6 @@ function GafCoreLoginPage() {
   const runLogin = async () => {
     setError("");
     setMessage("");
-    setEmailEditable(true);
-    setPasswordEditable(true);
     const fromDom = readLoginCredentials(null, { email, password });
     if (fromDom.email !== email) setEmail(fromDom.email);
     if (fromDom.password !== password) setPassword(fromDom.password);
@@ -157,7 +150,7 @@ function GafCoreLoginPage() {
     const loginPassword = fromDom.password;
     if (typoHint) setMessage(typoHint);
     if (!loginEmail || !loginPassword) {
-      setError("Escribe tu correo y contraseña (o toca cada campo si el navegador los rellenó).");
+      setError("Escribe tu correo y contraseña.");
       return;
     }
     setLoading(true);
@@ -362,7 +355,6 @@ function GafCoreLoginPage() {
                   <div
                     key={formKey}
                     className="space-y-4"
-                    autoComplete="off"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -370,17 +362,6 @@ function GafCoreLoginPage() {
                       }
                     }}
                   >
-                    <p className={`text-xs ${subtleText}`}>
-                      Si Chrome rellena solo: toca el campo y escribe, o{" "}
-                      <button
-                        type="button"
-                        className="text-violet-400 underline"
-                        onClick={clearCredentialFields}
-                      >
-                        vaciar campos
-                      </button>
-                      . Para quitar el guardado: candado en la barra → contraseñas de gafcore.com.
-                    </p>
                     <div>
                       <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-login-email">
                         Correo electrónico
@@ -389,16 +370,11 @@ function GafCoreLoginPage() {
                         <Mail size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-login-email"
-                          type="text"
-                          inputMode="email"
-                          autoComplete="one-time-code"
-                          data-1p-ignore
-                          data-lpignore="true"
-                          readOnly={!emailEditable}
+                          name="email"
+                          type="email"
+                          autoComplete="email"
                           value={email}
-                          onFocus={() => setEmailEditable(true)}
                           onChange={(e) => setEmail(e.target.value)}
-                          onInput={(e) => setEmail(e.currentTarget.value)}
                           placeholder="tu@correo.com"
                           className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                         />
@@ -412,15 +388,11 @@ function GafCoreLoginPage() {
                         <Lock size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-login-pw"
+                          name="password"
                           type={showPw ? "text" : "password"}
-                          autoComplete="new-password"
-                          data-1p-ignore
-                          data-lpignore="true"
-                          readOnly={!passwordEditable}
+                          autoComplete="current-password"
                           value={password}
-                          onFocus={() => setPasswordEditable(true)}
                           onChange={(e) => setPassword(e.target.value)}
-                          onInput={(e) => setPassword(e.currentTarget.value)}
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                         />

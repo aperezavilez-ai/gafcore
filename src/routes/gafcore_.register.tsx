@@ -1,6 +1,6 @@
 /** Confirmación por correo: solo en Supabase (Auth → Email → “Confirm email”). El cliente no la apaga. */
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -35,28 +35,7 @@ function GafCoreRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileMountKey, setTurnstileMountKey] = useState(0);
-  const [emailEditable, setEmailEditable] = useState(false);
-  const [passwordEditable, setPasswordEditable] = useState(false);
   const light = false;
-
-  const clearCredentialFields = useCallback(() => {
-    setEmail("");
-    setPassword("");
-    setEmailEditable(false);
-    setPasswordEditable(false);
-  }, []);
-
-  useEffect(() => {
-    clearCredentialFields();
-    const raf = requestAnimationFrame(clearCredentialFields);
-    const t1 = window.setTimeout(clearCredentialFields, 100);
-    const t2 = window.setTimeout(clearCredentialFields, 400);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [clearCredentialFields]);
   const { plan, redirect } = Route.useSearch();
   /** Tras crear cuenta o verificar correo: siempre a planes primero; solo si eligieron plan de pago → URL con ?plan= para abrir checkout. */
   const postRegisterPath = (() => {
@@ -282,14 +261,10 @@ function GafCoreRegisterPage() {
                   <Mail size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
                   <input
                     id="gc-reg-email"
-                    type="text"
-                    inputMode="email"
-                    autoComplete="one-time-code"
-                    data-1p-ignore
-                    data-lpignore="true"
-                    readOnly={!emailEditable}
+                    name="email"
+                    type="email"
+                    autoComplete="email"
                     value={email}
-                    onFocus={() => setEmailEditable(true)}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     placeholder="Escribe tu correo"
@@ -305,13 +280,10 @@ function GafCoreRegisterPage() {
                   <Lock size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
                   <input
                     id="gc-reg-pw"
+                    name="password"
                     type={showPw ? "text" : "password"}
                     autoComplete="new-password"
-                    data-1p-ignore
-                    data-lpignore="true"
-                    readOnly={!passwordEditable}
                     value={password}
-                    onFocus={() => setPasswordEditable(true)}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="Crea una contraseña"
