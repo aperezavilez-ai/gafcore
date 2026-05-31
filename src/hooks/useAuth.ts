@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
-import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
+import { getGafcoreSupabaseBrowser, isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 
 export interface AuthState {
   user: User | null;
@@ -55,16 +54,16 @@ export function initAuthOnce() {
   if (typeof window === "undefined") return Promise.resolve();
   if (authInitPromise) return authInitPromise;
 
-  if (!isSupabaseConfigured()) {
-    console.error(
-      "[Auth] Falta VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY en el build. Revisa variables en Vercel y redeploy.",
-    );
-    applySession(null, false);
-    return Promise.resolve();
-  }
-
   authInitPromise = (async () => {
     try {
+      if (!(await isSupabaseReadyOnClient())) {
+        console.error(
+          "[Auth] Supabase no disponible en el cliente (build sin VITE_* y /api/gafcore/client-env falló).",
+        );
+        applySession(null, false);
+        return;
+      }
+      const supabase = await getGafcoreSupabaseBrowser();
       supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
           lastProfileUserId = null;
@@ -110,13 +109,14 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(async () => {
-    if (!isSupabaseConfigured()) return;
+    if (!(await isSupabaseReadyOnClient())) return;
     try {
       const { setProjectSaveSuppressed } = await import("@/lib/userSupabase");
       setProjectSaveSuppressed(true);
       if (typeof window !== "undefined") {
         void import("sonner").then(({ toast }) => toast.dismiss());
       }
+      const supabase = await getGafcoreSupabaseBrowser();
       await supabase.auth.signOut();
     } catch {
       applySession(null, false);

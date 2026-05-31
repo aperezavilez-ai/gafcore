@@ -183,6 +183,22 @@ export default {
     if (path === "/api/__runtime-diag") {
       return runtimeEnvDiag();
     }
+    if (request.method === "GET" && path === "/api/gafcore/client-env") {
+      const url = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "").trim();
+      const publishableKey = (
+        process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || ""
+      ).trim();
+      if (!url || !publishableKey) {
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 503,
+          headers: { "content-type": "application/json", "cache-control": "no-store" },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, url, publishableKey }), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
     if (path === "/api/__extensions-diag") {
       const { extensionsCatalogDiag } = await import("./extensions/marketplace.server");
       const diag = await extensionsCatalogDiag();

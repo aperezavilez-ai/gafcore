@@ -1,7 +1,6 @@
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, KeyRound, Sparkles, Zap, Shield, Code2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 import {
   gafcoreLoginRedirectNow,
@@ -13,7 +12,8 @@ import {
 } from "@/lib/gafcore-login.shared";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { initAuthOnce } from "@/hooks/useAuth";
-import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
+import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
 if (typeof window !== "undefined") {
   stripSecretsFromLoginUrl();
@@ -64,8 +64,7 @@ function GafCoreLoginPage() {
   const { redirect, signedOut } = search;
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
-  const [clientReady, setClientReady] = useState(false);
-  const supabaseReady = clientReady && isSupabaseConfigured();
+  const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null);
   /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
 
@@ -76,8 +75,10 @@ function GafCoreLoginPage() {
   }, [navigate, redirect]);
 
   useEffect(() => {
-    setClientReady(true);
-    void initAuthOnce();
+    void (async () => {
+      setSupabaseReady(await isSupabaseReadyOnClient());
+      await initAuthOnce();
+    })();
   }, []);
 
   useEffect(() => {
@@ -108,7 +109,7 @@ function GafCoreLoginPage() {
 
   useEffect(() => {
     let active = true;
-    void supabase.auth.getSession().then(({ data }) => {
+    void getGafcoreSupabaseBrowser().then((sb) => sb.auth.getSession()).then(({ data }) => {
       if (!active) return;
       if (data.session?.user?.email) setActiveSessionEmail(data.session.user.email);
     });
@@ -119,7 +120,8 @@ function GafCoreLoginPage() {
 
   const switchAccount = async () => {
     setSwitching(true);
-    await supabase.auth.signOut();
+    const sb = await getGafcoreSupabaseBrowser();
+    await sb.auth.signOut();
     setActiveSessionEmail(null);
     setEmail("");
     setPassword("");
@@ -129,10 +131,6 @@ function GafCoreLoginPage() {
   const runLogin = async () => {
     setError("");
     setMessage("");
-    if (!isSupabaseConfigured()) {
-      setError("Supabase no está configurado en este sitio. Espera 2 min al deploy o contacta soporte.");
-      return;
-    }
     const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(email);
     if (typoHint) setMessage(typoHint);
     if (!loginEmail || !password) {
@@ -151,7 +149,8 @@ function GafCoreLoginPage() {
         setLoading(false);
         return;
       }
-      const { data: sessionAfterLogin } = await supabase.auth.getSession();
+      const sb = await getGafcoreSupabaseBrowser();
+      const { data: sessionAfterLogin } = await sb.auth.getSession();
       const uid = sessionAfterLogin.session?.user?.id;
       if (uid) clearPlanChoicePending(uid);
       gafcoreLoginRedirectNow(result.redirectTo);
@@ -170,7 +169,8 @@ function GafCoreLoginPage() {
     setError("");
     setMessage("");
     setResetLoading(true);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+    const sb = await getGafcoreSupabaseBrowser();
+    const { error: resetError } = await sb.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: getPasswordRecoveryRedirectTo(),
     });
     setResetLoading(false);
@@ -271,9 +271,10 @@ function GafCoreLoginPage() {
                     </p>
                   </div>
 
-                  {!supabaseReady ? (
+                  {supabaseReady === false ? (
                     <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-red-300">
-                      Supabase no está configurado en este despliegue. Revisa VITE_SUPABASE_* en Vercel.
+                      No se pudo conectar con Supabase. En Vercel define VITE_SUPABASE_URL y
+                      VITE_SUPABASE_PUBLISHABLE_KEY (Production y Build) y vuelve a desplegar.
                     </div>
                   ) : null}
                   {urlPasswordWarning ? (

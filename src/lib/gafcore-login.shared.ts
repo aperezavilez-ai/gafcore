@@ -3,10 +3,11 @@
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
 import type { User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
-import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
+import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 
 async function ensureGafcoreProfile(user: User): Promise<void> {
+  const supabase = await getGafcoreSupabaseBrowser();
   await supabase.from("profiles").upsert(
     {
       user_id: user.id,
@@ -139,11 +140,11 @@ export async function gafcoreLoginWithPassword(input: {
   password: string;
   redirectTo: string;
 }): Promise<GafcoreLoginResult> {
-  if (!isSupabaseConfigured()) {
+  if (!(await isSupabaseReadyOnClient())) {
     return {
       ok: false,
       error:
-        "Falta configurar Supabase (VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY). Revisa Vercel y redeploy.",
+        "Supabase no está disponible en este sitio. En Vercel añade VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY (Production y Build) y redeploy.",
     };
   }
 
@@ -153,6 +154,7 @@ export async function gafcoreLoginWithPassword(input: {
     return { ok: false, error: "Escribe tu correo y contraseña para iniciar sesión." };
   }
 
+  const supabase = await getGafcoreSupabaseBrowser();
   const { data, error } = await supabase.auth.signInWithPassword({ email: normalized, password });
   if (error) {
     const base = formatGafcoreSignInError(error.message, input.email);
