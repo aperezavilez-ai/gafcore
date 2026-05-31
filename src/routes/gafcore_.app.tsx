@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Loader2, Lock, ArrowRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth, forceAuthLoadingComplete } from "@/hooks/useAuth";
@@ -14,7 +14,7 @@ const GafCoreIDE = lazy(() =>
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
-import { clearPlanChoicePending, isPlanChoicePending } from "@/lib/gafcore-plan-choice";
+import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 
 export const Route = createFileRoute("/gafcore_/app")({
   component: GafCoreAppPage,
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/gafcore_/app")({
 
 function GafCoreAppPage() {
   const { user, loading: authLoading } = useAuth();
-  const { isAdmin, loading: roleLoading } = useSubscription(user?.id);
+  const { loading: roleLoading } = useSubscription(user?.id);
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   // Reintento defensivo: tras un login con full reload, getSession puede tardar
   // unos ms en hidratar desde localStorage. Hasta confirmar, mostramos loader.
@@ -39,13 +39,20 @@ function GafCoreAppPage() {
   const [planGateChecked, setPlanGateChecked] = useState(false);
   const [authSlow, setAuthSlow] = useState(false);
   const [forceContinue, setForceContinue] = useState(false);
+  const roleReadyOnceRef = useRef(false);
+  const welcomeSyncStartedRef = useRef(false);
 
-  const accessPending = (authLoading || graceChecking || roleLoading) && !forceContinue;
+  if (!roleLoading) roleReadyOnceRef.current = true;
+
+  const accessPending =
+    !forceContinue &&
+    (authLoading || graceChecking || (roleLoading && !roleReadyOnceRef.current));
 
   /** Asegura créditos de bienvenida si el backend los dejó en 0 (p. ej. cuenta ya existía). */
   useEffect(() => {
-    if (authLoading || graceChecking) return;
+    if (authLoading || graceChecking || welcomeSyncStartedRef.current) return;
     if (!user?.id && !hasSession) return;
+    welcomeSyncStartedRef.current = true;
     void (async () => {
       const sb = await getGafcoreSupabaseBrowser();
       const id = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
@@ -65,7 +72,7 @@ function GafCoreAppPage() {
         /* reintento en la próxima visita */
       }
     })();
-  }, [authLoading, graceChecking, user?.id, hasSession, assignUserWelcome]);
+  }, [authLoading, graceChecking, user?.id, hasSession]);
 
   useEffect(() => {
     if (!accessPending) {
@@ -85,9 +92,10 @@ function GafCoreAppPage() {
     }
     let cancelled = false;
     (async () => {
+      const sb = await getGafcoreSupabaseBrowser();
       for (let i = 0; i < 20; i++) {
         if (cancelled) return;
-        const { data } = await supabase.auth.getSession();
+        const { data } = await sb.auth.getSession();
         if (data.session?.user) {
           if (!cancelled) {
             setHasSession(true);
@@ -102,39 +110,20 @@ function GafCoreAppPage() {
     return () => { cancelled = true; };
   }, [authLoading, user]);
 
-  /** Registro nuevo: obligar a pasar por /gafcore#planes antes del IDE (localStorage por usuario). */
+  /** En /gafcore/app no redirigir a landing (evita parpadeo). Solo limpiar bloqueo de plan si ya hay sesión. */
   useEffect(() => {
     if (authLoading || graceChecking) return;
     if (!user?.id && !hasSession) {
       setPlanGateChecked(false);
       return;
     }
-    const planTimeout = window.setTimeout(() => setPlanGateChecked(true), 6_000);
     void (async () => {
       const sb = await getGafcoreSupabaseBrowser();
       const uid = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
-      if (!uid) {
-        setPlanGateChecked(true);
-        return;
-      }
-      try {
-        const url = typeof window !== "undefined" ? new URL(window.location.href) : null;
-        const checkoutOk =
-          url?.searchParams.get("checkout") === "success" ||
-          url?.searchParams.get("credits") === "success";
-        if (checkoutOk) clearPlanChoicePending(uid);
-        if (isAdmin) clearPlanChoicePending(uid);
-        if (!checkoutOk && !isAdmin && isPlanChoicePending(uid)) {
-          window.location.replace(`${window.location.origin}/gafcore?pick_plan=1#plan-free`);
-          return;
-        }
-      } catch {
-        /* ignore */
-      }
+      if (uid) clearPlanChoicePending(uid);
       setPlanGateChecked(true);
     })();
-    return () => window.clearTimeout(planTimeout);
-  }, [authLoading, graceChecking, user?.id, hasSession, isAdmin]);
+  }, [authLoading, graceChecking, user?.id, hasSession]);
 
   if (accessPending) {
     return (

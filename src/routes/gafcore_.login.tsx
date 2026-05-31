@@ -59,7 +59,15 @@ function GafCoreLoginPage() {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     if (loginUrlHasForbiddenParams(url)) {
-      window.location.replace(buildSanitizedLoginUrl(url));
+      const target = buildSanitizedLoginUrl(url);
+      const clean = new URL(target);
+      const nextPath = `${clean.pathname}${clean.search}${clean.hash}`;
+      if (clean.origin === url.origin && clean.pathname === url.pathname) {
+        window.history.replaceState(null, "", nextPath);
+      } else {
+        window.location.replace(target);
+      }
+      setBlockingUrlSanitize(false);
       return;
     }
     stripSecretsFromLoginUrl();
@@ -133,9 +141,7 @@ function GafCoreLoginPage() {
         const expiresAt = session?.expires_at ?? 0;
         const sessionLive = Boolean(sessionEmail && expiresAt * 1000 > Date.now() + 30_000);
         if (sessionEmail) setActiveSessionEmail(sessionEmail);
-        if (sessionLive && !signedOut) {
-          gafcoreLoginRedirectNow(`${window.location.origin}${redirectTo}`);
-        }
+        /* No redirigir solo: evita bucle login ↔ app ↔ planes (parpadeo). Usa «Continuar a GafCore». */
       })
       .catch(() => {
         /* sin sesión o Supabase aún no listo */

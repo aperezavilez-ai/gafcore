@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { logClientWarn } from "@/lib/gafcore-client-logger";
@@ -105,7 +105,10 @@ export function useSubscription(userId: string | undefined) {
         }
         setIsAdmin(adminFlag);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          hasLoadedOnce = true;
+          setLoading(false);
+        }
       }
     };
 
@@ -124,7 +127,7 @@ export function useSubscription(userId: string | undefined) {
           table: "subscriptions",
           filter: `user_id=eq.${userId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .on(
         "postgres_changes",
@@ -134,12 +137,12 @@ export function useSubscription(userId: string | undefined) {
           table: "user_roles",
           filter: `user_id=eq.${userId}`,
         },
-        () => void load(),
+        () => void load({ silent: true }),
       )
       .subscribe();
 
     const onExternalRefresh = () => {
-      void load();
+      void load({ silent: true });
     };
     window.addEventListener("gafcore:credits-applied", onExternalRefresh);
     window.addEventListener("gafcore:credits-refresh", onExternalRefresh);

@@ -71,10 +71,18 @@ export function initAuthOnce() {
           if (typeof window !== "undefined") {
             void import("sonner").then(({ toast }) => toast.dismiss());
           }
-          applySession(null);
+          applySession(null, false);
           return;
         }
-        applySession(session ?? null);
+        if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+          applySession(session ?? null, false);
+          return;
+        }
+        if (session?.user) {
+          emitAuthState({ user: session.user, session, loading: false });
+          return;
+        }
+        applySession(session ?? null, false);
       });
 
       const result = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);

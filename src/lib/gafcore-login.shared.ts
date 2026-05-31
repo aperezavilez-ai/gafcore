@@ -93,7 +93,7 @@ export function readLoginCredentials(
 }
 
 /** Ejecuta en <head> antes de React: quita contraseña/correo de la URL al instante. */
-export const GAFCORE_LOGIN_URL_STRIP_SCRIPT = `(function(){try{var p=location.pathname;if(p.indexOf("/gafcore/login")===-1)return;var u=new URL(location.href);var f=["password","pwd","pass","email","username","gafcore_email","gafcore_password","access_token","refresh_token","token"];var d=false;for(var i=0;i<f.length;i++){if(u.searchParams.has(f[i])){d=true;u.searchParams.delete(f[i]);}}if(!d)return;var q=u.searchParams.toString();location.replace(u.origin+u.pathname+(q?"?"+q:"")+(u.hash||""));}catch(e){}})();`;
+export const GAFCORE_LOGIN_URL_STRIP_SCRIPT = `(function(){try{var p=location.pathname;if(p.indexOf("/gafcore/login")===-1)return;var u=new URL(location.href);var f=["password","pwd","pass","email","username","gafcore_email","gafcore_password","access_token","refresh_token","token"];var d=false;for(var i=0;i<f.length;i++){if(u.searchParams.has(f[i])){d=true;u.searchParams.delete(f[i]);}}if(!d)return;var q=u.searchParams.toString();var t=u.pathname+(q?"?"+q:"")+(u.hash||"");history.replaceState(null,"",t);}catch(e){}})();`;
 
 /** Parámetros que nunca deben aparecer en la barra de direcciones. */
 const LOGIN_URL_FORBIDDEN_PARAMS = [
