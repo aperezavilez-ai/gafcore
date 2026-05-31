@@ -32,6 +32,7 @@ function emitAuthState(next: AuthState) {
 async function ensureProfile(user: User) {
   if (lastProfileUserId === user.id) return;
   lastProfileUserId = user.id;
+  const supabase = await getGafcoreSupabaseBrowser();
   const { error } = await supabase.from("profiles").upsert(
     {
       user_id: user.id,

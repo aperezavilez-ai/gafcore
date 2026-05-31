@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth, forceAuthLoadingComplete } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
-import { supabase } from "@/integrations/supabase/client";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
 
 const GafCoreIDE = lazy(() =>
@@ -47,7 +47,8 @@ function GafCoreAppPage() {
     if (authLoading || graceChecking) return;
     if (!user?.id && !hasSession) return;
     void (async () => {
-      const id = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
+      const sb = await getGafcoreSupabaseBrowser();
+      const id = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
       if (!id) return;
       if (typeof window !== "undefined") {
         sessionStorage.removeItem(`gafcore_welcome_sync_v2_${id}`);
@@ -110,7 +111,8 @@ function GafCoreAppPage() {
     }
     const planTimeout = window.setTimeout(() => setPlanGateChecked(true), 6_000);
     void (async () => {
-      const uid = user?.id ?? (await supabase.auth.getSession()).data.session?.user?.id;
+      const sb = await getGafcoreSupabaseBrowser();
+      const uid = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
       if (!uid) {
         setPlanGateChecked(true);
         return;

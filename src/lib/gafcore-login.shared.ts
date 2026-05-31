@@ -59,25 +59,35 @@ export type GafcoreLoginResult =
   | { ok: true; redirectTo: string }
   | { ok: false; error: string };
 
-/** Lee credenciales del DOM (autofill) con fallback a estado React. */
+const LOGIN_EMAIL_IDS = ["gc-login-email", "gc-email"] as const;
+const LOGIN_PASSWORD_IDS = ["gc-login-pw", "gc-pw"] as const;
+
+function readInputByIds(ids: readonly string[]): string {
+  if (typeof document === "undefined") return "";
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el instanceof HTMLInputElement && el.value.trim()) return el.value;
+  }
+  return "";
+}
+
+/** Lee credenciales del DOM (autofill de Chrome no actualiza React) con fallback a estado. */
 export function readLoginCredentials(
   form: HTMLFormElement | null | undefined,
   fallback: { email: string; password: string },
 ): { email: string; password: string } {
   const emailEl = form?.elements.namedItem("email") as HTMLInputElement | null;
   const passwordEl = form?.elements.namedItem("password") as HTMLInputElement | null;
-  const byIdEmail = typeof document !== "undefined" ? document.getElementById("gc-email") : null;
-  const byIdPw = typeof document !== "undefined" ? document.getElementById("gc-pw") : null;
   const email = (
     emailEl?.value ||
-    (byIdEmail instanceof HTMLInputElement ? byIdEmail.value : "") ||
+    readInputByIds(LOGIN_EMAIL_IDS) ||
     fallback.email
   )
     .trim()
     .toLowerCase();
   const password =
     passwordEl?.value ||
-    (byIdPw instanceof HTMLInputElement ? byIdPw.value : "") ||
+    readInputByIds(LOGIN_PASSWORD_IDS) ||
     fallback.password;
   return { email, password };
 }

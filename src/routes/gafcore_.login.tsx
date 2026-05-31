@@ -5,6 +5,7 @@ import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
 import {
   gafcoreLoginRedirectNow,
   gafcoreLoginWithPassword,
+  readLoginCredentials,
   normalizeGafcoreLoginEmail,
   stripSecretsFromLoginUrl,
   loginUrlHasForbiddenParams,
@@ -91,18 +92,11 @@ function GafCoreLoginPage() {
     })();
   }, []);
 
-  /** Chrome rellena tras cargar: vaciar varias veces al montar (no es el servidor). */
+  /** Solo al cerrar sesión: vaciar campos (no borrar autofill tardío de Chrome en login normal). */
   useEffect(() => {
+    if (!signedOut) return;
     clearCredentialFields();
-    const raf = requestAnimationFrame(clearCredentialFields);
-    const t1 = window.setTimeout(clearCredentialFields, 100);
-    const t2 = window.setTimeout(clearCredentialFields, 400);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [formKey, clearCredentialFields]);
+  }, [signedOut, clearCredentialFields]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -154,22 +148,27 @@ function GafCoreLoginPage() {
   const runLogin = async () => {
     setError("");
     setMessage("");
-    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(email);
+    setEmailEditable(true);
+    setPasswordEditable(true);
+    const fromDom = readLoginCredentials(null, { email, password });
+    if (fromDom.email !== email) setEmail(fromDom.email);
+    if (fromDom.password !== password) setPassword(fromDom.password);
+    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(fromDom.email);
+    const loginPassword = fromDom.password;
     if (typoHint) setMessage(typoHint);
-    if (!loginEmail || !password) {
-      setError("Escribe tu correo y contraseña.");
+    if (!loginEmail || !loginPassword) {
+      setError("Escribe tu correo y contraseña (o toca cada campo si el navegador los rellenó).");
       return;
     }
     setLoading(true);
     try {
       const result = await gafcoreLoginWithPassword({
         email: loginEmail,
-        password,
+        password: loginPassword,
         redirectTo,
       });
       if (!result.ok) {
         setError(result.error);
-        setLoading(false);
         return;
       }
       const sb = await getGafcoreSupabaseBrowser();
@@ -179,6 +178,7 @@ function GafCoreLoginPage() {
       gafcoreLoginRedirectNow(result.redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.");
+    } finally {
       setLoading(false);
     }
   };
@@ -398,6 +398,7 @@ function GafCoreLoginPage() {
                           value={email}
                           onFocus={() => setEmailEditable(true)}
                           onChange={(e) => setEmail(e.target.value)}
+                          onInput={(e) => setEmail(e.currentTarget.value)}
                           placeholder="tu@correo.com"
                           className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                         />
@@ -419,6 +420,7 @@ function GafCoreLoginPage() {
                           value={password}
                           onFocus={() => setPasswordEditable(true)}
                           onChange={(e) => setPassword(e.target.value)}
+                          onInput={(e) => setPassword(e.currentTarget.value)}
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
                         />
