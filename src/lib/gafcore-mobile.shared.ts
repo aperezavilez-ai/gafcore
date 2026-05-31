@@ -5,7 +5,8 @@
  * - VITE_GAFCORE_APP_STORE_URL
  */
 
-export const GAFCORE_PWA_MANIFEST_PATH = "/manifest.webmanifest";
+/** Sin manifest PWA en producción (solo web). */
+export const GAFCORE_PWA_MANIFEST_PATH = null as const;
 
 export const GAFCORE_MOBILE_START_URL = "/gafcore/app";
 

@@ -6,13 +6,12 @@ import {
   gafcoreSeoHeadLinks,
 } from "@/lib/gafcore-seo.shared";
 import {
-  GAFCORE_APPLE_TOUCH_ICON_PATH,
   GAFCORE_FAVICON_INLINE,
   GAFCORE_FAVICON_PATH,
   GAFCORE_FAVICON_SVG_PATH,
   gafcoreHeadIconLinks,
-  gafcorePwaMetaTags,
 } from "@/lib/site-icons.shared";
+import { GAFCORE_WEB_ONLY_HEAD_SCRIPT } from "@/lib/gafcore-web-only.shared";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
@@ -61,7 +60,7 @@ export const Route = createRootRoute({
       meta: [
         ...buildGafcoreSeoMeta(),
         { name: "theme-color", content: GAFCORE_PWA_THEME_COLOR },
-        ...gafcorePwaMetaTags(),
+        { name: "mobile-web-app-capable", content: "no" },
       ],
       links: [...gafcoreSeoHeadLinks(), ...gafcoreHeadIconLinks()],
       scripts: [
@@ -82,11 +81,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="es" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: GAFCORE_LOGIN_URL_STRIP_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: GAFCORE_WEB_ONLY_HEAD_SCRIPT }} />
         <link rel="icon" href={GAFCORE_FAVICON_INLINE} />
         <link rel="shortcut icon" href={GAFCORE_FAVICON_INLINE} />
         <link rel="icon" type="image/svg+xml" href={GAFCORE_FAVICON_SVG_PATH} />
         <link rel="icon" type="image/png" sizes="32x32" href={GAFCORE_FAVICON_PATH} />
-        <link rel="apple-touch-icon" href={GAFCORE_APPLE_TOUCH_ICON_PATH} />
         <HeadContent />
       </head>
       <body>

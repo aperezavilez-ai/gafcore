@@ -1,6 +1,6 @@
 /** Rutas estáticas en /public (favicon, Open Graph). Sin manifest PWA instalable (solo web). */
 /** ?v= rompe caché del icono genérico en pestañas. */
-export const FAVICON_CACHE_VERSION = "gafcore-4";
+export const FAVICON_CACHE_VERSION = "gafcore-5";
 
 export const GAFCORE_FAVICON_SVG_PATH = `/favicon.svg?v=${FAVICON_CACHE_VERSION}`;
 export const GAFCORE_FAVICON_PATH = `/favicon.png?v=${FAVICON_CACHE_VERSION}`;
@@ -21,11 +21,5 @@ export function gafcoreHeadIconLinks() {
     { rel: "shortcut icon", href: GAFCORE_FAVICON_INLINE },
     { rel: "icon", type: "image/svg+xml", href: GAFCORE_FAVICON_SVG_PATH },
     { rel: "icon", type: "image/png", sizes: "32x32", href: GAFCORE_FAVICON_PATH },
-    { rel: "apple-touch-icon", href: GAFCORE_APPLE_TOUCH_ICON_PATH },
   ] as const;
-}
-
-/** Solo nombre de app; sin «añadir a pantalla de inicio» / modo standalone. */
-export function gafcorePwaMetaTags() {
-  return [{ name: "application-name", content: "GafCore" }] as const;
 }

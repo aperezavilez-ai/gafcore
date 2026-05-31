@@ -7,6 +7,7 @@ import { useEffect } from "react";
 export function GafcoreWebOnly() {
   useEffect(() => {
     void (async () => {
+      document.querySelectorAll('link[rel="manifest"]').forEach((el) => el.remove());
       if ("serviceWorker" in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map((r) => r.unregister()));

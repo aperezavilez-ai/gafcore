@@ -87,7 +87,8 @@ export function initAuthOnce() {
 
       const result = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
       if (result === "timeout") {
-        applySession(null);
+        const retry = await supabase.auth.getSession();
+        applySession(retry.data.session ?? null, false);
         return;
       }
       applySession(result.data.session ?? null);
@@ -139,4 +140,20 @@ export function useAuth() {
 export function forceAuthLoadingComplete() {
   if (!authState.loading) return;
   emitAuthState({ ...authState, loading: false });
+}
+
+/** Tras login en /gafcore/login: sincroniza estado global antes del redirect. */
+export async function hydrateAuthFromStorage(maxMs = 5_000): Promise<boolean> {
+  if (!(await isSupabaseReadyOnClient())) return false;
+  const supabase = await getGafcoreSupabaseBrowser();
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) {
+      applySession(data.session, false);
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
 }

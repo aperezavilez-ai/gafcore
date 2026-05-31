@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound } from "lucide-react";
@@ -10,10 +10,17 @@ import { AuthCard } from "@/components/AuthCard";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
-    const redirect = search.redirect;
-    return typeof redirect === "string" && redirect.startsWith("/") && !redirect.startsWith("//")
-      ? { redirect }
+    const redirectTo = search.redirect;
+    return typeof redirectTo === "string" &&
+      redirectTo.startsWith("/") &&
+      !redirectTo.startsWith("//")
+      ? { redirect: redirectTo }
       : {};
+  },
+  beforeLoad: ({ search }) => {
+    const next: { redirect?: string } = {};
+    if (search.redirect) next.redirect = search.redirect;
+    throw redirect({ to: "/gafcore/login", search: next, replace: true });
   },
   component: LoginPage,
 });

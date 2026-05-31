@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Loader2, Lock, ArrowRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth, forceAuthLoadingComplete } from "@/hooks/useAuth";
+import { useAuth, forceAuthLoadingComplete, hydrateAuthFromStorage } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
@@ -82,6 +82,12 @@ function GafCoreAppPage() {
     const t = window.setTimeout(() => setAuthSlow(true), 8_000);
     return () => window.clearTimeout(t);
   }, [accessPending]);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      void hydrateAuthFromStorage(3_000);
+    }
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (authLoading) return;

@@ -46,9 +46,23 @@ assert(
   loginPage.includes('method="post"') && loginPage.includes("e.preventDefault()"),
   "login: form POST + preventDefault (no GET con contraseña en URL)",
 );
+assert(
+  loginPage.includes('name="gafcore_user"') && loginPage.includes('name="gafcore_secret"'),
+  "login: nombres de campo sin autofill Chrome (gafcore_user/secret)",
+);
+assert(
+  loginPage.includes("GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT") || loginShared.includes("GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT"),
+  "login: script vacía campos al cargar",
+);
+assert(loginPage.includes("hydrateAuthFromStorage"), "login: hidrata sesión antes del redirect");
 assert(!loginPage.includes("gafcore_email"), "login: sin name gafcore_email (legacy)");
 assert(!register.includes("clearCredentialFields"), "register: sin referencia rota a clearCredentialFields");
 assert(rootTsx.includes("GAFCORE_LOGIN_URL_STRIP_SCRIPT"), "root: script limpia URL antes de React");
+assert(
+  rootTsx.includes("GAFCORE_WEB_ONLY_HEAD_SCRIPT") && !existsSync(resolve(root, "public/manifest.webmanifest")),
+  "solo web: sin manifest PWA y script anti-SW en head",
+);
+assert(!rootTsx.includes("apple-touch-icon"), "root: sin apple-touch-icon (evita «Abrir en la app»)");
 assert(
   autofix.includes("isPreviewAutofixAiEnabled") && autofix.includes("GAFCORE_AUTOFIX_SESSION_MAX = 2"),
   "autofix preview: desactivado por defecto, máx 2 si activo",

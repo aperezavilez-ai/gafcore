@@ -7,6 +7,11 @@
       "source": "/",
       "destination": "/gafcore",
       "permanent": false
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "destination": "/gafcore",
+      "statusCode": 410
     }
   ],
   "crons": [

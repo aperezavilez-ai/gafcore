@@ -2,9 +2,23 @@
  * @locked Flujo de inicio de sesión GafCore (email + contraseña).
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
-import type { User } from "@supabase/supabase-js";
+import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
+
+/** Tras signIn, espera a que la sesión quede en storage (Chrome / red lenta). */
+export async function waitForGafcoreAuthSession(
+  supabase: SupabaseClient,
+  maxMs = 5_000,
+): Promise<Session | null> {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user) return data.session;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
 
 async function ensureGafcoreProfile(user: User): Promise<void> {
   const supabase = await getGafcoreSupabaseBrowser();
@@ -76,8 +90,8 @@ export function readLoginCredentials(
   form: HTMLFormElement | null | undefined,
   fallback: { email: string; password: string },
 ): { email: string; password: string } {
-  const emailEl = form?.elements.namedItem("email") as HTMLInputElement | null;
-  const passwordEl = form?.elements.namedItem("password") as HTMLInputElement | null;
+  const emailEl = form?.elements.namedItem(LOGIN_FORM_EMAIL_NAME) as HTMLInputElement | null;
+  const passwordEl = form?.elements.namedItem(LOGIN_FORM_PASSWORD_NAME) as HTMLInputElement | null;
   const email = (
     emailEl?.value ||
     readInputByIds(LOGIN_EMAIL_IDS) ||
@@ -94,6 +108,25 @@ export function readLoginCredentials(
 
 /** Ejecuta en <head> antes de React: quita contraseña/correo de la URL al instante. */
 export const GAFCORE_LOGIN_URL_STRIP_SCRIPT = `(function(){try{var p=location.pathname;if(p.indexOf("/gafcore/login")===-1)return;var u=new URL(location.href);var f=["password","pwd","pass","email","username","gafcore_email","gafcore_password","access_token","refresh_token","token"];var d=false;for(var i=0;i<f.length;i++){if(u.searchParams.has(f[i])){d=true;u.searchParams.delete(f[i]);}}if(!d)return;var q=u.searchParams.toString();var t=u.pathname+(q?"?"+q:"")+(u.hash||"");history.replaceState(null,"",t);}catch(e){}})();`;
+
+/** Vacía campos que Chrome rellena antes de hidratar React (no guardamos credenciales). */
+export const GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT = `(function(){function c(){try{if(location.pathname.indexOf("/gafcore/login")===-1)return;var e=document.getElementById("gc-login-email");var w=document.getElementById("gc-login-pw");if(e)e.value="";if(w)w.value=""}catch(x){}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",c);c();setTimeout(c,0);setTimeout(c,120);setTimeout(c,400);})();`;
+
+const LOGIN_FORM_EMAIL_NAME = "gafcore_user";
+const LOGIN_FORM_PASSWORD_NAME = "gafcore_secret";
+
+/** Limpia inputs en el DOM (autofill de Chrome no pasa por React). */
+export function clearLoginCredentialFieldsDom(): void {
+  if (typeof document === "undefined") return;
+  for (const id of LOGIN_EMAIL_IDS) {
+    const el = document.getElementById(id);
+    if (el instanceof HTMLInputElement) el.value = "";
+  }
+  for (const id of LOGIN_PASSWORD_IDS) {
+    const el = document.getElementById(id);
+    if (el instanceof HTMLInputElement) el.value = "";
+  }
+}
 
 /** Parámetros que nunca deben aparecer en la barra de direcciones. */
 const LOGIN_URL_FORBIDDEN_PARAMS = [
@@ -174,18 +207,12 @@ export async function gafcoreLoginWithPassword(input: {
     return { ok: false, error: typoHint ? `${typoHint} ${base}` : base };
   }
 
-  if (data.session?.user) {
-    await ensureGafcoreProfile(data.session.user);
+  const session =
+    data.session ??
+    (await waitForGafcoreAuthSession(supabase, 5_000));
+  if (session?.user) {
+    await ensureGafcoreProfile(session.user);
     return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };
-  }
-
-  for (let i = 0; i < 15; i++) {
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData.session?.user) {
-      await ensureGafcoreProfile(sessionData.session.user);
-      return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };
-    }
-    await new Promise((r) => setTimeout(r, 80));
   }
 
   return {

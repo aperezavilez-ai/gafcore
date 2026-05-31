@@ -19,6 +19,7 @@
     "purge-users": "node scripts/delete-users-except-admin.mjs",
     "gafcore:doctor": "node scripts/check-gafcore-setup.mjs",
     "gafcore:stability": "node scripts/smoke-gafcore-stability.mjs",
+    "gafcore:smoke-login": "node scripts/smoke-gafcore-login.mjs",
     "gafcore:health": "node scripts/check-gafcore-setup.mjs && node scripts/diagnose-gafcore-admin.mjs",
     "gafcore:migrate-workflow": "node scripts/apply-gafcore-workflow-migrations.mjs",
     "gafcore:migrate-extensions": "node scripts/apply-gafcore-extensions-migrations.mjs",

@@ -10,9 +10,11 @@ import {
   stripSecretsFromLoginUrl,
   loginUrlHasForbiddenParams,
   buildSanitizedLoginUrl,
+  clearLoginCredentialFieldsDom,
+  GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT,
 } from "@/lib/gafcore-login.shared";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
-import { initAuthOnce } from "@/hooks/useAuth";
+import { hydrateAuthFromStorage, initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
@@ -46,7 +48,10 @@ export const Route = createFileRoute("/gafcore_/login")({
     throw redirect({ to: "/gafcore/login", search: nextSearch, replace: true });
   },
   component: GafCoreLoginPage,
-  head: () => ({ meta: [{ title: "Entrar — GafCore" }] }),
+  head: () => ({
+    meta: [{ title: "Entrar — GafCore" }],
+    scripts: [{ children: GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT }],
+  }),
 });
 
 function GafCoreLoginPage() {
@@ -111,11 +116,10 @@ function GafCoreLoginPage() {
     })();
   }, []);
 
-  /** Solo al cerrar sesión: vaciar campos (no borrar autofill tardío de Chrome en login normal). */
   useEffect(() => {
-    if (!signedOut) return;
     clearCredentialFields();
-  }, [signedOut, clearCredentialFields]);
+    clearLoginCredentialFieldsDom();
+  }, [formKey, clearCredentialFields]);
 
   useEffect(() => {
     if (!signedOut) return;
@@ -140,8 +144,12 @@ function GafCoreLoginPage() {
         const sessionEmail = session?.user?.email;
         const expiresAt = session?.expires_at ?? 0;
         const sessionLive = Boolean(sessionEmail && expiresAt * 1000 > Date.now() + 30_000);
-        if (sessionEmail) setActiveSessionEmail(sessionEmail);
-        /* No redirigir solo: evita bucle login ↔ app ↔ planes (parpadeo). Usa «Continuar a GafCore». */
+        if (sessionEmail && sessionLive) {
+          setActiveSessionEmail(sessionEmail);
+          if (!signedOut) {
+            gafcoreLoginRedirectNow(`${window.location.origin}${redirectTo}`);
+          }
+        }
       })
       .catch(() => {
         /* sin sesión o Supabase aún no listo */
@@ -149,7 +157,7 @@ function GafCoreLoginPage() {
     return () => {
       active = false;
     };
-  }, [redirectTo, signedOut]);
+  }, [redirectTo, signedOut, redirect]);
 
   const switchAccount = async () => {
     setSwitching(true);
@@ -161,10 +169,10 @@ function GafCoreLoginPage() {
     setSwitching(false);
   };
 
-  const runLogin = async () => {
+  const runLogin = async (form?: HTMLFormElement | null) => {
     setError("");
     setMessage("");
-    const fromDom = readLoginCredentials(null, { email, password });
+    const fromDom = readLoginCredentials(form ?? null, { email, password });
     if (fromDom.email !== email) setEmail(fromDom.email);
     if (fromDom.password !== password) setPassword(fromDom.password);
     const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(fromDom.email);
@@ -185,9 +193,16 @@ function GafCoreLoginPage() {
         setError(result.error);
         return;
       }
+      const hydrated = await hydrateAuthFromStorage(4_000);
       const sb = await getGafcoreSupabaseBrowser();
       const { data: sessionAfterLogin } = await sb.auth.getSession();
       const uid = sessionAfterLogin.session?.user?.id;
+      if (!uid && !hydrated) {
+        setError(
+          "Inicio correcto pero la sesión no se guardó. Permite cookies para este sitio o prueba en ventana normal (no incógnito).",
+        );
+        return;
+      }
       if (uid) clearPlanChoicePending(uid);
       gafcoreLoginRedirectNow(result.redirectTo);
     } catch (err) {
@@ -381,15 +396,17 @@ function GafCoreLoginPage() {
                     <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
                   </div>
 
+                  {!activeSessionEmail && inputsReady ? (
                   <form
                     key={formKey}
                     className="space-y-4"
                     noValidate
+                    autoComplete="off"
                     action="/gafcore/login"
                     method="post"
                     onSubmit={(e) => {
                       e.preventDefault();
-                      void runLogin();
+                      void runLogin(e.currentTarget);
                     }}
                   >
                     <div>
@@ -400,8 +417,13 @@ function GafCoreLoginPage() {
                         <Mail size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-login-email"
+                          name="gafcore_user"
                           type="email"
-                          autoComplete="email"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          required
+                          readOnly={!inputsReady}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="tu@correo.com"
@@ -417,8 +439,13 @@ function GafCoreLoginPage() {
                         <Lock size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
                           id="gc-login-pw"
+                          name="gafcore_secret"
                           type={showPw ? "text" : "password"}
-                          autoComplete="current-password"
+                          autoComplete="new-password"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          required
+                          readOnly={!inputsReady}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
@@ -444,7 +471,11 @@ function GafCoreLoginPage() {
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
                   </form>
+                  ) : !activeSessionEmail ? (
+                    <p className={`py-6 text-center text-sm ${subtleText}`}>Preparando formulario seguro…</p>
+                  ) : null}
 
+                  {!activeSessionEmail ? (
                   <button
                     type="button"
                     onClick={handlePasswordReset}
@@ -454,6 +485,7 @@ function GafCoreLoginPage() {
                     <KeyRound size={15} />
                     {resetLoading ? "Enviando..." : "¿Olvidaste tu contraseña?"}
                   </button>
+                  ) : null}
 
                   <p className={`mt-5 text-center text-sm ${subtleText}`}>
                     ¿No tienes cuenta?{" "}
