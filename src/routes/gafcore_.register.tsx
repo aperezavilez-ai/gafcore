@@ -1,6 +1,6 @@
 /** Confirmación por correo: solo en Supabase (Auth → Email → “Confirm email”). El cliente no la apaga. */
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Mail, Lock, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
@@ -35,7 +35,28 @@ function GafCoreRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileMountKey, setTurnstileMountKey] = useState(0);
+  const [emailEditable, setEmailEditable] = useState(false);
+  const [passwordEditable, setPasswordEditable] = useState(false);
   const light = false;
+
+  const clearCredentialFields = useCallback(() => {
+    setEmail("");
+    setPassword("");
+    setEmailEditable(false);
+    setPasswordEditable(false);
+  }, []);
+
+  useEffect(() => {
+    clearCredentialFields();
+    const raf = requestAnimationFrame(clearCredentialFields);
+    const t1 = window.setTimeout(clearCredentialFields, 100);
+    const t2 = window.setTimeout(clearCredentialFields, 400);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [clearCredentialFields]);
   const { plan, redirect } = Route.useSearch();
   /** Tras crear cuenta o verificar correo: siempre a planes primero; solo si eligieron plan de pago → URL con ?plan= para abrir checkout. */
   const postRegisterPath = (() => {
@@ -246,24 +267,29 @@ function GafCoreRegisterPage() {
             </div>
 
             <form className="space-y-4" onSubmit={handleSubmit} autoComplete="off">
-              <div className="sr-only" aria-hidden>
-                <input type="text" name="username" tabIndex={-1} autoComplete="username" />
-                <input type="password" name="password" tabIndex={-1} autoComplete="current-password" />
-              </div>
+              <p className={`text-xs ${subtleText}`}>
+                Los campos empiezan vacíos. Si el navegador rellena solo, pulsa{" "}
+                <button type="button" className="text-violet-400 underline" onClick={clearCredentialFields}>
+                  vaciar campos
+                </button>
+                .
+              </p>
               <div>
-                <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`}>
+                <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-reg-email">
                   Correo electrónico
                 </label>
                 <div className="relative">
                   <Mail size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
                   <input
                     id="gc-reg-email"
-                    name="gafcore_reg_email"
-                    type="email"
-                    autoComplete="off"
+                    type="text"
+                    inputMode="email"
+                    autoComplete="one-time-code"
                     data-1p-ignore
                     data-lpignore="true"
+                    readOnly={!emailEditable}
                     value={email}
+                    onFocus={() => setEmailEditable(true)}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     placeholder="Escribe tu correo"
@@ -272,19 +298,20 @@ function GafCoreRegisterPage() {
                 </div>
               </div>
               <div>
-                <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`}>
+                <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-reg-pw">
                   Contraseña
                 </label>
                 <div className="relative">
                   <Lock size={17} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${subtleText}`} />
                   <input
                     id="gc-reg-pw"
-                    name="gafcore_reg_password"
                     type={showPw ? "text" : "password"}
                     autoComplete="new-password"
                     data-1p-ignore
                     data-lpignore="true"
+                    readOnly={!passwordEditable}
                     value={password}
+                    onFocus={() => setPasswordEditable(true)}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="Crea una contraseña"

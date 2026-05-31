@@ -65,8 +65,18 @@ function GafCoreLoginPage() {
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null);
+  /** Evita que Chrome rellene hasta que el usuario toque el campo. */
+  const [emailEditable, setEmailEditable] = useState(false);
+  const [passwordEditable, setPasswordEditable] = useState(false);
   /** Cambia al cerrar sesión para resetear inputs. */
   const formKey = signedOut ? "signed-out" : "login";
+
+  const clearCredentialFields = useCallback(() => {
+    setEmail("");
+    setPassword("");
+    setEmailEditable(false);
+    setPasswordEditable(false);
+  }, []);
 
   const cleanLoginUrl = useCallback(() => {
     const nextSearch: { redirect?: string } = {};
@@ -80,6 +90,19 @@ function GafCoreLoginPage() {
       await initAuthOnce();
     })();
   }, []);
+
+  /** Chrome rellena tras cargar: vaciar varias veces al montar (no es el servidor). */
+  useEffect(() => {
+    clearCredentialFields();
+    const raf = requestAnimationFrame(clearCredentialFields);
+    const t1 = window.setTimeout(clearCredentialFields, 100);
+    const t2 = window.setTimeout(clearCredentialFields, 400);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [formKey, clearCredentialFields]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -339,6 +362,7 @@ function GafCoreLoginPage() {
                   <div
                     key={formKey}
                     className="space-y-4"
+                    autoComplete="off"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -346,17 +370,33 @@ function GafCoreLoginPage() {
                       }
                     }}
                   >
+                    <p className={`text-xs ${subtleText}`}>
+                      Si Chrome rellena solo: toca el campo y escribe, o{" "}
+                      <button
+                        type="button"
+                        className="text-violet-400 underline"
+                        onClick={clearCredentialFields}
+                      >
+                        vaciar campos
+                      </button>
+                      . Para quitar el guardado: candado en la barra → contraseñas de gafcore.com.
+                    </p>
                     <div>
-                      <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-email">
+                      <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-login-email">
                         Correo electrónico
                       </label>
                       <div className="relative">
                         <Mail size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
-                          id="gc-email"
-                          type="email"
-                          autoComplete="off"
+                          id="gc-login-email"
+                          type="text"
+                          inputMode="email"
+                          autoComplete="one-time-code"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          readOnly={!emailEditable}
                           value={email}
+                          onFocus={() => setEmailEditable(true)}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="tu@correo.com"
                           className={`relative z-[2] h-12 w-full rounded-xl border px-11 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
@@ -364,16 +404,20 @@ function GafCoreLoginPage() {
                       </div>
                     </div>
                     <div>
-                      <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-pw">
+                      <label className={`mb-1.5 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`} htmlFor="gc-login-pw">
                         Contraseña
                       </label>
                       <div className="relative">
                         <Lock size={17} aria-hidden className={`pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 ${subtleText}`} />
                         <input
-                          id="gc-pw"
+                          id="gc-login-pw"
                           type={showPw ? "text" : "password"}
-                          autoComplete="off"
+                          autoComplete="new-password"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          readOnly={!passwordEditable}
                           value={password}
+                          onFocus={() => setPasswordEditable(true)}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
                           className={`relative z-[2] h-12 w-full rounded-xl border pl-11 pr-12 text-sm outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/30 ${inputBg}`}
