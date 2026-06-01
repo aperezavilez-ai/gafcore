@@ -85,24 +85,17 @@ function readInputByIds(ids: readonly string[]): string {
   return "";
 }
 
-/** Lee credenciales del DOM (autofill de Chrome no actualiza React) con fallback a estado. */
+/** Lee credenciales: estado React primero; DOM solo si autofill no actualizó React. */
 export function readLoginCredentials(
   form: HTMLFormElement | null | undefined,
   fallback: { email: string; password: string },
 ): { email: string; password: string } {
   const emailEl = form?.elements.namedItem(LOGIN_FORM_EMAIL_NAME) as HTMLInputElement | null;
   const passwordEl = form?.elements.namedItem(LOGIN_FORM_PASSWORD_NAME) as HTMLInputElement | null;
-  const email = (
-    emailEl?.value ||
-    readInputByIds(LOGIN_EMAIL_IDS) ||
-    fallback.email
-  )
-    .trim()
-    .toLowerCase();
-  const password =
-    passwordEl?.value ||
-    readInputByIds(LOGIN_PASSWORD_IDS) ||
-    fallback.password;
+  const domEmail = (emailEl?.value ?? readInputByIds(LOGIN_EMAIL_IDS)).trim();
+  const domPassword = passwordEl?.value ?? readInputByIds(LOGIN_PASSWORD_IDS) ?? "";
+  const email = (fallback.email.trim() || domEmail).trim().toLowerCase();
+  const password = fallback.password || domPassword;
   return { email, password };
 }
 

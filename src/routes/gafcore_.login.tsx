@@ -11,7 +11,6 @@ import {
   loginUrlHasForbiddenParams,
   buildSanitizedLoginUrl,
   clearLoginCredentialFieldsDom,
-  GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT,
 } from "@/lib/gafcore-login.shared";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 import { hydrateAuthFromStorage, initAuthOnce } from "@/hooks/useAuth";
@@ -48,10 +47,7 @@ export const Route = createFileRoute("/gafcore_/login")({
     throw redirect({ to: "/gafcore/login", search: nextSearch, replace: true });
   },
   component: GafCoreLoginPage,
-  head: () => ({
-    meta: [{ title: "Entrar — GafCore" }],
-    scripts: [{ children: GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT }],
-  }),
+  head: () => ({ meta: [{ title: "Entrar — GafCore" }] }),
 });
 
 function GafCoreLoginPage() {
@@ -76,7 +72,6 @@ function GafCoreLoginPage() {
       return;
     }
     stripSecretsFromLoginUrl();
-    clearLoginCredentialFieldsDom();
     setBlockingUrlSanitize(false);
   }, []);
 
@@ -118,12 +113,9 @@ function GafCoreLoginPage() {
   }, []);
 
   useEffect(() => {
+    if (!signedOut) return;
     clearCredentialFields();
     clearLoginCredentialFieldsDom();
-  }, [formKey, clearCredentialFields]);
-
-  useEffect(() => {
-    if (!signedOut) return;
     setEmail("");
     setPassword("");
     setError("");
@@ -170,11 +162,9 @@ function GafCoreLoginPage() {
   const runLogin = async (form?: HTMLFormElement | null) => {
     setError("");
     setMessage("");
-    const fromDom = readLoginCredentials(form ?? null, { email, password });
-    if (fromDom.email !== email) setEmail(fromDom.email);
-    if (fromDom.password !== password) setPassword(fromDom.password);
-    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(fromDom.email);
-    const loginPassword = fromDom.password;
+    const creds = readLoginCredentials(form ?? null, { email, password });
+    const { email: loginEmail, typoHint } = normalizeGafcoreLoginEmail(creds.email);
+    const loginPassword = creds.password;
     if (typoHint) setMessage(typoHint);
     if (!loginEmail || !loginPassword) {
       setError("Escribe tu correo y contraseña.");
@@ -399,11 +389,11 @@ function GafCoreLoginPage() {
                     key={formKey}
                     className="space-y-4"
                     noValidate
-                    autoComplete="off"
                     action="/gafcore/login"
                     method="post"
                     onSubmit={(e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       void runLogin(e.currentTarget);
                     }}
                   >
@@ -417,9 +407,7 @@ function GafCoreLoginPage() {
                           id="gc-login-email"
                           name="gafcore_user"
                           type="email"
-                          autoComplete="off"
-                          data-lpignore="true"
-                          data-1p-ignore="true"
+                          autoComplete="username"
                           required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
@@ -438,9 +426,7 @@ function GafCoreLoginPage() {
                           id="gc-login-pw"
                           name="gafcore_secret"
                           type={showPw ? "text" : "password"}
-                          autoComplete="new-password"
-                          data-lpignore="true"
-                          data-1p-ignore="true"
+                          autoComplete="current-password"
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
@@ -449,8 +435,14 @@ function GafCoreLoginPage() {
                         />
                         <button
                           type="button"
-                          onClick={() => setShowPw((v) => !v)}
-                          className="absolute right-2 top-1/2 z-[3] flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-slate-100"
+                          tabIndex={-1}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowPw((v) => !v);
+                          }}
+                          className="absolute right-2 top-1/2 z-[20] flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-slate-100 pointer-events-auto"
                           aria-label={showPw ? "Ocultar contraseña" : "Mostrar contraseña"}
                           aria-pressed={showPw}
                         >
@@ -460,9 +452,14 @@ function GafCoreLoginPage() {
                     </div>
 
                     <button
-                      type="submit"
+                      type="button"
                       disabled={loading}
                       className="auth-grad-btn mt-2 cursor-pointer disabled:cursor-not-allowed"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget.closest("form");
+                        void runLogin(form instanceof HTMLFormElement ? form : null);
+                      }}
                     >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>

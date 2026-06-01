@@ -51,8 +51,12 @@ assert(
   "login: nombres de campo sin autofill Chrome (gafcore_user/secret)",
 );
 assert(
-  loginPage.includes("GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT") || loginShared.includes("GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT"),
-  "login: script vacía campos al cargar",
+  !loginPage.includes("GAFCORE_LOGIN_CLEAR_FIELDS_SCRIPT"),
+  "login: sin script que borre campos al escribir",
+);
+assert(
+  loginShared.includes("fallback.email.trim() || domEmail"),
+  "login: lee credenciales del estado React primero",
 );
 assert(loginPage.includes("hydrateAuthFromStorage"), "login: hidrata sesión antes del redirect");
 assert(!loginPage.includes("inputsReady"), "login: sin variable inputsReady rota (pantalla negra)");
