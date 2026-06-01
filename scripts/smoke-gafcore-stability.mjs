@@ -59,10 +59,16 @@ assert(
   "login: lee credenciales del estado React primero",
 );
 const supabaseBrowser = read("src/lib/gafcore-supabase-browser.ts");
+assert(supabaseBrowser.includes("loadSupabaseCreateClient"), "supabase browser: delega createClient a import dinámico");
 assert(
-  supabaseBrowser.includes("resolveSupabaseCreateClient") &&
-    supabaseBrowser.includes("assertGafcoreSupabaseClient"),
-  "supabase browser: createClient defensivo + assert",
+  read("src/lib/gafcore-supabase-create.shared.ts").includes('import("@supabase/supabase-js")'),
+  "supabase create: import dinámico en loadSupabaseCreateClient",
+);
+const viteCfg = read("vite.config.ts");
+assert(!viteCfg.includes("manualChunks(id)"), "vite: sin manualChunks (evita vendor-heavy roto)");
+assert(
+  viteCfg.includes("gafcore-supabase-client-proxy"),
+  "vite: alias sustituye integrations/supabase/client",
 );
 assert(loginPage.includes("hydrateAuthFromStorage"), "login: hidrata sesión antes del redirect");
 assert(!loginPage.includes("inputsReady"), "login: sin variable inputsReady rota (pantalla negra)");

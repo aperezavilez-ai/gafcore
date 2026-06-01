@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import {
   assertGafcoreSupabaseClient,
-  resolveSupabaseCreateClient,
+  loadSupabaseCreateClient,
 } from "@/lib/gafcore-supabase-create.shared";
 import {
   GAFCORE_SUPABASE_ENV_HINT,
@@ -19,6 +19,7 @@ export type GafcorePublicClientEnv = { url: string; publishableKey: string };
 
 let cachedEnv: GafcorePublicClientEnv | null = null;
 let browserClient: SupabaseClient<Database> | null = null;
+let browserClientPromise: Promise<SupabaseClient<Database>> | null = null;
 
 export async function fetchGafcorePublicClientEnv(): Promise<GafcorePublicClientEnv | null> {
   if (cachedEnv) return cachedEnv;
@@ -55,22 +56,31 @@ export async function getGafcoreSupabaseBrowser(): Promise<SupabaseClient<Databa
     assertGafcoreSupabaseClient(browserClient);
     return browserClient;
   }
+  if (browserClientPromise) return browserClientPromise;
 
-  const env = await fetchGafcorePublicClientEnv();
-  if (!env?.url || !env.publishableKey) {
-    throw new Error(`Supabase no disponible. ${GAFCORE_SUPABASE_ENV_HINT}`);
+  browserClientPromise = (async () => {
+    const env = await fetchGafcorePublicClientEnv();
+    if (!env?.url || !env.publishableKey) {
+      throw new Error(`Supabase no disponible. ${GAFCORE_SUPABASE_ENV_HINT}`);
+    }
+
+    const createClient = await loadSupabaseCreateClient();
+    const client = createClient(env.url, env.publishableKey, {
+      auth: {
+        storage: typeof window !== "undefined" ? localStorage : undefined,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+
+    assertGafcoreSupabaseClient(client);
+    browserClient = client;
+    return client;
+  })();
+
+  try {
+    return await browserClientPromise;
+  } finally {
+    browserClientPromise = null;
   }
-
-  const createClient = resolveSupabaseCreateClient();
-  const client = createClient(env.url, env.publishableKey, {
-    auth: {
-      storage: typeof window !== "undefined" ? localStorage : undefined,
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  });
-
-  assertGafcoreSupabaseClient(client);
-  browserClient = client;
-  return browserClient;
 }

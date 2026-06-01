@@ -1,29 +1,5 @@
-/**
- * createClient robusto: evita «Cannot read properties of undefined (reading 'create')»
- * cuando el bundler deja el named export vacío (chunk vendor-supabase).
- */
-import * as SupabaseJs from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-
-type CreateClientFn = (
-  url: string,
-  key: string,
-  options?: Parameters<typeof SupabaseJs.createClient>[2],
-) => SupabaseClient<Database>;
-
-export function resolveSupabaseCreateClient(): CreateClientFn {
-  const mod = SupabaseJs as typeof SupabaseJs & {
-    default?: { createClient?: CreateClientFn };
-  };
-  const fn = mod.createClient ?? mod.default?.createClient;
-  if (typeof fn !== "function") {
-    throw new Error(
-      "[GafCore] @supabase/supabase-js no expone createClient. Ejecuta «bun install» y redeploy; si persiste, reporta el build.",
-    );
-  }
-  return fn as CreateClientFn;
-}
 
 export function assertGafcoreSupabaseClient(
   client: SupabaseClient<Database> | null | undefined,
@@ -34,4 +10,18 @@ export function assertGafcoreSupabaseClient(
   if (typeof client.auth?.getSession !== "function") {
     throw new Error("Supabase client not initialized (auth unavailable)");
   }
+}
+
+/** Import dinámico: evita createClient undefined en vendor-heavy / manualChunks. */
+export async function loadSupabaseCreateClient(): Promise<
+  typeof import("@supabase/supabase-js").createClient
+> {
+  const mod = await import("@supabase/supabase-js");
+  const fn = mod.createClient ?? (mod as { default?: { createClient?: typeof mod.createClient } }).default?.createClient;
+  if (typeof fn !== "function") {
+    throw new Error(
+      "[GafCore] @supabase/supabase-js no expone createClient tras import(). Redeploy o «bun install».",
+    );
+  }
+  return fn;
 }

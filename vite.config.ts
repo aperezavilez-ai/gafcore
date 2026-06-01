@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { nitro } from "nitro/vite";
+import path from "node:path";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { assertSafeClientEnvKey } from "./src/lib/gafcore-env-guard.shared";
 import viteReact from "@vitejs/plugin-react";
@@ -84,27 +85,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            if (!id.includes("node_modules")) return;
-            if (
-              id.includes("react-dom") ||
-              id.includes("/react/") ||
-              id.includes("@tanstack/react-router") ||
-              id.includes("@tanstack/react-query")
-            ) {
-              return "vendor-core";
-            }
-            // No separar @supabase: en Vercel rompe createClient («reading create» undefined).
-            if (id.includes("framer-motion") || id.includes("motion-dom")) return "vendor-motion";
-            if (
-              id.includes("recharts") ||
-              id.includes("monaco") ||
-              id.includes("@monaco-editor")
-            ) {
-              return "vendor-heavy";
-            }
-            return "vendor";
-          },
+          // Sin manualChunks: partir @supabase / monaco en vendor-heavy rompía createClient (undefined.create).
           // Mismo nombre en client y SSR (evita HTTPError 500 en Vercel por hash distinto).
           assetFileNames: (assetInfo) => {
             const names = assetInfo.names ?? (assetInfo.name ? [assetInfo.name] : []);
@@ -118,7 +99,11 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        "@": `${process.cwd()}/src`,
+        "@": path.join(process.cwd(), "src"),
+        "@/integrations/supabase/client": path.join(
+          process.cwd(),
+          "src/lib/gafcore-supabase-client-proxy.ts",
+        ),
       },
       dedupe: [
         "react",
