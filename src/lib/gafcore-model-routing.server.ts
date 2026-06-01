@@ -2,6 +2,7 @@
  * Resolución de rutas IA con secretos — solo servidor.
  * Tipos y normalización de slugs: gafcore-model-routing.shared.ts
  */
+import { GAFCORE_ANTHROPIC_API_VERSION, GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
 import {
   detectModelFamily,
   normalizeModelSlug,
@@ -26,10 +27,28 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
     });
   }
 
-  const family = modelHint ? detectModelFamily(modelHint) : "other";
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
   const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const family = modelHint
+    ? detectModelFamily(modelHint)
+    : anthropicKey
+      ? "claude"
+      : "other";
+
+  if (anthropicKey) {
+    const slug =
+      family === "claude"
+        ? normalizeModelSlug(modelHint?.trim() || GAFCORE_ANTHROPIC_MODEL_DEFAULT, "anthropic")
+        : GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+    routes.push({
+      provider: "anthropic",
+      url: "https://api.anthropic.com/v1/messages",
+      apiKey: anthropicKey,
+      extraHeaders: { "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION },
+      modelSlug: slug,
+    });
+  }
 
   if (openrouterKey) {
     routes.push({
@@ -59,16 +78,6 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
       apiKey: openaiKey,
       extraHeaders: {},
       modelSlug: openaiSlug,
-    });
-  }
-
-  if (family === "claude" && anthropicKey) {
-    routes.push({
-      provider: "anthropic",
-      url: "https://api.anthropic.com/v1/chat/completions",
-      apiKey: anthropicKey,
-      extraHeaders: { "anthropic-version": "2023-06-01" },
-      modelSlug: normalizeModelSlug(modelHint ?? "claude-sonnet-4-5", "anthropic"),
     });
   }
 

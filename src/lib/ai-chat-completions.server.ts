@@ -8,6 +8,7 @@
  * - `OPENAI_API_KEY` → OpenAI directo.
  * - `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY` → endpoint custom (máxima prioridad).
  */
+import { GAFCORE_ANTHROPIC_API_VERSION } from "@/lib/gafcore-assistant-prompt.shared";
 import {
   resolveAiRoute,
   resolveAllAiRoutes,
@@ -90,12 +91,68 @@ function toAnthropicBody(body: ChatCompletionsBody, modelSlug: string): Record<s
   return out;
 }
 
+/** Convierte SSE de Anthropic Messages API a formato OpenAI (widget `/api/chat`). */
+function wrapAnthropicStreamResponse(res: Response): Response {
+  if (!res.ok || !res.body) return res;
+
+  const reader = res.body.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let lineEnd: number;
+          while ((lineEnd = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, lineEnd).trim();
+            buffer = buffer.slice(lineEnd + 1);
+            if (!line.startsWith("data:")) continue;
+            const payload = line.replace(/^data:\s*/, "").trim();
+            if (!payload || payload === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(payload) as {
+                type?: string;
+                delta?: { type?: string; text?: string };
+              };
+              if (
+                parsed.type === "content_block_delta" &&
+                parsed.delta?.type === "text_delta" &&
+                parsed.delta.text
+              ) {
+                const chunk = { choices: [{ delta: { content: parsed.delta.text } }] };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              }
+            } catch {
+              /* línea parcial SSE */
+            }
+          }
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: res.status,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 /** Envuelve una respuesta nativa de Anthropic como si fuera OpenAI chat-completions. */
 async function wrapAnthropicResponse(res: Response): Promise<Response> {
   if (!res.ok) return res;
-  if (res.headers.get("content-type")?.includes("stream")) {
-    return res;
-  }
   const json = (await res.json().catch(() => null)) as
     | {
         id?: string;
@@ -159,10 +216,14 @@ async function callRoute(
       headers: {
         "Content-Type": "application/json",
         "x-api-key": route.apiKey,
+        "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION,
         ...route.extraHeaders,
       },
       body: JSON.stringify(anthropicBody),
     });
+    if (anthropicBody.stream) {
+      return wrapAnthropicStreamResponse(res);
+    }
     return wrapAnthropicResponse(res);
   }
 

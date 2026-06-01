@@ -38,7 +38,7 @@ export type UpstreamFailure = {
 
 export function getGafcoreAiGateway(): GafcoreAiGateway {
   const config = getAiChatConfig();
-  const defaults = resolveGafcoreModelDefaults(config.url);
+  const defaults = resolveGafcoreModelDefaults(config.url || undefined);
   const fast = process.env.AI_MODEL_FAST?.trim() || defaults.fast;
   const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
   const ui = process.env.AI_MODEL_UI?.trim() || defaults.ui;

@@ -1,15 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import "@tanstack/react-start";
 import { requireUser } from "./elevenlabs/-_auth";
-import {
-  getGafcoreAiGateway,
-  parseUpstreamFailure,
-  resolveGatewayModel,
-  streamChatCompletions,
-} from "@/lib/gafcore-ai-gateway.server";
+import { GAFCORE_ASSISTANT_SYSTEM_PROMPT } from "@/lib/gafcore-assistant-prompt.shared";
+import { parseUpstreamFailure } from "@/lib/gafcore-ai-gateway.server";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
-
-const SYSTEM_PROMPT = `Eres GafCore AI, asistente de la plataforma de creación con IA. Responde en español de forma clara, breve y útil. Usa markdown cuando ayude.`;
+import { streamClaudeChat } from "@/services/claudeService";
 
 type Mode = "fast" | "reasoning" | "pro";
 
@@ -20,10 +15,7 @@ export const Route = createFileRoute("/api/chat")({
         const auth = await requireUser(request);
         if (auth instanceof Response) return auth;
 
-        let gateway: ReturnType<typeof getGafcoreAiGateway>;
-        try {
-          gateway = getGafcoreAiGateway();
-        } catch {
+        if (!process.env.ANTHROPIC_API_KEY?.trim()) {
           return new Response(
             JSON.stringify({
               error: "ai_not_configured",
@@ -51,17 +43,15 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
-        const mode: Mode = body.mode && ["fast", "reasoning", "pro"].includes(body.mode) ? body.mode : "fast";
-        const model = resolveGatewayModel(gateway, {
-          tier: mode === "fast" ? "fast" : "deep",
-        });
+        const conversation = messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }));
 
-        const upstream = await streamChatCompletions({
-          model,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            ...messages.map((m) => ({ role: m.role, content: m.content })),
-          ],
+        const upstream = await streamClaudeChat(conversation, {
+          systemPrompt: GAFCORE_ASSISTANT_SYSTEM_PROMPT,
         });
 
         if (!upstream.ok) {

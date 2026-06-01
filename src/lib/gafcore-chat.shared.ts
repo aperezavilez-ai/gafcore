@@ -24,6 +24,7 @@ import {
 } from "@/services/ai/design-engine.shared";
 import { prepareIncrementalEditSession } from "@/lib/gafcore-incremental-edit.shared";
 import { buildIntegrityShieldPromptAppend } from "@/lib/gafcore-integrity-shield.shared";
+import { GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -140,6 +141,11 @@ export const MODEL_FAST = "google/gemini-2.0-flash-001";
 export const MODEL_DEEP = "openai/gpt-4o";
 export const MODEL_UI = "google/gemini-2.5-pro";
 
+/** Defaults con API nativa Anthropic (ANTHROPIC_API_KEY en Vercel). */
+export const ANTHROPIC_API_DEFAULT_FAST = GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+export const ANTHROPIC_API_DEFAULT_DEEP = GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+export const ANTHROPIC_API_DEFAULT_UI = GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+
 /** IDs por defecto en API nativa OpenAI (sin OpenRouter). */
 export const OPENAI_API_DEFAULT_FAST = "gpt-4o-mini";
 export const OPENAI_API_DEFAULT_DEEP = "gpt-4o";
@@ -151,12 +157,22 @@ export const OPENAI_API_DEFAULT_UI = "gpt-4o";
  * slugs estilo OpenRouter (`anthropic/claude-sonnet-4.5`, `openai/gpt-4o-mini`)
  * son válidos en cualquier ruta: el router normaliza al formato del proveedor.
  */
-export function resolveGafcoreModelDefaults(chatCompletionsUrl: string): {
+export function resolveGafcoreModelDefaults(chatCompletionsUrl?: string): {
   fast: string;
   deep: string;
   ui: string;
 } {
-  const u = chatCompletionsUrl.toLowerCase();
+  const hasAnthropic =
+    typeof process !== "undefined" && Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+  if (hasAnthropic) {
+    return {
+      fast: process.env.AI_MODEL_FAST?.trim() || ANTHROPIC_API_DEFAULT_FAST,
+      deep: process.env.AI_MODEL_DEEP?.trim() || ANTHROPIC_API_DEFAULT_DEEP,
+      ui: process.env.AI_MODEL_UI?.trim() || ANTHROPIC_API_DEFAULT_UI,
+    };
+  }
+
+  const u = (chatCompletionsUrl ?? "").toLowerCase();
   const isOpenAiNative =
     u.includes("api.openai.com") && !u.includes("openrouter") && !u.includes("anthropic");
   return {
