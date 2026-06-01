@@ -34,7 +34,11 @@ for (const f of [".env", ".env.local", ".env.development"]) loadEnvFile(f);
 
 const url = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "").trim();
 const key = (
-  process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || ""
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  ""
 ).trim();
 const email = (process.env.GAFCORE_TEST_EMAIL || "alfonsoavilery@icloud.com").trim().toLowerCase();
 const password = (process.env.GAFCORE_TEST_PASSWORD || "").trim();

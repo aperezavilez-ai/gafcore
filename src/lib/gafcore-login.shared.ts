@@ -183,7 +183,7 @@ export async function gafcoreLoginWithPassword(input: {
     return {
       ok: false,
       error:
-        "Supabase no está disponible en este sitio. En Vercel añade VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY (Production y Build) y redeploy.",
+        "Supabase no está disponible en este sitio. En Vercel añade VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY (o VITE_SUPABASE_ANON_KEY) en Production y Build, y redeploy.",
     };
   }
 

@@ -58,6 +58,12 @@ assert(
   loginShared.includes("fallback.email.trim() || domEmail"),
   "login: lee credenciales del estado React primero",
 );
+const supabaseBrowser = read("src/lib/gafcore-supabase-browser.ts");
+assert(
+  supabaseBrowser.includes("resolveSupabaseCreateClient") &&
+    supabaseBrowser.includes("assertGafcoreSupabaseClient"),
+  "supabase browser: createClient defensivo + assert",
+);
 assert(loginPage.includes("hydrateAuthFromStorage"), "login: hidrata sesión antes del redirect");
 assert(!loginPage.includes("inputsReady"), "login: sin variable inputsReady rota (pantalla negra)");
 assert(!loginPage.includes("gafcore_email"), "login: sin name gafcore_email (legacy)");

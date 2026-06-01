@@ -65,7 +65,8 @@ if (has("VITE_SUPABASE_URL")) {
 } else issues.push("Falta VITE_SUPABASE_URL");
 
 if (has("VITE_SUPABASE_PUBLISHABLE_KEY")) ok.push("VITE_SUPABASE_PUBLISHABLE_KEY");
-else issues.push("Falta VITE_SUPABASE_PUBLISHABLE_KEY");
+else if (has("VITE_SUPABASE_ANON_KEY")) ok.push("VITE_SUPABASE_ANON_KEY (alias de publishable)");
+else issues.push("Falta VITE_SUPABASE_PUBLISHABLE_KEY o VITE_SUPABASE_ANON_KEY (clave anon del panel Supabase)");
 
 if (has("SUPABASE_URL")) ok.push("SUPABASE_URL");
 else if (has("VITE_SUPABASE_URL"))

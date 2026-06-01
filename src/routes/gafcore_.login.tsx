@@ -322,7 +322,8 @@ function GafCoreLoginPage() {
                   {supabaseReady === false ? (
                     <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-red-300">
                       No se pudo conectar con Supabase. En Vercel define VITE_SUPABASE_URL y
-                      VITE_SUPABASE_PUBLISHABLE_KEY (Production y Build) y vuelve a desplegar.
+                      VITE_SUPABASE_PUBLISHABLE_KEY (o VITE_SUPABASE_ANON_KEY) en Production y Build y
+                      vuelve a desplegar.
                     </div>
                   ) : null}
                   {urlPasswordWarning ? (

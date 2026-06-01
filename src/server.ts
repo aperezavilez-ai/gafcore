@@ -147,8 +147,10 @@ function runtimeEnvDiag(): Response {
       env: {
         VITE_SUPABASE_URL: flag("VITE_SUPABASE_URL"),
         VITE_SUPABASE_PUBLISHABLE_KEY: flag("VITE_SUPABASE_PUBLISHABLE_KEY"),
+        VITE_SUPABASE_ANON_KEY: flag("VITE_SUPABASE_ANON_KEY"),
         SUPABASE_URL: flag("SUPABASE_URL"),
         SUPABASE_PUBLISHABLE_KEY: flag("SUPABASE_PUBLISHABLE_KEY"),
+        SUPABASE_ANON_KEY: flag("SUPABASE_ANON_KEY"),
         SUPABASE_SERVICE_ROLE_KEY: flag("SUPABASE_SERVICE_ROLE_KEY"),
         OPENAI_API_KEY: flag("OPENAI_API_KEY"),
         OPENROUTER_API_KEY: flag("OPENROUTER_API_KEY"),
@@ -184,17 +186,15 @@ export default {
       return runtimeEnvDiag();
     }
     if (request.method === "GET" && path === "/api/gafcore/client-env") {
-      const url = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "").trim();
-      const publishableKey = (
-        process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || ""
-      ).trim();
-      if (!url || !publishableKey) {
+      const { resolveServerSupabasePublicEnv } = await import("./lib/gafcore-supabase-env.server");
+      const pub = resolveServerSupabasePublicEnv();
+      if (!pub) {
         return new Response(JSON.stringify({ ok: false }), {
           status: 503,
           headers: { "content-type": "application/json", "cache-control": "no-store" },
         });
       }
-      return new Response(JSON.stringify({ ok: true, url, publishableKey }), {
+      return new Response(JSON.stringify({ ok: true, url: pub.url, publishableKey: pub.publishableKey }), {
         status: 200,
         headers: { "content-type": "application/json", "cache-control": "no-store" },
       });

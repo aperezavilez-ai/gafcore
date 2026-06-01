@@ -43,14 +43,28 @@ export default defineConfig(({ mode }) => {
     }
   }
   // Build Vercel: si solo hay SUPABASE_* en el panel, inyectar también VITE_* en el bundle SSR.
-  for (const [viteKey, serverKey] of [
-    ["VITE_SUPABASE_URL", "SUPABASE_URL"],
-    ["VITE_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_PUBLISHABLE_KEY"],
-  ] as const) {
+  for (const [viteKey, serverKey] of [["VITE_SUPABASE_URL", "SUPABASE_URL"]] as const) {
     const fromServer = process.env[serverKey]?.trim();
     const fromVite = viteEnv[viteKey]?.trim();
     if (fromServer && !fromVite) viteEnv[viteKey] = fromServer;
     if (fromVite && !process.env[serverKey]?.trim()) process.env[serverKey] = fromVite;
+  }
+  const publishableFromPanel =
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.VITE_SUPABASE_ANON_KEY?.trim() ||
+    process.env.SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.SUPABASE_ANON_KEY?.trim() ||
+    "";
+  if (publishableFromPanel) {
+    if (!viteEnv.VITE_SUPABASE_PUBLISHABLE_KEY) {
+      viteEnv.VITE_SUPABASE_PUBLISHABLE_KEY = publishableFromPanel;
+    }
+    if (!viteEnv.VITE_SUPABASE_ANON_KEY) {
+      viteEnv.VITE_SUPABASE_ANON_KEY = publishableFromPanel;
+    }
+    if (!process.env.SUPABASE_PUBLISHABLE_KEY?.trim()) {
+      process.env.SUPABASE_PUBLISHABLE_KEY = publishableFromPanel;
+    }
   }
   const envDefine: Record<string, string> = {};
   for (const [key, value] of Object.entries(viteEnv)) {
@@ -80,7 +94,7 @@ export default defineConfig(({ mode }) => {
             ) {
               return "vendor-core";
             }
-            if (id.includes("@supabase")) return "vendor-supabase";
+            // No separar @supabase: en Vercel rompe createClient («reading create» undefined).
             if (id.includes("framer-motion") || id.includes("motion-dom")) return "vendor-motion";
             if (
               id.includes("recharts") ||
