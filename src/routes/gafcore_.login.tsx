@@ -76,6 +76,7 @@ function GafCoreLoginPage() {
       return;
     }
     stripSecretsFromLoginUrl();
+    clearLoginCredentialFieldsDom();
     setBlockingUrlSanitize(false);
   }, []);
 
@@ -146,9 +147,6 @@ function GafCoreLoginPage() {
         const sessionLive = Boolean(sessionEmail && expiresAt * 1000 > Date.now() + 30_000);
         if (sessionEmail && sessionLive) {
           setActiveSessionEmail(sessionEmail);
-          if (!signedOut) {
-            gafcoreLoginRedirectNow(`${window.location.origin}${redirectTo}`);
-          }
         }
       })
       .catch(() => {
@@ -396,7 +394,7 @@ function GafCoreLoginPage() {
                     <div className={`h-px flex-1 ${light ? "bg-slate-200" : "bg-white/10"}`} />
                   </div>
 
-                  {!activeSessionEmail && inputsReady ? (
+                  {!activeSessionEmail ? (
                   <form
                     key={formKey}
                     className="space-y-4"
@@ -423,7 +421,6 @@ function GafCoreLoginPage() {
                           data-lpignore="true"
                           data-1p-ignore="true"
                           required
-                          readOnly={!inputsReady}
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="tu@correo.com"
@@ -445,7 +442,6 @@ function GafCoreLoginPage() {
                           data-lpignore="true"
                           data-1p-ignore="true"
                           required
-                          readOnly={!inputsReady}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
@@ -471,8 +467,6 @@ function GafCoreLoginPage() {
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
                   </form>
-                  ) : !activeSessionEmail ? (
-                    <p className={`py-6 text-center text-sm ${subtleText}`}>Preparando formulario seguro…</p>
                   ) : null}
 
                   {!activeSessionEmail ? (

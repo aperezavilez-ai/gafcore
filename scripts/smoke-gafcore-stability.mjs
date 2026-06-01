@@ -55,6 +55,7 @@ assert(
   "login: script vacía campos al cargar",
 );
 assert(loginPage.includes("hydrateAuthFromStorage"), "login: hidrata sesión antes del redirect");
+assert(!loginPage.includes("inputsReady"), "login: sin variable inputsReady rota (pantalla negra)");
 assert(!loginPage.includes("gafcore_email"), "login: sin name gafcore_email (legacy)");
 assert(!register.includes("clearCredentialFields"), "register: sin referencia rota a clearCredentialFields");
 assert(rootTsx.includes("GAFCORE_LOGIN_URL_STRIP_SCRIPT"), "root: script limpia URL antes de React");
