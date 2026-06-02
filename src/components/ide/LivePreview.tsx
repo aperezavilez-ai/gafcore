@@ -264,7 +264,7 @@ export function LivePreview({ files }: { files: FileItem[] }) {
   }
 
   function transpile(code, filename) {
-    const presets = [["env",{ modules:false, targets:"defaults" }], "react"];
+    const presets = [["env",{ modules:false, targets:"defaults" }], ["react", { runtime: "automatic", importSource: "react" }]];
     if (/\\.(ts|tsx)$/i.test(filename)) presets.push(["typescript",{ allExtensions:true, isTSX:true }]);
     return Babel.transform(repairJsxGlue(code), { filename, presets, sourceMaps: "inline" }).code;
   }

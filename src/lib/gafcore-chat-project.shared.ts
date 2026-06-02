@@ -3,8 +3,6 @@
  */
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
-import { classifyUserIntent } from "@/orchestrator/intent.classifier";
-import { selectTemplateSlug } from "@/orchestrator/template.selector";
 
 export type ChatProjectFile = { name: string; content: string; language?: string };
 
@@ -82,14 +80,13 @@ export function suggestProjectNameFromInstruction(instruction: string): string {
   return `Proyecto ${date}`;
 }
 
-export function resolveTemplateSlugForChatInstruction(instruction: string): string {
-  const intent = classifyUserIntent(instruction, { mode: "build", visualEdit: false });
-  return selectTemplateSlug(intent);
+export function resolveTemplateSlugForChatInstruction(_instruction: string): string {
+  return "blank-vite";
 }
 
 export function buildFreshProjectInstructionPrefix(): string {
   return (
-    "[PROYECTO NUEVO GafCore] Canvas limpio con plantilla base. " +
+    "[PROYECTO NUEVO GafCore] Canvas limpio. " +
     "Construye el producto pedido desde cero en App.tsx (export default). " +
     "PROHIBIDO mezclar con proyectos anteriores ni conservar secciones ajenas al pedido. " +
     "Responde SOLO JSON { reply, files } con código completo. "

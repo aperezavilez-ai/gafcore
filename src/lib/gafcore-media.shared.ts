@@ -834,8 +834,19 @@ function repairListaProcesadaMap(source: string): string {
   return out;
 }
 
+function ensureReactImportInJsxSource(source: string): string {
+  if (/import\s+React\b/.test(source) || /import\s*\*\s*as\s+React\b/.test(source)) {
+    return source;
+  }
+  if (/\bReact\./.test(source)) {
+    return `import React from "react";\n${source}`;
+  }
+  return source;
+}
+
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
   let out = unwrapLegacySafeJsxWrappers(source);
+  out = ensureReactImportInJsxSource(out);
   out = repairListaProcesadaMap(out);
   out = out.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");

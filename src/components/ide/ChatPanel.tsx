@@ -128,10 +128,7 @@ import {
 import type { FactoryRunResult } from "@/lib/gafcore-factory.shared";
 import {
   FACTORY_PROFILE_AUTO_ID,
-  listFactoryProfileSelectorOptions,
 } from "@/lib/gafcore-factory-templates.shared";
-
-const FACTORY_PROFILE_OPTIONS = listFactoryProfileSelectorOptions();
 import {
   WorkflowTaskStrip,
   type WorkflowMetricsUi,
@@ -157,14 +154,12 @@ import {
   GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
   GAFCORE_FORCE_FILES_BUILD_PREFIX,
   outputReplacesWelcome,
-  filesFromBuiltinTemplateByInstruction,
 } from "@/lib/gafcore-chat-delivery.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import {
   buildFreshProjectInstructionPrefix,
-  resolveTemplateSlugForChatInstruction,
   suggestProjectNameFromInstruction,
   userWantsFreshProject,
   userWantsInPlaceRebuild,
@@ -504,14 +499,7 @@ export function ChatPanel({
       return false;
     }
   });
-  const [factoryProfileId, setFactoryProfileId] = useState(() => {
-    if (typeof window === "undefined") return FACTORY_PROFILE_AUTO_ID;
-    try {
-      return localStorage.getItem("gafcore_factory_profile") || FACTORY_PROFILE_AUTO_ID;
-    } catch {
-      return FACTORY_PROFILE_AUTO_ID;
-    }
-  });
+  const [factoryProfileId] = useState(FACTORY_PROFILE_AUTO_ID);
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
   const [healthPhase, setHealthPhase] = useState<HealthStatusPhase | null>(null);
   const freeCreditsRescueDone = useRef(false);
@@ -2316,9 +2304,6 @@ export function ChatPanel({
       toast.success(`Sitio publicado: ${factoryRes.deploy.siteHost}`, { duration: 8000 });
     }
 
-    if (factoryRes.templateProfile) {
-      toast.message(`Plantilla fábrica: ${factoryRes.templateProfile.label}`, { duration: 4000 });
-    }
     appendMessageDeduped("ai", factoryRes.reply);
     scrollChatToBottomSoon("auto");
 
@@ -2637,7 +2622,6 @@ export function ChatPanel({
             /* best-effort */
           }
         }
-        const templateSlug = resolveTemplateSlugForChatInstruction(raw);
         const name = suggestProjectNameFromInstruction(raw);
         try {
           const created = await gafcoreAuthJsonFetch<{
@@ -2645,7 +2629,7 @@ export function ChatPanel({
             project?: { id: string; name: string; created_at: string };
             files?: FileItem[];
             error?: string;
-          }>("/api/gafcore/projects-create", { name, templateSlug });
+          }>("/api/gafcore/projects-create", { name });
           if (!created.ok || !created.project) {
             toast.error("No se pudo crear el proyecto", {
               description: created.error ?? "Reintenta con «+ Nuevo».",
@@ -2670,11 +2654,7 @@ export function ChatPanel({
           return;
         }
       } else if (userWantsInPlaceRebuild(raw)) {
-        const bootstrap = filesFromBuiltinTemplateByInstruction(raw);
-        if (bootstrap.length > 0) {
-          buildContextFiles = ensureReactPackageJson(bootstrap) as FileItem[];
-          isFreshProject = true;
-        }
+        /* Reconstrucción in-place: la IA sustituye archivos; sin plantillas predefinidas. */
       }
     }
 
@@ -2896,9 +2876,7 @@ export function ChatPanel({
         );
         filesToApply = delivery.files;
 
-        const needsCustomize =
-          filesToApply.length > 0 &&
-          (delivery.source === "template_bootstrap" || delivery.planOnly);
+        const needsCustomize = filesToApply.length > 0 && delivery.planOnly;
 
         if (
           filesToApply.length > 0 &&
@@ -3284,26 +3262,14 @@ export function ChatPanel({
             <HealthStatus phase={healthPhase} />
           </div>
         ) : null}
-        {pipelineStatus || validationLabel || (factoryMode && factoryProfileId) ? (
+        {pipelineStatus || validationLabel || factoryMode ? (
           <p
             className="mt-1 truncate text-[10px] text-muted-foreground"
-            title={[
-              factoryMode
-                ? `Fábrica · ${FACTORY_PROFILE_OPTIONS.find((o) => o.id === factoryProfileId)?.label ?? "Auto"}`
-                : null,
-              pipelineStatus,
-              validationLabel,
-            ]
+            title={[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
               .filter(Boolean)
               .join(" · ")}
           >
-            {[
-              factoryMode
-                ? `Fábrica: ${FACTORY_PROFILE_OPTIONS.find((o) => o.id === factoryProfileId)?.label ?? "Auto"}`
-                : null,
-              pipelineStatus,
-              validationLabel,
-            ]
+            {[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -3353,12 +3319,6 @@ export function ChatPanel({
               <p className="mt-1 max-w-[280px] text-[12.5px] text-foreground/80">
                 Describe en el chat qué app o sitio quieres construir y pulsa Construir.
               </p>
-              <Link
-                to="/gafcore/marketplace"
-                className="mt-6 inline-flex rounded-lg border border-primary/50 bg-primary/10 px-3 py-2 text-[12.5px] font-medium text-primary transition hover:bg-primary/15"
-              >
-                Ver plantillas en Marketplace
-              </Link>
             </div>
           ) : (
             <div className="space-y-5">
@@ -3692,40 +3652,6 @@ export function ChatPanel({
                       <span className="text-[10px] text-muted-foreground">OFF</span>
                     )}
                   </DropdownMenuItem>
-                  {factoryMode ? (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        disabled
-                        className="text-xs text-muted-foreground focus:bg-transparent"
-                      >
-                        Plantilla fábrica
-                      </DropdownMenuItem>
-                      {FACTORY_PROFILE_OPTIONS.map((opt) => (
-                        <DropdownMenuItem
-                          key={opt.id}
-                          onSelect={() => {
-                            setFactoryProfileId(opt.id);
-                            try {
-                              localStorage.setItem("gafcore_factory_profile", opt.id);
-                            } catch {
-                              /* */
-                            }
-                            toast.message(
-                              opt.id === FACTORY_PROFILE_AUTO_ID
-                                ? "Plantilla: detección automática"
-                                : `Plantilla: ${opt.label}`,
-                            );
-                          }}
-                        >
-                          <span className="flex-1 truncate">{opt.label}</span>
-                          {factoryProfileId === opt.id ? (
-                            <span className="text-[10px] font-medium text-primary">✓</span>
-                          ) : null}
-                        </DropdownMenuItem>
-                      ))}
-                    </>
-                  ) : null}
                   <DropdownMenuItem
                     disabled={!factoryMode}
                     onSelect={(e) => {
@@ -3977,21 +3903,8 @@ export function ChatPanel({
                   >
                     {mode === "build" ? "Construir" : "Chatear"}
                     {mode === "build" && factoryMode ? (
-                      <span
-                        className="max-w-[4.5rem] truncate rounded-full bg-primary-foreground/20 px-1.5 text-[9px] font-semibold leading-tight"
-                        title={
-                          FACTORY_PROFILE_OPTIONS.find((o) => o.id === factoryProfileId)?.label ??
-                          "Fábrica"
-                        }
-                      >
-                        {(() => {
-                          const opt = FACTORY_PROFILE_OPTIONS.find(
-                            (o) => o.id === factoryProfileId,
-                          );
-                          if (!opt) return "Fábrica";
-                          if (opt.id === FACTORY_PROFILE_AUTO_ID) return "Auto";
-                          return opt.label.split(" ")[0] ?? opt.label;
-                        })()}
+                      <span className="max-w-[4.5rem] truncate rounded-full bg-primary-foreground/20 px-1.5 text-[9px] font-semibold leading-tight">
+                        Fábrica
                       </span>
                     ) : null}
                     <ChevronDown className="h-3 w-3 shrink-0" />

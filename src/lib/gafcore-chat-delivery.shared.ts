@@ -13,9 +13,6 @@ import {
   aiReplyLooksLikePlanOnly,
   isSubstantiveBuildRequest,
 } from "@/lib/gafcore-chat-intent.shared";
-import { classifyUserIntent } from "@/orchestrator/intent.classifier";
-import { selectTemplateSlug } from "@/orchestrator/template.selector";
-import { BUILTIN_PROJECT_TEMPLATES } from "@/lib/gafcore-templates.shared";
 import {
   applyIncrementalEditPersistence,
   prepareIncrementalEditSession,
@@ -37,18 +34,11 @@ export type FinalizeBuildResult = {
   planOnly: boolean;
 };
 
+/** Plantillas desactivadas: siempre canvas en blanco + IA. */
 export function filesFromBuiltinTemplateByInstruction(
-  instruction: string,
+  _instruction: string,
 ): GafcoreDeliveredFile[] {
-  const intent = classifyUserIntent(instruction, { mode: "build", visualEdit: false });
-  const slug = selectTemplateSlug(intent);
-  const tpl = BUILTIN_PROJECT_TEMPLATES.find((t) => t.slug === slug);
-  if (!tpl?.files?.length) return [];
-  return tpl.files.map((f) => ({
-    name: f.name.replace(/^src\//i, "").replace(/^public\//i, ""),
-    language: f.language,
-    content: f.content,
-  }));
+  return [];
 }
 
 function contextStillWelcome(contextFiles: ProjFile[]): boolean {
@@ -108,11 +98,7 @@ export function finalizeGafcoreBuildDelivery(
   }
 
   if (shouldBootstrapBuildDelivery(instruction, contextFiles, files, reply)) {
-    const bootstrap = filesFromBuiltinTemplateByInstruction(instruction);
-    if (bootstrap.length > 0) {
-      files = ensureReactPackageJson(repairGafcoreOutputFiles(bootstrap));
-      source = "template_bootstrap";
-    }
+    /* Sin plantillas predefinidas — confiar en la respuesta de la IA o reintento del usuario. */
   } else if (files.length > 0) {
     files = ensureReactPackageJson(files);
   }
