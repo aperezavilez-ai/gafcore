@@ -8,7 +8,7 @@ import { resolveBrainRoute } from "@/services/ai/aiOrchestrator.server";
 import type { AiBrainTaskKind } from "@/services/ai/types.shared";
 
 export function isDeepModeInstruction(instruction: string): boolean {
-  return /^\[modo profundo\]/i.test(instruction.trim());
+  return /\[modo profundo\]/i.test(instruction);
 }
 
 export function inferChatBrainTask(instruction: string): AiBrainTaskKind {

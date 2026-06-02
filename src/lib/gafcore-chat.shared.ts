@@ -46,6 +46,8 @@ export const gafcoreChatBodySchema = z.object({
     )
     .max(80),
   projectId: z.string().uuid().optional(),
+  /** Modo profundo del IDE (interruptor «Profundo ON»). */
+  deepMode: z.boolean().optional(),
 });
 
 export type GafcoreChatBody = z.infer<typeof gafcoreChatBodySchema>;

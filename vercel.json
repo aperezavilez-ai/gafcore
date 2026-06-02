@@ -12,6 +12,11 @@
       "source": "/manifest.webmanifest",
       "destination": "/gafcore",
       "statusCode": 410
+    },
+    {
+      "source": "/sw.js",
+      "destination": "/gafcore",
+      "statusCode": 410
     }
   ],
   "crons": [

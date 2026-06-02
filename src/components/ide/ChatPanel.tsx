@@ -267,6 +267,12 @@ function describeGafcoreStreamFailure(message: string): string | null {
   if (message === "rate_limited") {
     return "Has enviado muchas solicitudes seguidas. Espera un minuto y vuelve a intentarlo.";
   }
+  if (message.startsWith("UPSTREAM_DETAIL:")) {
+    return "El asistente de IA tuvo un error temporal. Inténtalo de nuevo en unos minutos.";
+  }
+  if (message === "upstream") {
+    return "El asistente de IA tuvo un error temporal. Inténtalo de nuevo en unos minutos.";
+  }
   if (message === "project_not_found") {
     return "No se encontró el proyecto abierto. Recarga la página o elige otro proyecto.";
   }
@@ -1263,6 +1269,7 @@ export function ChatPanel({
   const autoFixAttemptedErrorsRef = useRef<Set<string>>(new Set());
   const previewErrorCooldownRef = useRef<{ msg: string; at: number }>({ msg: "", at: 0 });
   const autoFixSessionCountRef = useRef(0);
+  const validationAutoRetryUsedRef = useRef(false);
   const [autoFixActive, setAutoFixActive] = useState(false);
   const [composerHighlight, setComposerHighlight] = useState(false);
 
@@ -1654,10 +1661,23 @@ export function ChatPanel({
         data: toPersist.map((f) => ({ name: f.name, content: f.content })),
       });
       if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
-        const sourceErr = v.errors.map((e) => `${e.name}: ${e.message}`).join("\n");
-        setLastError(sourceErr);
-        if (isPreviewAutofixAiEnabled() && shouldAttemptAiAutofix(sourceErr)) {
-          scheduleRuntimeAutofixRef.current(sourceErr);
+        const jsxErrors = v.errors.filter((e) => /\.(tsx|jsx)$/i.test(e.name));
+        const otherErrors = v.errors.filter((e) => !/\.(tsx|jsx)$/i.test(e.name));
+        if (jsxErrors.length > 0) {
+          const sourceErr = jsxErrors.map((e) => `${e.name}: ${e.message}`).join("\n");
+          setLastError(sourceErr);
+          if (
+            isPreviewAutofixAiEnabled() &&
+            shouldAttemptAiAutofix(sourceErr) &&
+            !validationAutoRetryUsedRef.current
+          ) {
+            scheduleRuntimeAutofixRef.current(sourceErr);
+          }
+        } else if (otherErrors.length > 0) {
+          toast.message("Aviso en archivos auxiliares (no bloquea el preview).", {
+            description: otherErrors[0].message.slice(0, 120),
+            duration: 5000,
+          });
         }
       }
     } catch {
@@ -1943,6 +1963,7 @@ export function ChatPanel({
         history,
         instruction,
         files: contextFiles,
+        deepMode: deepModel,
         ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
       }),
       signal: ac.signal,
@@ -1952,13 +1973,16 @@ export function ChatPanel({
       let errCode = `HTTP ${res.status}`;
       try {
         if (!ct.includes("text/html")) {
-          const ej = (await res.json()) as { error?: string };
+          const ej = (await res.json()) as { error?: string; detail?: string };
           if (ej?.error === "insufficient_credits") errCode = "INSUFFICIENT_CREDITS";
           else if (ej?.error === "ai_not_configured") errCode = "AI_NO_CONFIGURADA";
           else if (ej?.error === "rate_limited") errCode = "rate_limited";
           else if (ej?.error === "project_not_found") errCode = "project_not_found";
-          else if (res.status === 429) errCode = "rate_limited";
+          else if (ej?.error === "upstream" && typeof ej.detail === "string" && ej.detail.trim()) {
+            errCode = `UPSTREAM_DETAIL:${ej.detail.trim().slice(0, 200)}`;
+          } else if (res.status === 429) errCode = "rate_limited";
           else if (typeof ej?.error === "string") errCode = ej.error;
+          else if (res.status >= 500) errCode = `UPSTREAM:${res.status}`;
         } else {
           errCode = "HTML_RESPONSE";
         }
@@ -2712,6 +2736,15 @@ export function ChatPanel({
       coreText +
       pendingRef;
     if (!instruction.trim() || loading || sendInFlightRef.current) return;
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (
+      lastUser &&
+      lastUser.content.trim() === (raw || coreText).trim() &&
+      Date.now() - lastUser.ts < 8_000
+    ) {
+      toast.message("Mensaje ya enviado; espera la respuesta del asistente.", { duration: 4_000 });
+      return;
+    }
     sendInFlightRef.current = true;
     setLoading(true);
     if (effectiveBuild) {
@@ -2722,6 +2755,7 @@ export function ChatPanel({
       setHealthPhase(null);
     }
     const myEpoch = ++requestEpochRef.current;
+    validationAutoRetryUsedRef.current = false;
     setInput("");
     setPendingComposerImages([]);
     const userDisplay = [raw, pendingSnapshot.length > 0 ? `📎 ${pendingSnapshot.length} imagen` : ""]
@@ -2775,6 +2809,17 @@ export function ChatPanel({
         throw new Error("no_session");
       }
 
+      /** Si el usuario envió otra petición, no descartar en silencio una respuesta ya lista. */
+      const staleDrop = (partialReply?: string) => {
+        if (myEpoch === requestEpochRef.current) return false;
+        const t = partialReply?.trim();
+        if (t) {
+          appendMessageDeduped("ai", sanitizeUserFacingAiText(t));
+          scrollChatToBottomSoon("auto");
+        }
+        return true;
+      };
+
       let result: {
         reply: string;
         files: Array<{ name: string; language?: string; content: string }>;
@@ -2810,12 +2855,23 @@ export function ChatPanel({
         );
       }
 
-      if (myEpoch !== requestEpochRef.current) return;
+      if (
+        staleDrop(
+          sanitizeUserFacingAiText(softenRoboticReply(raw, result.reply || "Listo.")),
+        )
+      ) {
+        return;
+      }
 
       let replyText = sanitizeUserFacingAiText(
         softenRoboticReply(raw, result.reply || "Listo."),
       );
+      // Mostrar respuesta en cuanto la IA responde (no esperar personalización/reintentos).
+      appendMessageDeduped("ai", replyText);
+      scrollChatToBottomSoon("auto");
+      setLoading(false);
       setStreamChars(null);
+
       if (effectiveBuild) {
         const sbPhase = result.safeBuild?.phase;
         setHealthPhase(
@@ -2841,11 +2897,19 @@ export function ChatPanel({
         filesToApply = delivery.files;
 
         const needsCustomize =
-          delivery.source === "template_bootstrap" ||
-          delivery.planOnly ||
-          (filesToApply.length > 0 && !outputReplacesWelcome(contextForDelivery, filesToApply));
+          filesToApply.length > 0 &&
+          (delivery.source === "template_bootstrap" || delivery.planOnly);
 
-        if (needsCustomize && filesToApply.length > 0 && myEpoch === requestEpochRef.current) {
+        if (
+          filesToApply.length > 0 &&
+          !needsCustomize &&
+          !outputReplacesWelcome(contextForDelivery, filesToApply)
+        ) {
+          toast.message("Proyecto generado. Revisa la vista previa.", { duration: 6000 });
+        }
+
+        if (needsCustomize && myEpoch === requestEpochRef.current) {
+          setLoading(true);
           toast.message("Personalizando proyecto con IA…", { duration: 8000 });
           const customizeInstruction = GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX + (raw || coreText);
           const customizeHistory: ChatMsg[] = [
@@ -2863,7 +2927,7 @@ export function ChatPanel({
             raw || coreText,
             { preferReliableJson: true },
           );
-          if (myEpoch !== requestEpochRef.current) return;
+          if (staleDrop(replyText)) return;
           delivery = finalizeGafcoreBuildDelivery(
             raw || coreText,
             filesToApply,
@@ -2875,6 +2939,8 @@ export function ChatPanel({
             softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto aplicado al preview.`),
           );
         } else if (filesToApply.length === 0) {
+          setLoading(true);
+          setHealthPhase("optimizing_design");
           const strictInstruction =
             FUNCTIONAL_FIRST_BUILD_PREFIX +
             GAFCORE_FORCE_FILES_BUILD_PREFIX +
@@ -2893,7 +2959,7 @@ export function ChatPanel({
             raw || coreText,
             { preferReliableJson: true },
           );
-          if (myEpoch !== requestEpochRef.current) return;
+          if (staleDrop(replyText)) return;
           delivery = finalizeGafcoreBuildDelivery(
             raw || coreText,
             contextForDelivery,
@@ -2921,10 +2987,12 @@ export function ChatPanel({
         filesToApply = result.files;
       }
 
-      appendMessageDeduped("ai", replyText);
-      forceScrollToBottom();
-      scrollChatToBottomSoon("auto");
-      void persistMessage("assistant", replyText);
+      if (replyText.trim()) {
+        appendMessageDeduped("ai", replyText);
+        forceScrollToBottom();
+        scrollChatToBottomSoon("auto");
+        void persistMessage("assistant", replyText);
+      }
 
       if (filesToApply.length > 0 && effectiveBuild) {
         const runFunctional = effectiveBuild && !visualEditOn;
@@ -2961,7 +3029,8 @@ export function ChatPanel({
         if (
           runFunctional &&
           shouldAutoRetryValidation(issues) &&
-          !isVisualOnlyTweak(raw)
+          !isVisualOnlyTweak(raw) &&
+          !validationAutoRetryUsedRef.current
         ) {
           const canRetry =
             isAdmin ||
@@ -2971,6 +3040,7 @@ export function ChatPanel({
           if (!canRetry) {
             toast.error("Sin créditos para el reintento automático de corrección.");
           } else {
+            validationAutoRetryUsedRef.current = true;
             toast.message("Corrigiendo validación (1 reintento automático)…", { duration: 5000 });
             setHealthPhase("fixing_error");
             await advancePipeline("retry", "retrying");

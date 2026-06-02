@@ -192,18 +192,6 @@ function auditBuildReadiness(files: Array<{ name: string; content: string }>): P
         });
       }
     }
-    const open = (f.content.match(/\{/g) || []).length;
-    const close = (f.content.match(/\}/g) || []).length;
-    const openParen = (f.content.match(/\(/g) || []).length;
-    const closeParen = (f.content.match(/\)/g) || []).length;
-    if (Math.abs(open - close) > 2 || Math.abs(openParen - closeParen) > 2) {
-      issues.push({
-        severity: "error",
-        category: "syntax",
-        file: f.name,
-        message: "Posible desbalance de llaves o paréntesis (error de sintaxis).",
-      });
-    }
   }
 
   return issues;

@@ -8,7 +8,11 @@
  * - `OPENAI_API_KEY` → OpenAI directo.
  * - `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY` → endpoint custom (máxima prioridad).
  */
-import { GAFCORE_ANTHROPIC_API_VERSION } from "@/lib/gafcore-assistant-prompt.shared";
+import {
+  GAFCORE_ANTHROPIC_API_VERSION,
+  GAFCORE_ANTHROPIC_MODEL_DEFAULT,
+  GAFCORE_ANTHROPIC_MODEL_RETIRED,
+} from "@/lib/gafcore-assistant-prompt.shared";
 import {
   resolveAiRoute,
   resolveAllAiRoutes,
@@ -79,9 +83,24 @@ function toAnthropicBody(body: ChatCompletionsBody, modelSlug: string): Record<s
     }
   }
 
+  const rf = body.response_format;
+  const wantsJson =
+    rf &&
+    typeof rf === "object" &&
+    (rf as { type?: string }).type === "json_object";
+  if (wantsJson) {
+    systemParts.push(
+      "Responde con un único objeto JSON válido. Sin markdown, sin texto antes ni después del JSON.",
+    );
+  }
+
+  const anthropicModel = GAFCORE_ANTHROPIC_MODEL_RETIRED.has(modelSlug)
+    ? GAFCORE_ANTHROPIC_MODEL_DEFAULT
+    : modelSlug;
+
   const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : 8192;
   const out: Record<string, unknown> = {
-    model: modelSlug,
+    model: anthropicModel,
     messages: conversation,
     max_tokens: maxTokens,
   };
@@ -201,7 +220,16 @@ async function wrapAnthropicResponse(res: Response): Promise<Response> {
 
 /** Códigos en los que descartamos al proveedor y probamos el siguiente. */
 function isProviderFatalForFallback(status: number): boolean {
-  return status === 401 || status === 402 || status === 403 || status === 404;
+  return (
+    status === 400 ||
+    status === 401 ||
+    status === 402 ||
+    status === 403 ||
+    status === 404 ||
+    status === 422 ||
+    status === 429 ||
+    status >= 500
+  );
 }
 
 async function callRoute(

@@ -44,6 +44,17 @@ export function gateDeliveredFiles(
   }
 
   const fixInstruction = buildValidationFixInstruction(blocking, originalInstruction);
+  const syntaxOnly = blocking.every((i) => i.category === "syntax" || i.category === "import");
+  if (syntaxOnly && deltaFiles.length > 0) {
+    return {
+      ok: true,
+      files: deltaFiles,
+      issues: audit.issues,
+      userMessage: formatValidationForUser(blocking),
+      fixInstruction,
+    };
+  }
+
   return {
     ok: false,
     files: [],

@@ -234,7 +234,10 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   const brand = await readProjectBrand(data.projectId);
   const brandBlock = brand ? brandContextBlock(brand) : "";
   const hasVision = extractVisionImageParts(projFiles).length > 0;
-  const { model } = resolveModelForGafcoreChat(gateway, data.instruction, { hasVision });
+  const { model } = resolveModelForGafcoreChat(gateway, data.instruction, {
+    hasVision,
+    deepMode: data.deepMode === true,
+  });
   const { messages, subset, ctxFiles } = buildGafcoreMessages(
     data,
     model,
@@ -438,6 +441,7 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   const hasVisionComplete = extractVisionImageParts(projFilesComplete).length > 0;
   const { model } = resolveModelForGafcoreChat(gateway, data.instruction, {
     hasVision: hasVisionComplete,
+    deepMode: data.deepMode === true,
   });
   const { messages, subset, ctxFiles } = buildGafcoreMessages(
     data,

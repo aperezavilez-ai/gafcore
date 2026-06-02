@@ -2,6 +2,10 @@
  * Utilidades de routing IA sin secretos (seguro en shared).
  * Resolución con API keys: gafcore-model-routing.server.ts
  */
+import {
+  GAFCORE_ANTHROPIC_MODEL_DEFAULT,
+  GAFCORE_ANTHROPIC_MODEL_RETIRED,
+} from "@/lib/gafcore-assistant-prompt.shared";
 
 export type ResolvedProvider = "anthropic" | "openai" | "openrouter" | "custom";
 
@@ -19,7 +23,11 @@ export function normalizeModelSlug(model: string, target: ResolvedProvider): str
 
   if (target === "anthropic") {
     const stripped = m.replace(/^anthropic\//i, "");
-    return stripped.replace(/(\d+)\.(\d+)/g, "$1-$2");
+    const slug = stripped.replace(/(\d+)\.(\d+)/g, "$1-$2");
+    if (GAFCORE_ANTHROPIC_MODEL_RETIRED.has(slug)) {
+      return GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+    }
+    return slug;
   }
 
   if (target === "openai") {

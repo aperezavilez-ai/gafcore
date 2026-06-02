@@ -81,8 +81,8 @@ export function useSubscription(userId: string | undefined) {
       return !!data;
     }
 
-    const load = async () => {
-      setLoading(true);
+    const load = async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
       try {
         const [subRes, adminFlag] = await Promise.all([
           supabase
@@ -105,10 +105,7 @@ export function useSubscription(userId: string | undefined) {
         }
         setIsAdmin(adminFlag);
       } finally {
-        if (!cancelled) {
-          hasLoadedOnce = true;
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 

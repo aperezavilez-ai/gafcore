@@ -1003,8 +1003,12 @@ export function repairGeneratedSourceFiles<T extends { name: string; content: st
 ): T[] {
   return files.map((f) => {
     if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
-    const content = repairCommonJsxSyntaxErrors(f.content);
-    return content === f.content ? f : { ...f, content };
+    let name = f.name;
+    let content = repairCommonJsxSyntaxErrors(f.content);
+    if (/\.ts$/i.test(name) && /<[A-Za-z][\w.-]*[\s/>]/.test(content)) {
+      name = name.replace(/\.ts$/i, ".tsx");
+    }
+    return content === f.content && name === f.name ? f : { ...f, name, content };
   });
 }
 

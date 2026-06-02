@@ -50,6 +50,7 @@ function mask(k) {
 
 function aiConfigured() {
   if (has("AI_CHAT_COMPLETIONS_URL") && has("AI_API_KEY")) return true;
+  if (has("ANTHROPIC_API_KEY")) return true;
   if (has("OPENROUTER_API_KEY")) return true;
   if (has("OPENAI_API_KEY")) return true;
   return false;
@@ -84,10 +85,13 @@ else
     "Falta SUPABASE_PUBLISHABLE_KEY: el servidor la usa en rutas API (p. ej. chat/stream), distinta de VITE_. Copia el mismo valor que VITE_SUPABASE_PUBLISHABLE_KEY.",
   );
 
-if (aiConfigured()) ok.push("IA: OPENAI_API_KEY u OPENROUTER_API_KEY o AI_CHAT_COMPLETIONS_URL+AI_API_KEY");
+if (aiConfigured())
+  ok.push(
+    "IA: ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY o AI_CHAT_COMPLETIONS_URL+AI_API_KEY",
+  );
 else
   issues.push(
-    "Falta configuración de IA: define OPENAI_API_KEY, o OPENROUTER_API_KEY, o AI_CHAT_COMPLETIONS_URL + AI_API_KEY",
+    "Falta configuración de IA: define ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, o AI_CHAT_COMPLETIONS_URL + AI_API_KEY",
   );
 
 if (has("VITE_PAYMENTS_CLIENT_TOKEN")) ok.push("VITE_PAYMENTS_CLIENT_TOKEN (Stripe publishable)");

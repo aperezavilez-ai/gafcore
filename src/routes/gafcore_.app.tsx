@@ -2,8 +2,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Loader2, Lock, ArrowRight, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth, forceAuthLoadingComplete, hydrateAuthFromStorage } from "@/hooks/useAuth";
-import { useSubscription } from "@/hooks/useSubscription";
+import {
+  useAuth,
+  forceAuthLoadingComplete,
+  hydrateAuthFromStorage,
+  initAuthOnce,
+} from "@/hooks/useAuth";
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
@@ -15,6 +19,9 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
+
+/** Máximo tiempo mostrando «Verificando acceso…» antes de dejar pasar. */
+const APP_BOOT_MAX_MS = 900;
 
 export const Route = createFileRoute("/gafcore_/app")({
   component: GafCoreAppPage,
@@ -28,38 +35,78 @@ export const Route = createFileRoute("/gafcore_/app")({
 });
 
 function GafCoreAppPage() {
-  const { user, loading: authLoading } = useAuth();
-  const { loading: roleLoading } = useSubscription(user?.id);
+  const { user } = useAuth();
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
-  // Reintento defensivo: tras un login con full reload, getSession puede tardar
-  // unos ms en hidratar desde localStorage. Hasta confirmar, mostramos loader.
-  const [graceChecking, setGraceChecking] = useState(true);
+
+  const [bootDone, setBootDone] = useState(false);
   const [hasSession, setHasSession] = useState(false);
-  /** Tras auth: comprobar si debe ir a elegir plan antes de montar el IDE. */
-  const [planGateChecked, setPlanGateChecked] = useState(false);
-  const [authSlow, setAuthSlow] = useState(false);
-  const [forceContinue, setForceContinue] = useState(false);
-  const roleReadyOnceRef = useRef(false);
+  const [planReady, setPlanReady] = useState(false);
   const welcomeSyncStartedRef = useRef(false);
 
-  if (!roleLoading) roleReadyOnceRef.current = true;
+  const sessionKnown = Boolean(user?.id) || hasSession;
+  const showBootScreen = !bootDone;
 
-  const accessPending =
-    !forceContinue &&
-    (authLoading || graceChecking || (roleLoading && !roleReadyOnceRef.current));
-
-  /** Asegura créditos de bienvenida si el backend los dejó en 0 (p. ej. cuenta ya existía). */
   useEffect(() => {
-    if (authLoading || graceChecking || welcomeSyncStartedRef.current) return;
-    if (!user?.id && !hasSession) return;
+    let cancelled = false;
+
+    const finishBoot = (session: boolean) => {
+      if (cancelled) return;
+      forceAuthLoadingComplete();
+      setHasSession(session);
+      setBootDone(true);
+    };
+
+    void (async () => {
+      try {
+        await initAuthOnce();
+        const sb = await getGafcoreSupabaseBrowser();
+        const { data } = await sb.auth.getSession();
+        if (data.session?.user) {
+          finishBoot(true);
+          return;
+        }
+        const hydrated = await hydrateAuthFromStorage(800);
+        if (hydrated) {
+          finishBoot(true);
+          return;
+        }
+        finishBoot(false);
+      } catch {
+        finishBoot(false);
+      }
+    })();
+
+    const cap = window.setTimeout(() => {
+      void (async () => {
+        if (cancelled) return;
+        try {
+          const sb = await getGafcoreSupabaseBrowser();
+          const { data } = await sb.auth.getSession();
+          finishBoot(Boolean(data.session?.user));
+        } catch {
+          finishBoot(false);
+        }
+      })();
+    }, APP_BOOT_MAX_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(cap);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) setHasSession(true);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!bootDone || welcomeSyncStartedRef.current) return;
+    if (!sessionKnown) return;
     welcomeSyncStartedRef.current = true;
     void (async () => {
       const sb = await getGafcoreSupabaseBrowser();
       const id = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
       if (!id) return;
-      if (typeof window !== "undefined") {
-        sessionStorage.removeItem(`gafcore_welcome_sync_v2_${id}`);
-      }
       const k = `gafcore_welcome_sync_v3_${id}`;
       if (typeof window !== "undefined" && sessionStorage.getItem(k)) return;
       try {
@@ -72,97 +119,38 @@ function GafCoreAppPage() {
         /* reintento en la próxima visita */
       }
     })();
-  }, [authLoading, graceChecking, user?.id, hasSession]);
+  }, [bootDone, sessionKnown, user?.id, assignUserWelcome]);
 
   useEffect(() => {
-    if (!accessPending) {
-      setAuthSlow(false);
+    if (!bootDone || !sessionKnown) {
+      setPlanReady(false);
       return;
     }
-    const t = window.setTimeout(() => setAuthSlow(true), 8_000);
-    return () => window.clearTimeout(t);
-  }, [accessPending]);
-
-  useEffect(() => {
-    if (!authLoading && !user) {
-      void hydrateAuthFromStorage(3_000);
-    }
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (user) {
-      setHasSession(true);
-      setGraceChecking(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const sb = await getGafcoreSupabaseBrowser();
-      for (let i = 0; i < 20; i++) {
-        if (cancelled) return;
-        const { data } = await sb.auth.getSession();
-        if (data.session?.user) {
-          if (!cancelled) {
-            setHasSession(true);
-            setGraceChecking(false);
-          }
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 120));
-      }
-      if (!cancelled) setGraceChecking(false);
-    })();
-    return () => { cancelled = true; };
-  }, [authLoading, user]);
-
-  /** En /gafcore/app no redirigir a landing (evita parpadeo). Solo limpiar bloqueo de plan si ya hay sesión. */
-  useEffect(() => {
-    if (authLoading || graceChecking) return;
-    if (!user?.id && !hasSession) {
-      setPlanGateChecked(false);
-      return;
-    }
+    setPlanReady(true);
     void (async () => {
-      const sb = await getGafcoreSupabaseBrowser();
-      const uid = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
-      if (uid) clearPlanChoicePending(uid);
-      setPlanGateChecked(true);
+      try {
+        const sb = await getGafcoreSupabaseBrowser();
+        const uid = user?.id ?? (await sb.auth.getSession()).data.session?.user?.id;
+        if (uid) clearPlanChoicePending(uid);
+      } catch {
+        /* */
+      }
     })();
-  }, [authLoading, graceChecking, user?.id, hasSession]);
+  }, [bootDone, sessionKnown, user?.id]);
 
-  if (accessPending) {
+  if (showBootScreen) {
     return (
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <DevPortBanner />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Verificando acceso seguro…</p>
-          {authSlow ? (
-            <div className="mt-2 flex max-w-sm flex-col items-center gap-2 text-center">
-              <p className="text-xs text-muted-foreground">
-                Tardando más de lo habitual. Puedes entrar manualmente o comprobar tu conexión.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  forceAuthLoadingComplete();
-                  setGraceChecking(false);
-                  setForceContinue(true);
-                }}
-              >
-                Continuar sin esperar
-              </Button>
-            </div>
-          ) : null}
+          <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
+          <p className="text-sm text-muted-foreground">Cargando GafCore…</p>
         </div>
       </div>
     );
   }
 
-  if (!user && !hasSession) {
+  if (!sessionKnown) {
     return (
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <DevPortBanner />
@@ -176,13 +164,13 @@ function GafCoreAppPage() {
     );
   }
 
-  if (!planGateChecked) {
+  if (!planReady) {
     return (
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <DevPortBanner />
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Preparando tu espacio…</p>
+          <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
+          <p className="text-sm text-muted-foreground">Cargando editor…</p>
         </div>
       </div>
     );

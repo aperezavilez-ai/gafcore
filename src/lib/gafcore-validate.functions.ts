@@ -44,16 +44,21 @@ export const validateGafcoreSources = createServerFn({ method: "POST" })
       return { ok: true, errors };
     }
     for (const f of data) {
-      if (!/\.(mtsx|mts|tsx|ts|jsx|js|cjs|mjs)$/i.test(f.name)) continue;
+      const isJsx = /\.(tsx|jsx|mtsx)$/i.test(f.name);
+      const isScript = /\.(ts|mts|js|mjs|cjs)$/i.test(f.name);
+      if (!isJsx && !isScript) continue;
       try {
-        const isTsx = /\.(mtsx|tsx|jsx)$/i.test(f.name);
+        const compilerOptions: import("typescript").CompilerOptions = {
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.ESNext,
+          strict: false,
+        };
+        // Solo archivos JSX llevan opción jsx (evita falso error en lib/store.ts).
+        if (isJsx) {
+          compilerOptions.jsx = ts.JsxEmit.ReactJSX;
+        }
         const r = ts.transpileModule(f.content, {
-          compilerOptions: {
-            jsx: isTsx ? ts.JsxEmit.ReactJSX : ts.JsxEmit.None,
-            target: ts.ScriptTarget.ES2022,
-            module: ts.ModuleKind.ESNext,
-            strict: false,
-          },
+          compilerOptions,
           reportDiagnostics: true,
           fileName: f.name,
         });
