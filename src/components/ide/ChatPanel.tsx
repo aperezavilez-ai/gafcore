@@ -51,6 +51,20 @@ import { gafcoreChat } from "@/lib/gafcore-chat.functions";
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
+import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
+import {
+  aiReplyNeedsUserInput,
+  allGuideStepsCompleted,
+  buildAutopilotInstruction,
+  createGuideAutopilotState,
+  extractGuidePauseHint,
+  GUIDE_AUTOPILOT_DELAY_MS,
+  guideAutopilotStatusMessage,
+  isBlockingPreviewError,
+  pickAutopilotStep,
+  shouldEnableGuideAutopilot,
+  type GuideAutopilotState,
+} from "@/lib/gafcore-guide-autopilot.shared";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import {
   validateGafcoreSources,
@@ -502,6 +516,12 @@ export function ChatPanel({
   });
   const [factoryProfileId] = useState(FACTORY_PROFILE_AUTO_ID);
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
+  const [guideAutopilotUi, setGuideAutopilotUi] = useState<GuideAutopilotState>(
+    createGuideAutopilotState,
+  );
+  const guideAutopilotRef = useRef<GuideAutopilotState>(createGuideAutopilotState());
+  const lastErrorRef = useRef<string | null>(null);
+  const guideAutopilotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [healthPhase, setHealthPhase] = useState<HealthStatusPhase | null>(null);
   const freeCreditsRescueDone = useRef(false);
   const freeCreditsRescueUserId = useRef<string | null>(null);
@@ -2603,6 +2623,114 @@ export function ChatPanel({
     };
   };
 
+  useEffect(() => {
+    lastErrorRef.current = lastError;
+  }, [lastError]);
+
+  useEffect(() => {
+    guideAutopilotRef.current = guideAutopilotUi;
+  }, [guideAutopilotUi]);
+
+  const buildGuideSuggestionContext = useCallback((): GafcoreChatSuggestionContext => {
+    return {
+      messages,
+      files: files.map((f) => ({ name: f.name, content: f.content })),
+      mode,
+      factoryMode,
+      visualEditOn,
+      multiAgentMode,
+      factoryAutoDeploy,
+      lastError: lastErrorRef.current,
+      pipelineStatus,
+      validationLabel,
+    };
+  }, [
+    messages,
+    files,
+    mode,
+    factoryMode,
+    visualEditOn,
+    multiAgentMode,
+    factoryAutoDeploy,
+    pipelineStatus,
+    validationLabel,
+  ]);
+
+  const tryAdvanceGuideAutopilot = useCallback(async () => {
+    if (loading || sendInFlightRef.current || factoryMode || visualEditOn || mode !== "build") {
+      return;
+    }
+    const ga = guideAutopilotRef.current;
+    if (ga.paused) return;
+
+    const ctx = buildGuideSuggestionContext();
+
+    if (!ga.active) {
+      if (!shouldEnableGuideAutopilot(ctx)) return;
+      const started = { active: true, paused: false, pauseReason: null, lastStepId: null };
+      guideAutopilotRef.current = started;
+      setGuideAutopilotUi(started);
+    }
+
+    if (allGuideStepsCompleted(ctx)) {
+      const done = createGuideAutopilotState();
+      guideAutopilotRef.current = done;
+      setGuideAutopilotUi(done);
+      toast.success("Guía del proyecto completada. Revisa el preview y publica cuando quieras.", {
+        duration: 8000,
+      });
+      return;
+    }
+
+    const err = lastErrorRef.current;
+    if (isBlockingPreviewError(err)) {
+      const steps = getGafcoreChatNextSteps(ctx);
+      const fixStep =
+        steps.find((s) => s.id === "guide-fix-now") ??
+        steps.find((s) => s.status === "current") ??
+        null;
+      if (fixStep && fixStep.id !== ga.lastStepId) {
+        guideAutopilotRef.current = { ...guideAutopilotRef.current, lastStepId: fixStep.id };
+        setGuideAutopilotUi(guideAutopilotRef.current);
+        toast.message("Guía: corrigiendo error del preview…", { duration: 5000 });
+        await sendRef.current?.(buildAutopilotInstruction(fixStep));
+      } else {
+        const paused = {
+          active: true,
+          paused: true,
+          pauseReason: "Corrige el error del preview (Empezar de cero o responde en el chat).",
+          lastStepId: ga.lastStepId,
+        };
+        guideAutopilotRef.current = paused;
+        setGuideAutopilotUi(paused);
+      }
+      return;
+    }
+
+    const step = pickAutopilotStep(ctx, ga.lastStepId);
+    if (!step || step.id === "guide-1") return;
+
+    const nextGa = { ...guideAutopilotRef.current, lastStepId: step.id };
+    guideAutopilotRef.current = nextGa;
+    setGuideAutopilotUi(nextGa);
+    toast.message(`Guía automática: ${step.label}`, { duration: 5000 });
+    await sendRef.current?.(buildAutopilotInstruction(step));
+  }, [
+    loading,
+    factoryMode,
+    visualEditOn,
+    mode,
+    buildGuideSuggestionContext,
+  ]);
+
+  const scheduleGuideAutopilotAdvance = useCallback(() => {
+    if (guideAutopilotTimerRef.current) clearTimeout(guideAutopilotTimerRef.current);
+    guideAutopilotTimerRef.current = setTimeout(() => {
+      guideAutopilotTimerRef.current = null;
+      void tryAdvanceGuideAutopilot();
+    }, GUIDE_AUTOPILOT_DELAY_MS);
+  }, [tryAdvanceGuideAutopilot]);
+
   const send = async (text?: string) => {
     const raw = (text ?? input).trim();
     const pendingSnapshot = [...pendingComposerImages];
@@ -2620,6 +2748,11 @@ export function ChatPanel({
         ? "Usa la imagen de referencia adjunta en los archivos del proyecto."
         : "");
     if (!coreText && pendingSnapshot.length === 0) return;
+    if (raw && guideAutopilotRef.current.paused) {
+      const resumed = { ...guideAutopilotRef.current, paused: false, pauseReason: null };
+      guideAutopilotRef.current = resumed;
+      setGuideAutopilotUi(resumed);
+    }
     /** Bloquear si no alcanza 1 crédito: el denominador de la UI puede ser 10 aunque `balance` sea 0 (plan gratis), y antes no se bloqueaba y el error del proveedor parecía “fallo de conexión”. */
     const noQuota =
       !isAdmin &&
@@ -2635,6 +2768,7 @@ export function ChatPanel({
     }
     const conversational = isConversationalOnly(raw) && pendingSnapshot.length === 0;
     const effectiveBuild = mode === "build" && !conversational;
+    let scheduleGuideAfterBuild = false;
 
     let buildContextFiles = files;
     let isFreshProject = false;
@@ -2984,6 +3118,9 @@ export function ChatPanel({
 
         if (filesToApply.length > 0) {
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
+          if (effectiveBuild && !aiReplyNeedsUserInput(replyText)) {
+            scheduleGuideAfterBuild = true;
+          }
         } else {
           toast.error(
             "No pude generar archivos. Prueba: «Crea landing de [tu negocio] con hero y formulario».",
@@ -3135,7 +3272,32 @@ export function ChatPanel({
           appendMessageDeduped("ai", publishGuide);
           scrollChatToBottomSoon("auto");
           void persistMessage("assistant", publishGuide);
+          if (
+            !hasBlockingValidationIssues(issues) &&
+            !isBlockingPreviewError(lastErrorRef.current) &&
+            !aiReplyNeedsUserInput(replyText)
+          ) {
+            scheduleGuideAfterBuild = true;
+          }
         }
+      }
+
+      if (effectiveBuild && aiReplyNeedsUserInput(replyText)) {
+        const paused = {
+          active: true,
+          paused: true,
+          pauseReason: extractGuidePauseHint(replyText),
+          lastStepId: guideAutopilotRef.current.lastStepId,
+        };
+        guideAutopilotRef.current = paused;
+        setGuideAutopilotUi(paused);
+        const pauseMsg =
+          `📋 **Guía en pausa** — ${extractGuidePauseHint(replyText)}\n\n` +
+          "Responde en el chat y pulsa **Construir** para continuar con el siguiente paso.";
+        appendMessageDeduped("ai", pauseMsg);
+        scrollChatToBottomSoon("auto");
+        void persistMessage("assistant", pauseMsg);
+        scheduleGuideAfterBuild = false;
       }
     } catch (error: any) {
       if (
@@ -3189,6 +3351,9 @@ export function ChatPanel({
       if (myEpoch === requestEpochRef.current) {
         setLoading(false);
         setHealthPhase(null);
+        if (scheduleGuideAfterBuild && effectiveBuild && !guideAutopilotRef.current.paused) {
+          scheduleGuideAutopilotAdvance();
+        }
       }
       refreshCredits();
     }
@@ -3424,6 +3589,7 @@ export function ChatPanel({
         <ChatNextStepSuggestions
           steps={nextSteps}
           disabled={loading}
+          autopilotStatus={guideAutopilotStatusMessage(guideAutopilotUi)}
           onSelect={(step) => {
             if (loading) return;
             setInput(step.prompt);

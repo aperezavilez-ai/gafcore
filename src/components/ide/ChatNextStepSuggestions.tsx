@@ -13,7 +13,12 @@ type Props = {
 /**
  * Guía completa encima del compositor del chat.
  */
-export function ChatNextStepSuggestions({ steps, disabled, onSelect }: Props) {
+export function ChatNextStepSuggestions({
+  steps,
+  disabled,
+  onSelect,
+  autopilotStatus,
+}: Props & { autopilotStatus?: string | null }) {
   if (steps.length === 0) return null;
 
   const recommended = getRecommendedNextStep(steps);
@@ -31,17 +36,19 @@ export function ChatNextStepSuggestions({ steps, disabled, onSelect }: Props) {
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold text-foreground">Guía del proyecto</p>
           <p className="text-[10px] leading-snug text-muted-foreground">
-            {recommended ? (
+            {autopilotStatus ? (
+              <span className="font-medium text-primary">{autopilotStatus}</span>
+            ) : recommended ? (
               <>
                 <span className="font-medium text-foreground">
                   Siguiente: {recommended.label.replace(/^\d+\.\s*|^⚠\s*/, "")}
                 </span>
                 {" · "}
-                {completedCount}/{steps.length} completados. Pulsa un paso → se carga el prompt abajo →
-                envía con <span className="font-medium">Construir</span>.
+                {completedCount}/{steps.length} completados. Tras describir tu proyecto, la guía
+                avanza sola; si hace falta tu ayuda, te lo pedimos aquí.
               </>
             ) : (
-              "Pulsa un paso para cargar el prompt en el recuadro de abajo."
+              "Describe tu proyecto abajo y pulsa Construir; los pasos continúan automáticamente."
             )}
           </p>
         </div>

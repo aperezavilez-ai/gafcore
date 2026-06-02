@@ -834,15 +834,30 @@ function repairListaProcesadaMap(source: string): string {
   return out;
 }
 
+function dedupeReactDefaultImports(source: string): string {
+  let seen = false;
+  return source
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (!/^import\s+React\b/.test(t) && !/^import\s+React,/.test(t)) return true;
+      if (seen) return false;
+      seen = true;
+      return true;
+    })
+    .join("\n");
+}
+
 function ensureReactImportInJsxSource(source: string): string {
-  if (/from\s+["']react["']/i.test(source)) return source;
-  if (/import\s+React\b/.test(source) || /import\s*\*\s*as\s+React\b/.test(source)) {
-    return source;
+  let out = dedupeReactDefaultImports(source);
+  if (/from\s+["']react["']/i.test(out)) return out;
+  if (/import\s+React\b/.test(out) || /import\s*\*\s*as\s+React\b/.test(out)) {
+    return out;
   }
-  if (/\bReact\.[A-Z]/.test(source)) {
-    return `import React from "react";\n${source}`;
+  if (/\bReact\.[A-Z]/.test(out)) {
+    return `import React from "react";\n${out}`;
   }
-  return source;
+  return out;
 }
 
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
