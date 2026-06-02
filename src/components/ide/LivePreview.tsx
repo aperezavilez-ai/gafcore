@@ -257,6 +257,7 @@ export function LivePreview({ files }: { files: FileItem[] }) {
 (function(){
   const MODULES = ${JSON.stringify(modulesPayload)};
   const ENTRY = ${JSON.stringify(entry)};
+  const REACT_SHIM = ${JSON.stringify(PREVIEW_REACT_SHIM_NAME)};
   const blobMap = {};
 
   function repairJsxGlue(code) {
@@ -267,6 +268,19 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     const presets = [["env",{ modules:false, targets:"defaults" }], ["react", { runtime: "automatic", importSource: "react" }]];
     if (/\\.(ts|tsx)$/i.test(filename)) presets.push(["typescript",{ allExtensions:true, isTSX:true }]);
     return Babel.transform(repairJsxGlue(code), { filename, presets, sourceMaps: "inline" }).code;
+  }
+
+  /** Babel inyecta imports de react/jsx-runtime tras el rewrite del IDE — deben apuntar al shim único. */
+  function rewriteTranspiledReactImports(code) {
+    var shimRef = "app:" + REACT_SHIM;
+    var out = code;
+    out = out.replace(/from\\s*["']react\\/jsx-runtime["']/g, 'from "' + shimRef + '"');
+    out = out.replace(/from\\s*["']react\\/jsx-dev-runtime["']/g, 'from "' + shimRef + '"');
+    out = out.replace(/from\\s*["']react["']/g, 'from "' + shimRef + '"');
+    if (/\\bReact\\./.test(out) && !/import\\s+(?:\\*\\s*as\\s+)?React\\b/.test(out)) {
+      out = 'import React from "' + shimRef + '";\\n' + out;
+    }
+    return out;
   }
 
   function neutralizeCssModuleSpecifiers(code) {
@@ -379,7 +393,7 @@ export function LivePreview({ files }: { files: FileItem[] }) {
   window.addEventListener('unhandledrejection', (ev) => showError(ev.reason));
 
   try {
-    const transpiled = MODULES.map(m => ({ name: m.name, code: transpile(m.code, m.name) }));
+    const transpiled = MODULES.map(m => ({ name: m.name, code: rewriteTranspiledReactImports(transpile(m.code, m.name)) }));
     const byName = {};
     transpiled.forEach(m => { byName[m.name] = m; });
 
@@ -425,9 +439,9 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     const mountSrc = isMain
       ? \`import "\${entryUrl}";\`
       : \`
-        import React from "react";
+        import React from "\${blobMap[REACT_SHIM]}";
         import * as Entry from "\${entryUrl}";
-        import { createRoot } from "react-dom/client";
+        import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
         function pickComponent(mod) {
           if (!mod) return null;
           const candidates = [mod.default, mod.App, mod.Aplicacion, mod['Aplicación'], mod.Main, mod.Root, mod.Page];

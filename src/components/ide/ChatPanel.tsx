@@ -102,6 +102,7 @@ import {
   isPreviewAutofixAiEnabled,
 } from "@/lib/gafcore-chat-autofix.shared";
 import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
+import { GAFCORE_DEFAULT_TEMPLATE_FILES } from "@/lib/gafcore-templates.shared";
 import { recordProjectAiMemory } from "@/lib/gafcore-ai-memory.functions";
 import { listGafcoreActiveAiPlugins } from "@/lib/gafcore-extensions.functions";
 import { fetchUserExtensionInstalls } from "@/lib/gafcore-extensions-client";
@@ -793,6 +794,34 @@ export function ChatPanel({
     setAutoFixActive(false);
     setLastError(null);
   }, [cancelPreviewAutofixInFlight]);
+
+  const resetProjectToBlank = useCallback(async () => {
+    cancelPreviewAutofixInFlight();
+    autoFixAttemptedErrorsRef.current.clear();
+    autoFixSessionCountRef.current = 0;
+    setLastError(null);
+    const blank = ensureReactPackageJson(
+      sanitizeProjectJsxFiles(
+        GAFCORE_DEFAULT_TEMPLATE_FILES.map((f) => ({
+          name: f.name,
+          language: f.language,
+          content: f.content,
+        })),
+      ),
+    ) as FileItem[];
+    setFiles(blank);
+    filesRef.current = blank;
+    if (projectId && user?.id) {
+      const saved = await syncFilesToDb(blank);
+      if (!saved.ok) {
+        toast.message("Canvas reiniciado en el editor", {
+          description: "No se pudo guardar en la nube; al reconectar se sincronizará.",
+        });
+      }
+    }
+    onCodeGenerated?.();
+    toast.success("Canvas en blanco. Describe qué quieres y pulsa Construir.");
+  }, [cancelPreviewAutofixInFlight, onCodeGenerated, projectId, user?.id]);
 
   useEffect(() => {
     const onCancelAutofix = () => cancelPreviewAutofixInFlight();
@@ -3471,6 +3500,13 @@ export function ChatPanel({
                   className="rounded-md bg-destructive px-2.5 py-1 text-[11px] font-semibold text-destructive-foreground hover:opacity-90"
                 >
                   Intenta arreglarlo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void resetProjectToBlank()}
+                  className="rounded-md border border-primary/50 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/15"
+                >
+                  Empezar de cero
                 </button>
                 <button
                   onClick={() => setLastError(null)}
