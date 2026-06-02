@@ -672,57 +672,13 @@ function stripRecursiveIdeLinks(source: string): string {
 }
 
 /**
- * Defensa local contra "Objects are not valid as a React child" (React error #31).
- *
- * Detecta variables declaradas como objetos/arrays literales y envuelve sus
- * usos en posición JSX con un wrapper seguro que:
- *   - Si es ReactElement (tiene $$typeof) → lo deja pasar.
- *   - Si es objeto plano → muestra title/label/name o cadena vacía.
- *   - Si es array → no lo toca (asumimos que ya tenían .map).
- *   - Si es primitivo → lo deja pasar.
- *
- * Esto evita que un bug del LLM ("renderizar `{feature}` cuando feature es
- * objeto") rompa toda la página. El render no será perfecto, pero el preview
- * no quedará en pantalla roja y el auto-fix con IA podrá iterar.
+ * Deshace ternarios gigantes inyectados por versiones anteriores del reparador JSX.
+ * Esos wrappers rompían Babel en el preview (SyntaxError) aunque la IA hubiera generado código válido.
  */
-function safeJsxChildTernary(expr: string): string {
-  return (
-    `(${expr} == null) ? null :` +
-    ` (typeof ${expr} === 'string' || typeof ${expr} === 'number' || typeof ${expr} === 'boolean') ? ${expr} :` +
-    ` (typeof ${expr} === 'object' && ${expr} != null && ${expr}.$$typeof) ? ${expr} :` +
-    ` Array.isArray(${expr}) ? null :` +
-    ` (typeof ${expr} === 'object' && 'type' in ${expr} && 'props' in ${expr}` +
-    ` ? (${expr}.props?.children ?? ${expr}.props?.title ?? ${expr}.props?.label ?? '') :` +
-    ` (typeof ${expr} === 'object' ? (${expr}.title ?? ${expr}.label ?? ${expr}.name ?? ${expr}.heading ?? ${expr}.value ?? ${expr}.text ?? ${expr}.desc ?? '') : null)`
-  );
-}
-
-function safeJsxChildExpr(name: string): string {
-  return `{${safeJsxChildTernary(name)}}`;
-}
-
-/** Envuelve expresiones compuestas en JSX: `{item.stats}`, `{row.icon}`, etc. */
-function fixMemberAccessAsJsxChild(source: string): string {
+function unwrapLegacySafeJsxWrappers(source: string): string {
   return source.replace(
-    /\{([a-zA-Z_$][\w$]*(?:\.[a-zA-Z_$][\w$]+)+)\}(?!\s*[/.\w])/g,
-    (match, expr: string) => {
-      if (
-        /==\s*null|typeof\s|\.map\s*\(|createElement|__gafcore|safeJsx/i.test(expr) ||
-        /\.(length|map|filter|slice|join|includes|toFixed|toString)\b/.test(expr)
-      ) {
-        return match;
-      }
-      return `{${safeJsxChildTernary(expr)}}`;
-    },
-  );
-}
-
-/** `.map(x => x.campo)` cuando campo puede ser objeto (testimonios, features, stats). */
-function fixMapReturningMember(source: string): string {
-  return source.replace(
-    /\.map\(\s*\(?(\w+)\)?\s*=>\s*\1\.([a-zA-Z_$][\w$]*)\s*\)/g,
-    (_m, param: string, prop: string) =>
-      `.map((${param}) => (${safeJsxChildTernary(`${param}.${prop}`)}))`,
+    /\{\((\w+(?:\.\w+)*)\s*==\s*null\)\s*\?[\s\S]*?\$\$typeof\)[\s\S]*?:\s*null\)\}/g,
+    (_m, expr: string) => `{${expr}}`,
   );
 }
 
@@ -761,114 +717,22 @@ function fixBareLucideComponentInJsx(source: string): string {
   return out;
 }
 
-/** Parámetros de `.map` renderizados como `{item}` sin `.campo`. */
-function fixAllMapCallbackBareChildren(source: string): string {
-  let out = source;
-  const params = new Set<string>();
-  const mapParamRe =
-    /\.map\s*\(\s*(?:function\s*)?(?:\(\s*(\w+)\s*\)|(\w+))\s*(?::[^)]*)?\s*=>/g;
-  let m: RegExpExecArray | null;
-  while ((m = mapParamRe.exec(source))) {
-    const p = m[1] || m[2];
-    if (p) params.add(p);
-  }
-  const mapFnRe = /\.map\s*\(\s*function\s*\(\s*(\w+)\s*\)/g;
-  while ((m = mapFnRe.exec(source))) {
-    params.add(m[1]);
-  }
-  for (const param of params) {
-    const bareChild = new RegExp(`\\{${param}\\}(?!\\.)`, "g");
-    out = out.replace(bareChild, safeJsxChildExpr(param));
-  }
-  return out;
-}
-
-/** `{features}` con array de objetos (sin .map) → filas de texto seguras. */
-function fixObjectArrayRenderedAsChild(source: string, arrayNames: Set<string>): string {
-  let out = source;
-  for (const name of arrayNames) {
-    const whole = new RegExp(`\\{${name}\\}(?!\\s*\\.map)`, "g");
-    out = out.replace(
-      whole,
-      `{${name}.map((__row, __i) => (typeof __row === "object" && __row != null && __row.$$typeof ? __row : (typeof __row === "string" || typeof __row === "number") ? __row : String(__row?.title ?? __row?.label ?? __row?.text ?? __row?.name ?? "")))}`,
-    );
-  }
-  return out;
-}
-
+/**
+ * Reparaciones ligeras de hijos JSX inválidos.
+ * La coerción en runtime la hace el shim del preview (`__gafcoreCoerceChild`).
+ */
 function fixObjectAsJsxChild(source: string): string {
-  const objectVars = new Set<string>();
-  const objectArrayVars = new Set<string>();
-  const declRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*([\[{])/g;
-  let m: RegExpExecArray | null;
-  while ((m = declRe.exec(source))) {
-    if (m[2] === "[") {
-      const after = source.slice(declRe.lastIndex, declRe.lastIndex + 12);
-      if (!/^\s*\{/.test(after)) continue;
-      objectArrayVars.add(m[1]);
-    }
-    objectVars.add(m[1]);
-  }
+  let out = unwrapLegacySafeJsxWrappers(source);
 
-  const useStateArrayRe =
-    /\[\s*(\w+)\s*,\s*\w+\s*\]\s*=\s*useState\s*(?:<[^>]*>\s*)?\(\s*\[\s*\{/g;
-  while ((m = useStateArrayRe.exec(source))) {
-    objectArrayVars.add(m[1]);
-  }
-
-  let out = source;
-
-  // `.map(item => item)` cuando item es objeto → mostrar campo legible, no el objeto entero.
-  out = out.replace(
-    /\.map\(\s*\(?(\w+)\)?\s*=>\s*\1\s*\)/g,
-    (match, name: string) => {
-      const safe =
-        `(typeof ${name} === 'object' && ${name} != null && !${name}.$$typeof` +
-        ` ? (${name}.title ?? ${name}.label ?? ${name}.name ?? ${name}.heading ?? '') : ${name})`;
-      return `.map((${name}) => ${safe})`;
-    },
+  // `.map(item => item)` con objeto → campo legible corto (sin ternarios anidados).
+  out = out.replace(/\.map\(\s*\(?(\w+)\)?\s*=>\s*\1\s*\)/g, (_m, name: string) =>
+    `.map((${name}) => (typeof ${name} === "object" && ${name} != null ? String(${name}.title ?? ${name}.label ?? ${name}.name ?? "") : ${name}))`,
   );
 
-  // Corrige `{ {...obj} }` usado por error como child JSX.
-  out = out.replace(
-    /\{\s*\{\s*\.\.\.\s*(\w+)\s*\}\s*\}/g,
-    (_m, name: string) => safeJsxChildExpr(name),
-  );
-
-  out = fixAllMapCallbackBareChildren(out);
-
-  // Si se mapea un array de objetos y se renderiza `{item}` en JSX,
-  // reemplaza por un wrapper seguro para evitar React #31.
-  //
-  // Ejemplo:
-  //   features.map((feature) => <li>{feature}</li>)
-  // → features.map((feature) => <li>{(...safe...)}</li>)
-  for (const listName of objectArrayVars) {
-    const mapParamRe = new RegExp(
-      `${listName}\\.map\\(\\s*\\(?\\s*(\\w+)\\s*\\)?\\s*=>`,
-      "g",
-    );
-    const callbackParams = new Set<string>();
-    let mapMatch: RegExpExecArray | null;
-    while ((mapMatch = mapParamRe.exec(out))) {
-      callbackParams.add(mapMatch[1]);
-    }
-    for (const param of callbackParams) {
-      const bareChild = new RegExp(`\\{${param}\\}(?!\\.)`, "g");
-      out = out.replace(bareChild, safeJsxChildExpr(param));
-    }
-  }
-
-  for (const name of objectVars) {
-    const bareChild = new RegExp(`\\{${name}\\}(?!\\.)`, "g");
-    out = out.replace(bareChild, safeJsxChildExpr(name));
-  }
-
-  out = fixObjectArrayRenderedAsChild(out, objectArrayVars);
+  // `{ {...obj} }` como hijo JSX → null (spread inválido como child).
+  out = out.replace(/\{\s*\{\s*\.\.\.\s*(\w+)\s*\}\s*\}/g, "{null}");
 
   out = fixComponentFieldAsJsxChild(out);
-  out = fixMapReturningMember(out);
-  out = fixMemberAccessAsJsxChild(out);
   return fixBareLucideComponentInJsx(out);
 }
 
@@ -971,7 +835,8 @@ function repairListaProcesadaMap(source: string): string {
 }
 
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
-  let out = repairListaProcesadaMap(source);
+  let out = unwrapLegacySafeJsxWrappers(source);
+  out = repairListaProcesadaMap(out);
   out = out.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
   out = out.replace(/\s+(https?:\/\/[^\s"'<>]+)(?=\s+[a-zA-Z_][\w-]*=)/g, " ");
@@ -989,7 +854,7 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
 
 export function repairCommonJsxSyntaxErrors(source: string): string {
   let out = source;
-  for (let pass = 0; pass < 6; pass++) {
+  for (let pass = 0; pass < 2; pass++) {
     const next = repairCommonJsxSyntaxErrorsPass(out);
     if (next === out) break;
     out = next;
