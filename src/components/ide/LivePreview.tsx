@@ -273,14 +273,10 @@ export function LivePreview({ files }: { files: FileItem[] }) {
   /** Babel inyecta imports de react/jsx-runtime tras el rewrite del IDE — deben apuntar al shim único. */
   function rewriteTranspiledReactImports(code) {
     var shimRef = "app:" + REACT_SHIM;
-    var out = code;
-    out = out.replace(/from\\s*["']react\\/jsx-runtime["']/g, 'from "' + shimRef + '"');
-    out = out.replace(/from\\s*["']react\\/jsx-dev-runtime["']/g, 'from "' + shimRef + '"');
-    out = out.replace(/from\\s*["']react["']/g, 'from "' + shimRef + '"');
-    if (/\\bReact\\./.test(out) && !/import\\s+(?:\\*\\s*as\\s+)?React\\b/.test(out)) {
-      out = 'import React from "' + shimRef + '";\\n' + out;
-    }
-    return out;
+    return code
+      .replace(/from\\s*["']react\\/jsx-runtime["']/g, 'from "' + shimRef + '"')
+      .replace(/from\\s*["']react\\/jsx-dev-runtime["']/g, 'from "' + shimRef + '"')
+      .replace(/from\\s*["']react["']/g, 'from "' + shimRef + '"');
   }
 
   function neutralizeCssModuleSpecifiers(code) {

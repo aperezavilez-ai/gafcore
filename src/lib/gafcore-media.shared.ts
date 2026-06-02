@@ -835,10 +835,11 @@ function repairListaProcesadaMap(source: string): string {
 }
 
 function ensureReactImportInJsxSource(source: string): string {
+  if (/from\s+["']react["']/i.test(source)) return source;
   if (/import\s+React\b/.test(source) || /import\s*\*\s*as\s+React\b/.test(source)) {
     return source;
   }
-  if (/\bReact\./.test(source)) {
+  if (/\bReact\.[A-Z]/.test(source)) {
     return `import React from "react";\n${source}`;
   }
   return source;
