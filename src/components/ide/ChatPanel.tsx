@@ -59,6 +59,7 @@ import {
   createGuideAutopilotState,
   extractGuidePauseHint,
   GUIDE_AUTOPILOT_DELAY_MS,
+  MAX_GUIDE_AUTOPILOT_CHAIN,
   guideAutopilotStatusMessage,
   isBlockingPreviewError,
   pickAutopilotStep,
@@ -183,7 +184,7 @@ import {
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
 /** Evita chat/preview “trabado” si el stream o la validación no terminan. */
-const CHAT_REQUEST_TIMEOUT_MS = 180_000;
+const CHAT_REQUEST_TIMEOUT_MS = 120_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
 
@@ -2663,11 +2664,24 @@ export function ChatPanel({
     const ga = guideAutopilotRef.current;
     if (ga.paused) return;
 
+    if (ga.autoStepsRun >= MAX_GUIDE_AUTOPILOT_CHAIN) {
+      const paused = {
+        active: true,
+        paused: true,
+        pauseReason: `Límite de ${MAX_GUIDE_AUTOPILOT_CHAIN} pasos automáticos. Pulsa Construir para continuar la guía.`,
+        lastStepId: ga.lastStepId,
+        autoStepsRun: ga.autoStepsRun,
+      };
+      guideAutopilotRef.current = paused;
+      setGuideAutopilotUi(paused);
+      return;
+    }
+
     const ctx = buildGuideSuggestionContext();
 
     if (!ga.active) {
       if (!shouldEnableGuideAutopilot(ctx)) return;
-      const started = { active: true, paused: false, pauseReason: null, lastStepId: null };
+      const started = { active: true, paused: false, pauseReason: null, lastStepId: null, autoStepsRun: 0 };
       guideAutopilotRef.current = started;
       setGuideAutopilotUi(started);
     }
@@ -2696,10 +2710,10 @@ export function ChatPanel({
         await sendRef.current?.(buildAutopilotInstruction(fixStep));
       } else {
         const paused = {
+          ...guideAutopilotRef.current,
           active: true,
           paused: true,
           pauseReason: "Corrige el error del preview (Empezar de cero o responde en el chat).",
-          lastStepId: ga.lastStepId,
         };
         guideAutopilotRef.current = paused;
         setGuideAutopilotUi(paused);
@@ -2710,7 +2724,11 @@ export function ChatPanel({
     const step = pickAutopilotStep(ctx, ga.lastStepId);
     if (!step || step.id === "guide-1") return;
 
-    const nextGa = { ...guideAutopilotRef.current, lastStepId: step.id };
+    const nextGa = {
+      ...guideAutopilotRef.current,
+      lastStepId: step.id,
+      autoStepsRun: guideAutopilotRef.current.autoStepsRun + 1,
+    };
     guideAutopilotRef.current = nextGa;
     setGuideAutopilotUi(nextGa);
     toast.message(`Guía automática: ${step.label}`, { duration: 5000 });
@@ -2932,7 +2950,7 @@ export function ChatPanel({
     const chatTimeoutId = window.setTimeout(() => {
       if (!sendInFlightRef.current) return;
       ac.abort();
-      toast.error("La solicitud tardó demasiado. Pulsa el cuadrado (detener) o envía de nuevo.", {
+      toast.error("La solicitud tardó demasiado (2 min). Pulsa el cuadrado para detener o envía de nuevo.", {
         duration: 8000,
       });
     }, CHAT_REQUEST_TIMEOUT_MS);
@@ -3079,7 +3097,7 @@ export function ChatPanel({
           replyText = sanitizeUserFacingAiText(
             softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto aplicado al preview.`),
           );
-        } else if (filesToApply.length === 0) {
+        } else if (filesToApply.length === 0 && !/\[GUÍA GAFCORE/i.test(instruction)) {
           setLoading(true);
           setHealthPhase("optimizing_design");
           const strictInstruction =
@@ -3284,10 +3302,10 @@ export function ChatPanel({
 
       if (effectiveBuild && aiReplyNeedsUserInput(replyText)) {
         const paused = {
+          ...guideAutopilotRef.current,
           active: true,
           paused: true,
           pauseReason: extractGuidePauseHint(replyText),
-          lastStepId: guideAutopilotRef.current.lastStepId,
         };
         guideAutopilotRef.current = paused;
         setGuideAutopilotUi(paused);

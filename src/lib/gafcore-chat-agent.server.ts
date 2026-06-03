@@ -9,7 +9,7 @@ import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { logDev } from "@/lib/gafcore-logger.server";
 
-const MAX_ATTEMPTS = 2;
+const MAX_ATTEMPTS = 1;
 
 export type AgentChatRunResult = {
   reply: string;

@@ -15,9 +15,18 @@ export type GuideAutopilotState = {
   paused: boolean;
   pauseReason: string | null;
   lastStepId: string | null;
+  /** Pasos auto-enviados en esta sesión de guía. */
+  autoStepsRun: number;
 };
 
-export const GUIDE_AUTOPILOT_DELAY_MS = 1800;
+export const GUIDE_AUTOPILOT_DELAY_MS = 2500;
+
+/** Máximo de pasos automáticos tras un mensaje del usuario (evita 15+ min en cadena). */
+export const MAX_GUIDE_AUTOPILOT_CHAIN = 3;
+
+export function shouldUseFastChatPipeline(instruction: string): boolean {
+  return /\[GUÍA GAFCORE/i.test(instruction);
+}
 
 const AI_NEEDS_USER_RE =
   /\?(?:\s|$)|¿|necesito que (?:me )?(?:digas|indiques|confirmes|elijas)|ind[ií]came|confirma(?:me)?|cu[aá]l prefieres|qu[eé] (?:color|nombre|texto|logo)|antes de continuar|falta (?:que|informaci)/i;
@@ -26,7 +35,7 @@ const BLOCKING_PREVIEW_RE =
   /syntaxerror|unexpected token|react is not defined|already been declared|script error/i;
 
 export function createGuideAutopilotState(): GuideAutopilotState {
-  return { active: false, paused: false, pauseReason: null, lastStepId: null };
+  return { active: false, paused: false, pauseReason: null, lastStepId: null, autoStepsRun: 0 };
 }
 
 export function shouldEnableGuideAutopilot(ctx: GafcoreChatSuggestionContext): boolean {

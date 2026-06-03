@@ -28,9 +28,7 @@ import {
 } from "@/lib/gafcore-ai-gateway.server";
 import { runGafcoreAgentChatCompletion } from "@/lib/gafcore-chat-agent.server";
 import { resolveModelForGafcoreChat } from "@/services/ai/chat-brain.server";
-import { runSafeBuildQualityLoop } from "@/services/ai/safe-build.server";
 import type { SafeBuildMeta } from "@/services/ai/safe-build.shared";
-import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
 import {
   getPersistedChatCache,
@@ -122,28 +120,11 @@ async function finalizeChatDeliveryWithSafeBuild(input: {
     input.rawFiles,
   );
 
-  if (!isSubstantiveBuildRequest(input.instruction)) {
-    return {
-      reply: input.replyRaw,
-      files: delivered,
-      safeBuild: { phase: "ready", repaired: false, skipped: true },
-    };
-  }
-
-  const loop = await runSafeBuildQualityLoop({
-    instruction: input.instruction,
-    reply: input.replyRaw,
-    files: delivered as ProjFile[],
-    contextFiles: input.contextFiles,
-    messages: input.messages,
-    gateway: input.gateway,
-    deepMode: /^\[modo profundo\]/i.test(input.instruction.trim()),
-  });
-
+  // Validación en cliente (ChatPanel); omitir bucle Safe-Build servidor (ahorra 2–3 llamadas IA / petición).
   return {
-    reply: loop.reply,
-    files: loop.files,
-    safeBuild: loop.meta,
+    reply: input.replyRaw,
+    files: delivered,
+    safeBuild: { phase: "ready", repaired: false, skipped: true },
   };
 }
 

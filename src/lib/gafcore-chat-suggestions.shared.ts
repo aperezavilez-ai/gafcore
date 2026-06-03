@@ -236,7 +236,7 @@ function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreCh
     {
       id: "guide-1",
       label: "1. Describe tu proyecto",
-      done: hasIntent,
+      done: hasIntent && (hasAiBuild || started),
       prompt:
         lastMessage(ctx.messages, "user").trim().length >= 20
           ? lastMessage(ctx.messages, "user").trim()
