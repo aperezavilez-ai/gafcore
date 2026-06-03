@@ -3284,12 +3284,9 @@ export function ChatPanel({
           if (!issues.some((i) => i.severity === "error")) {
             setLastError(null);
           }
-          const publishGuide =
-            "✅ Build aplicado. Revisa la vista previa y, cuando quieras, pulsa **Publicar**. " +
-            "Si algo falla al publicar, te ayudo a corregir y reintentar.";
-          appendMessageDeduped("ai", publishGuide);
-          scrollChatToBottomSoon("auto");
-          void persistMessage("assistant", publishGuide);
+          toast.success("Build aplicado. Revisa el preview y publica cuando quieras.", {
+            duration: 6000,
+          });
           if (
             !hasBlockingValidationIssues(issues) &&
             !isBlockingPreviewError(lastErrorRef.current) &&
@@ -3309,12 +3306,10 @@ export function ChatPanel({
         };
         guideAutopilotRef.current = paused;
         setGuideAutopilotUi(paused);
-        const pauseMsg =
-          `📋 **Guía en pausa** — ${extractGuidePauseHint(replyText)}\n\n` +
-          "Responde en el chat y pulsa **Construir** para continuar con el siguiente paso.";
-        appendMessageDeduped("ai", pauseMsg);
-        scrollChatToBottomSoon("auto");
-        void persistMessage("assistant", pauseMsg);
+        toast.message(`Guía en pausa: ${extractGuidePauseHint(replyText)}`, {
+          description: "Responde abajo y pulsa Construir para continuar.",
+          duration: 8000,
+        });
         scheduleGuideAfterBuild = false;
       }
     } catch (error: any) {
@@ -3604,26 +3599,6 @@ export function ChatPanel({
             : "max(0.75rem, env(safe-area-inset-bottom, 0px))",
         }}
       >
-        <ChatNextStepSuggestions
-          steps={nextSteps}
-          disabled={loading}
-          autopilotStatus={guideAutopilotStatusMessage(guideAutopilotUi)}
-          onSelect={(step) => {
-            if (loading) return;
-            setInput(step.prompt);
-            setComposerHighlight(true);
-            window.setTimeout(() => setComposerHighlight(false), 2200);
-            requestAnimationFrame(() => {
-              composerSectionRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-              taRef.current?.focus();
-              const el = taRef.current;
-              if (el) {
-                el.selectionStart = el.selectionEnd = step.prompt.length;
-                el.scrollTop = el.scrollHeight;
-              }
-            });
-          }}
-        />
         <div className="px-2 pt-2 sm:px-3">
         {lastError && (
           <div
@@ -3728,6 +3703,26 @@ export function ChatPanel({
             ))}
           </div>
         ) : null}
+        <ChatNextStepSuggestions
+          steps={nextSteps}
+          disabled={loading}
+          autopilotStatus={guideAutopilotStatusMessage(guideAutopilotUi)}
+          onSelect={(step) => {
+            if (loading) return;
+            setInput(step.prompt);
+            setComposerHighlight(true);
+            window.setTimeout(() => setComposerHighlight(false), 2200);
+            requestAnimationFrame(() => {
+              composerSectionRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+              taRef.current?.focus();
+              const el = taRef.current;
+              if (el) {
+                el.selectionStart = el.selectionEnd = step.prompt.length;
+                el.scrollTop = el.scrollHeight;
+              }
+            });
+          }}
+        />
         <div
           className={`min-w-0 max-w-full rounded-2xl border bg-background shadow-sm transition focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/15 ${
             composerHighlight

@@ -1,4 +1,3 @@
-import { Check, ChevronRight, Lightbulb } from "lucide-react";
 import type { GafcoreChatNextStep } from "@/lib/gafcore-chat-suggestions.shared";
 import { getRecommendedNextStep } from "@/lib/gafcore-chat-suggestions.shared";
 import { cn } from "@/lib/utils";
@@ -8,56 +7,40 @@ type Props = {
   disabled?: boolean;
   /** Rellena el compositor con el prompt (no envía; el usuario pulsa Construir). */
   onSelect: (step: GafcoreChatNextStep) => void;
+  autopilotStatus?: string | null;
 };
 
-/**
- * Guía completa encima del compositor del chat.
- */
+/** Chips horizontales encima del recuadro de escritura (no dentro del hilo del chat). */
 export function ChatNextStepSuggestions({
   steps,
   disabled,
   onSelect,
   autopilotStatus,
-}: Props & { autopilotStatus?: string | null }) {
+}: Props) {
   if (steps.length === 0) return null;
 
   const recommended = getRecommendedNextStep(steps);
   const completedCount = steps.filter((s) => s.status === "completed").length;
 
   return (
-    <section
-      className="shrink-0 border-t border-border/60 bg-muted/25 px-2 py-2.5 md:px-3"
-      aria-label="Guía para crear tu proyecto"
-    >
-      <div className="mb-2 flex items-start gap-2">
-        <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-          <Lightbulb className="size-3.5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold text-foreground">Guía del proyecto</p>
-          <p className="text-[10px] leading-snug text-muted-foreground">
-            {autopilotStatus ? (
-              <span className="font-medium text-primary">{autopilotStatus}</span>
-            ) : recommended ? (
-              <>
-                <span className="font-medium text-foreground">
-                  Siguiente: {recommended.label.replace(/^\d+\.\s*|^⚠\s*/, "")}
-                </span>
-                {" · "}
-                {completedCount}/{steps.length} completados. Tras describir tu proyecto, la guía
-                avanza sola; si hace falta tu ayuda, te lo pedimos aquí.
-              </>
-            ) : (
-              "Describe tu proyecto abajo y pulsa Construir; los pasos continúan automáticamente."
-            )}
-          </p>
-        </div>
-      </div>
-
+    <div className="mb-2 min-w-0" aria-label="Pasos del proyecto">
+      {autopilotStatus ? (
+        <p className="mb-1.5 line-clamp-2 text-[10px] font-medium leading-snug text-primary">
+          {autopilotStatus}
+        </p>
+      ) : recommended ? (
+        <p className="mb-1.5 text-[10px] leading-snug text-muted-foreground">
+          <span className="font-medium text-foreground">
+            Siguiente: {recommended.label.replace(/^\d+\.\s*|^⚠\s*/, "")}
+          </span>
+          {" · "}
+          {completedCount}/{steps.length} completados
+        </p>
+      ) : null}
       <div
-        className="max-h-[min(42vh,280px)] space-y-1 overflow-y-auto overscroll-contain pr-0.5"
-        role="list"
-        aria-label="Pasos para crear el proyecto"
+        className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 [-webkit-overflow-scrolling:touch]"
+        role="group"
+        aria-label="Sugerencias para continuar tu proyecto"
       >
         {steps.map((step) => {
           const isCurrent = step.status === "current";
@@ -67,35 +50,25 @@ export function ChatNextStepSuggestions({
               key={step.id}
               type="button"
               disabled={disabled}
-              title={isDone ? `Completado — pulsa para reutilizar el prompt` : step.prompt}
+              title={step.prompt}
               onClick={() => onSelect(step)}
-              role="listitem"
               className={cn(
-                "flex w-full min-w-0 items-start gap-2 rounded-xl border px-3 py-2 text-left text-[11px] font-medium leading-snug transition",
-                "disabled:cursor-not-allowed",
+                "shrink-0 rounded-full border px-3 py-1.5 text-[11.5px] font-medium leading-tight shadow-sm transition",
+                "disabled:cursor-not-allowed disabled:opacity-45",
                 isDone &&
-                  "border-border/40 bg-background/30 text-muted-foreground opacity-70",
+                  "border-border/50 bg-muted/35 text-muted-foreground opacity-80",
                 isCurrent &&
-                  "border-primary/55 bg-primary/10 text-foreground shadow-sm ring-1 ring-primary/30",
+                  "border-primary/55 bg-primary/10 text-foreground ring-1 ring-primary/30",
                 !isDone &&
                   !isCurrent &&
-                  "border-border/70 bg-background/70 text-foreground hover:border-primary/45 hover:bg-primary/5",
+                  "border-border/80 bg-muted/50 text-foreground hover:border-primary/45 hover:bg-primary/10",
               )}
             >
-              {isDone ? (
-                <Check className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
-              ) : isCurrent ? (
-                <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
-              ) : (
-                <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border border-border text-[9px] text-muted-foreground">
-                  {step.order}
-                </span>
-              )}
-              <span className="min-w-0 flex-1 whitespace-normal">{step.label}</span>
+              {step.label.replace(/^\d+\.\s*/, "")}
             </button>
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
