@@ -1737,9 +1737,9 @@ export function ChatPanel({
     }
     setFiles(merged);
     filesRef.current = merged;
+    queueMicrotask(() => onCodeGenerated?.());
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
     await persistMergedToProjectDb(merged);
-    onCodeGenerated?.();
 
     try {
       const v = await callValidateSources({
@@ -1786,6 +1786,7 @@ export function ChatPanel({
         }
         setFiles(mergedForReturn);
         filesRef.current = mergedForReturn;
+        queueMicrotask(() => onCodeGenerated?.());
         await persistMergedToProjectDb(mergedForReturn);
       }
       if (issues.length > 0) {

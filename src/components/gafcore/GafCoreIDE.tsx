@@ -223,6 +223,14 @@ export function GafCoreIDE() {
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
   const workspacePanelRef = useRef<ImperativePanelHandle>(null);
 
+  const refreshPreviewNow = useCallback(() => {
+    if (previewRefreshTimerRef.current) {
+      clearTimeout(previewRefreshTimerRef.current);
+      previewRefreshTimerRef.current = null;
+    }
+    setPreviewKey((k) => k + 1);
+  }, []);
+
   const schedulePreviewRefresh = useCallback(() => {
     if (previewRefreshTimerRef.current) clearTimeout(previewRefreshTimerRef.current);
     previewRefreshTimerRef.current = setTimeout(() => {
@@ -245,9 +253,9 @@ export function GafCoreIDE() {
 
   const onPreviewCodeGenerated = useCallback(() => {
     setView("preview");
-    schedulePreviewRefresh();
+    refreshPreviewNow();
     openWorkspacePanel();
-  }, [schedulePreviewRefresh, openWorkspacePanel]);
+  }, [refreshPreviewNow, openWorkspacePanel]);
 
   const closeWorkspacePanel = useCallback(() => {
     if (isMobile) {
