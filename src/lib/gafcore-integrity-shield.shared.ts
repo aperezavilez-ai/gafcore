@@ -11,6 +11,7 @@ import {
   type GafcoreCodeSnapshot,
   type ProjFile,
 } from "@/lib/gafcore-incremental-edit.shared";
+import { isReplacingWelcomeApp } from "@/lib/gafcore-project-stale.shared";
 
 export const GAFCORE_INTEGRITY_SHIELD_RULE = `
 [ESCUDO DE INTEGRIDAD — REGLAS DE HIERRO]
@@ -195,6 +196,10 @@ export function protectRootLayoutWhenChildEdit(
   const mergedApp = merged.find((f) => /^app\.(tsx|jsx)$/i.test(normalizePath(f.name)));
   if (!baseApp || !mergedApp) return { files: merged, protected: false };
 
+  if (isReplacingWelcomeApp(baseApp.content, mergedApp.content)) {
+    return { files: merged, protected: false };
+  }
+
   const baseOk = auditSyntaxClosure(baseApp.content).ok;
   const mergedBad = !auditSyntaxClosure(mergedApp.content).ok;
   const shrunk = mergedApp.content.length < baseApp.content.length * 0.65;
@@ -249,6 +254,13 @@ export function runIntegrityShield(
     if (!/\.(tsx|jsx|ts)$/i.test(f.name)) return f;
     const base = baselineMap.get(normalizePath(f.name));
     if (!base) return f;
+
+    if (
+      /^app\.(tsx|jsx)$/i.test(normalizePath(f.name)) &&
+      isReplacingWelcomeApp(base.content, f.content)
+    ) {
+      return f;
+    }
 
     let content = restoreHooksAndTypesInFile(f.content, base.content);
     const syntax = auditSyntaxClosure(content);

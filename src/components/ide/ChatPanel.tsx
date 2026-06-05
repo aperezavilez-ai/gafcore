@@ -1681,14 +1681,11 @@ export function ChatPanel({
       deltaPaths: outFiles.map((f) => f.name),
       instruction: userInstruction,
     });
-    const finalHeal = shield.healed || heal.healed ? shield.files : heal.files;
-    if (shield.healed || heal.healed) {
-      merged = finalHeal.map((f) => ({
-        name: f.name,
-        content: f.content,
-        language: f.language ?? "typescript",
-      }));
-    }
+    merged = shield.files.map((f) => ({
+      name: f.name,
+      content: f.content,
+      language: f.language ?? "typescript",
+    }));
     setFiles(merged);
     filesRef.current = merged;
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);

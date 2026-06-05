@@ -17,6 +17,18 @@ export function isGafcoreDefaultTemplateApp(content: string): boolean {
   return legacyMarkers.every((m) => c.includes(m));
 }
 
+/** Primer build: App IA sustituye plantilla de bienvenida (no revertir al baseline). */
+export function isReplacingWelcomeApp(
+  baselineAppContent: string | undefined,
+  mergedAppContent: string,
+): boolean {
+  if (!baselineAppContent?.trim()) return false;
+  return (
+    isGafcoreDefaultTemplateApp(baselineAppContent) &&
+    !isGafcoreDefaultTemplateApp(mergedAppContent)
+  );
+}
+
 export function isRemoteProjectStale(
   remote: Array<{ name: string; content: string }> | null | undefined,
 ): boolean {

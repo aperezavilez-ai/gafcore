@@ -5,6 +5,7 @@
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 export type { ProjFile };
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
+import { isReplacingWelcomeApp } from "@/lib/gafcore-project-stale.shared";
 
 export const GAFCORE_STRUCTURE_PRESERVATION_RULE = `
 [REGLA DE ORO — PRESERVACIÓN DE ESTRUCTURA]
@@ -238,6 +239,10 @@ export function validateAndHealBeforePreview(
     if (!/\.(tsx|jsx)$/i.test(f.name)) return f;
     const base = baselineMap.get(normalizePath(f.name));
     let content = f.content;
+
+    if (base && isReplacingWelcomeApp(base.content, content)) {
+      return f;
+    }
 
     if (base) {
       const before = content;
