@@ -1656,6 +1656,14 @@ export function ChatPanel({
     userRaw: string,
     options: { runFunctionalAudit: boolean; snapshotLabel?: string },
   ): Promise<{ merged: FileItem[]; issues: ProjectValidationIssue[] }> => {
+    const genProjectId = activeProjectIdRef.current ?? projectId ?? null;
+    const resolveActiveProjectId = () => activeProjectIdRef.current ?? projectId ?? null;
+    const isStaleProject = () => genProjectId !== resolveActiveProjectId();
+    const staleReturn = (): { merged: FileItem[]; issues: ProjectValidationIssue[] } => ({
+      merged: filesRef.current.length > 0 ? filesRef.current : baseFiles,
+      issues: [],
+    });
+
     const snapLabel = options.snapshotLabel?.trim();
     if (
       snapLabel &&
@@ -1720,6 +1728,13 @@ export function ChatPanel({
       content: f.content,
       language: f.language ?? "typescript",
     }));
+    if (isStaleProject()) {
+      logClientWarn("gafcore-apply-files-stale-project", {
+        expected: genProjectId,
+        current: resolveActiveProjectId(),
+      });
+      return staleReturn();
+    }
     setFiles(merged);
     filesRef.current = merged;
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
@@ -1761,6 +1776,14 @@ export function ChatPanel({
       issues = validation.issues;
       if (validation.patchedFiles?.length) {
         mergedForReturn = mergeGeneratedFiles(merged, validation.patchedFiles);
+        if (isStaleProject()) {
+          logClientWarn("gafcore-apply-files-stale-project", {
+            expected: genProjectId,
+            current: resolveActiveProjectId(),
+            phase: "validation_patch",
+          });
+          return staleReturn();
+        }
         setFiles(mergedForReturn);
         filesRef.current = mergedForReturn;
         await persistMergedToProjectDb(mergedForReturn);

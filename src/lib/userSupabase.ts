@@ -3,11 +3,45 @@ import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
 
+export type SaveProjectFilesResult =
+  | { ok: true }
+  | { ok: false; reason: "no_client" | "no_project" | "delete_failed" | "insert_failed"; detail?: string };
+
 const CFG_KEY = "ide.supabase.config";
 const PROJECT_KEY = "ide.project.id";
 
 let cached: { url: string; key: string; client: SupabaseClient } | null = null;
 let projectSaveSuppressed = false;
+
+/** Cola por proyecto: evita DELETE+INSERT intercalados que corrompen project_files. */
+const projectSaveQueue = new Map<string, Promise<SaveProjectFilesResult>>();
+/** Generación monotónica: descarta saves obsoletos aún en cola. */
+const projectSaveGeneration = new Map<string, number>();
+
+function allocateProjectSaveGeneration(projectId: string): number {
+  const next = (projectSaveGeneration.get(projectId) ?? 0) + 1;
+  projectSaveGeneration.set(projectId, next);
+  return next;
+}
+
+function isProjectSaveGenerationStale(projectId: string, generation: number): boolean {
+  return (projectSaveGeneration.get(projectId) ?? 0) !== generation;
+}
+
+function runSerializedProjectSave(
+  projectId: string,
+  task: () => Promise<SaveProjectFilesResult>,
+): Promise<SaveProjectFilesResult> {
+  const prev = projectSaveQueue.get(projectId) ?? Promise.resolve({ ok: true as const });
+  const run = prev
+    .catch(() => ({ ok: true as const }))
+    .then(task);
+  projectSaveQueue.set(
+    projectId,
+    run.catch(() => ({ ok: false as const, reason: "insert_failed" as const })),
+  );
+  return run;
+}
 
 /** Evita escrituras a project_files durante cierre de sesión (RLS sin auth). */
 export function setProjectSaveSuppressed(value: boolean) {
@@ -234,10 +268,6 @@ export async function loadProjectFiles(
   return Array.from(map.values());
 }
 
-export type SaveProjectFilesResult =
-  | { ok: true }
-  | { ok: false; reason: "no_client" | "no_project" | "delete_failed" | "insert_failed"; detail?: string };
-
 export async function saveProjectFiles(
   files: FileItem[],
   explicitProjectId?: string | null,
@@ -278,17 +308,13 @@ export async function upsertSingleProjectFile(
   return { ok: true };
 }
 
-export async function saveProjectFilesDetailed(
+async function writeProjectFilesToDb(
+  sb: SupabaseClient,
   files: FileItem[],
-  explicitProjectId?: string | null,
+  projectId: string,
+  generation: number,
 ): Promise<SaveProjectFilesResult> {
-  const sb = getUserSupabase();
-  if (!sb) return { ok: false, reason: "no_client" };
-  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
-
-  let projectId = explicitProjectId?.trim() || null;
-  if (!projectId) projectId = await ensureProjectId();
-  if (!projectId) return { ok: false, reason: "no_project" };
+  if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
 
   const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
   if (!owned?.id) {
@@ -300,6 +326,8 @@ export async function saveProjectFilesDetailed(
     return { ok: false, reason: "no_project", detail: "project_not_visible" };
   }
 
+  if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
+
   const { error: delErr } = await sb.from("project_files").delete().eq("project_id", projectId);
   if (delErr) {
     if (projectSaveSuppressed || isRlsAuthError(delErr.message)) {
@@ -310,6 +338,8 @@ export async function saveProjectFilesDetailed(
   }
 
   if (files.length === 0) return { ok: true };
+
+  if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
 
   const map = new Map<string, FileItem>();
   for (const f of files) map.set(f.name, f);
@@ -329,6 +359,27 @@ export async function saveProjectFilesDetailed(
     return { ok: false, reason: "insert_failed", detail: insErr.message };
   }
   return { ok: true };
+}
+
+export async function saveProjectFilesDetailed(
+  files: FileItem[],
+  explicitProjectId?: string | null,
+): Promise<SaveProjectFilesResult> {
+  const sb = getUserSupabase();
+  if (!sb) return { ok: false, reason: "no_client" };
+  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
+
+  let projectId = explicitProjectId?.trim() || null;
+  if (!projectId) projectId = await ensureProjectId();
+  if (!projectId) return { ok: false, reason: "no_project" };
+
+  const generation = allocateProjectSaveGeneration(projectId);
+  const snapshot = files.map((f) => ({ ...f }));
+
+  return runSerializedProjectSave(projectId, () => {
+    if (isProjectSaveGenerationStale(projectId, generation)) return Promise.resolve({ ok: true });
+    return writeProjectFilesToDb(sb, snapshot, projectId, generation);
+  });
 }
 
 export type SnapshotRow = {

@@ -318,6 +318,10 @@ export function GafCoreIDE() {
   });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveErrToastAt = useRef(0);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const currentProjectIdRef = useRef(currentProjectId);
+  currentProjectIdRef.current = currentProjectId;
   const [creditsModalOpen, setCreditsModalOpen] = useState(false);
 
   const handleSignOut = useCallback(async () => {
@@ -735,7 +739,9 @@ export function GafCoreIDE() {
     if (!loaded || !getUserSupabase() || !currentProjectId || !user?.id) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const result = await saveProjectFilesDetailed(files, currentProjectId);
+      const pid = currentProjectIdRef.current;
+      if (!pid) return;
+      const result = await saveProjectFilesDetailed(filesRef.current, pid);
       if (!result.ok) {
         const now = Date.now();
         if (now - saveErrToastAt.current > 25_000) {
