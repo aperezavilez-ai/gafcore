@@ -152,11 +152,21 @@ export function LivePreview({ files }: { files: FileItem[] }) {
     }
 
     if (!hasReactEntry) {
+      const jsNames = userJsFiles.map((f) => f.name);
+      const noEntryMsg =
+        "Sin punto de entrada React. Archivos JS: " +
+        (jsNames.length ? jsNames.join(", ") : "(ninguno)") +
+        ". Crea main.jsx, App.jsx o index.html.";
       return `<!doctype html><html><body style="font-family:system-ui;color:#64748b;display:grid;place-items:center;height:100vh;background:#fafafa">
         <div style="text-align:center">
           <p>Sin punto de entrada.</p>
           <p style="font-size:12px">Crea <code>main.jsx</code>, <code>App.jsx</code> o <code>index.html</code>.</p>
         </div>
+        <script>
+        (function(){
+          try { parent && parent.postMessage({ type: "preview-error", message: ${JSON.stringify(noEntryMsg)} }, "*"); } catch (_) {}
+        })();
+        </script>
       </body></html>`;
     }
 
@@ -265,9 +275,14 @@ export function LivePreview({ files }: { files: FileItem[] }) {
   }
 
   function transpile(code, filename) {
-    const presets = [["env",{ modules:false, targets:"defaults" }], ["react", { runtime: "automatic", importSource: "react" }]];
-    if (/\\.(ts|tsx)$/i.test(filename)) presets.push(["typescript",{ allExtensions:true, isTSX:true }]);
-    return Babel.transform(repairJsxGlue(code), { filename, presets, sourceMaps: "inline" }).code;
+    try {
+      const presets = [["env",{ modules:false, targets:"defaults" }], ["react", { runtime: "automatic", importSource: "react" }]];
+      if (/\\.(ts|tsx)$/i.test(filename)) presets.push(["typescript",{ allExtensions:true, isTSX:true }]);
+      return Babel.transform(repairJsxGlue(code), { filename, presets, sourceMaps: "inline" }).code;
+    } catch (e) {
+      var msg = (e && e.message) || String(e);
+      throw new Error("Transpile error in " + filename + ": " + msg);
+    }
   }
 
   /** Babel inyecta imports de react/jsx-runtime tras el rewrite del IDE — deben apuntar al shim único. */
@@ -517,9 +532,10 @@ export function LivePreview({ files }: { files: FileItem[] }) {
           };
         }
 
-        const Comp = gafcoreSafeRender(pickComponent(Entry));
+        const Picked = pickComponent(Entry);
         const el = document.getElementById('root');
-        if (Comp) {
+        if (Picked && typeof Picked === "function") {
+          const Comp = gafcoreSafeRender(Picked);
           try {
             createRoot(el).render(
               React.createElement(GafcoreErrorBoundary, null, React.createElement(Comp))
@@ -536,15 +552,23 @@ export function LivePreview({ files }: { files: FileItem[] }) {
           }
         } else {
           const keys = Entry ? Object.keys(Entry).join(', ') || '(ninguno)' : '(módulo vacío)';
-          el.innerHTML = '<pre style="padding:20px;color:#900;font:12px ui-monospace,monospace;white-space:pre-wrap">El archivo de entrada no exporta un componente válido.\\n\\nExports detectados: ' + keys + '\\n\\nAsegúrate de tener: export default function App() { ... }</pre>';
+          var errMsg = "El archivo de entrada (" + ENTRY + ") no exporta un componente válido. Exports detectados: " + keys + ". Usa export default function App() { ... }";
+          el.innerHTML = '<pre style="padding:20px;color:#900;font:12px ui-monospace,monospace;white-space:pre-wrap">' + errMsg.replace(/</g, "&lt;") + '</pre>';
+          try {
+            parent && parent.postMessage({ type: "preview-error", message: errMsg }, "*");
+          } catch (_) {}
         }
       \`;
+    if (!entryUrl) {
+      showError(new Error("No se pudo cargar el punto de entrada: " + ENTRY));
+    } else {
     const mountBlob = new Blob([mountSrc], { type: "text/javascript" });
     const s = document.createElement("script");
     s.type = "module";
     s.src = URL.createObjectURL(mountBlob);
     s.onerror = (e) => showError(e);
     document.body.appendChild(s);
+    }
   } catch (e) {
     showError(e);
   }
