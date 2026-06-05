@@ -189,6 +189,8 @@ const PER_FILE_CONTEXT_CAP = 14_000;
 
 export type ProjFile = { name: string; language?: string; content: string };
 
+export { validateOutputFiles } from "@/lib/gafcore-output-files-validate.shared";
+
 export function totalChars(files: ProjFile[]) {
   return files.reduce((s, f) => s + f.content.length, 0);
 }
@@ -305,30 +307,6 @@ export function pickModel(
   if (t.length >= 420) return deep;
   if (t.length < 260) return fast;
   return deep;
-}
-
-const SAFE_PATH = /^[a-zA-Z0-9_\-. /]+$/;
-const MAX_FILE_OUT = 450_000;
-
-export function validateOutputFiles(raw: unknown): ProjFile[] {
-  if (!Array.isArray(raw)) return [];
-  const out: ProjFile[] = [];
-  for (const row of raw) {
-    if (!row || typeof row !== "object") continue;
-    const name = (row as ProjFile).name;
-    const content = (row as ProjFile).content;
-    const language = (row as ProjFile).language;
-    if (typeof name !== "string" || name.length === 0 || name.length > 512) continue;
-    if (name.includes("..") || !SAFE_PATH.test(name) || name.startsWith("/")) continue;
-    if (typeof content !== "string") continue;
-    if (content.length > MAX_FILE_OUT) continue;
-    out.push({
-      name,
-      language: typeof language === "string" ? language : undefined,
-      content,
-    });
-  }
-  return out;
 }
 
 function djb2(s: string): number {
