@@ -216,5 +216,6 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       reply,
       files: safeFiles,
       balance: balanceAfterConsume,
+      validationBlocked: agentResult.validationBlocked && safeFiles.length === 0,
     };
   });

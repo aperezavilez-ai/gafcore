@@ -1765,8 +1765,11 @@ export function ChatPanel({
           });
         }
       }
-    } catch {
-      /* */
+    } catch (err) {
+      logClientWarn("gafcore-validate-sources", err);
+      toast.message("No se pudo verificar el código generado. El preview puede tener errores.", {
+        duration: 6000,
+      });
     }
 
     let issues: ProjectValidationIssue[] = [];
@@ -2039,6 +2042,7 @@ export function ChatPanel({
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
     safeBuild?: SafeBuildMeta;
+    validationBlocked?: boolean;
   }> => {
     const res = await fetch("/api/gafcore/chat/complete", {
       method: "POST",
@@ -2083,6 +2087,7 @@ export function ChatPanel({
       reply?: string;
       files?: Array<{ name: string; language?: string; content: string }>;
       safeBuild?: SafeBuildMeta;
+      validationBlocked?: boolean;
     };
     if (j.safeBuild?.phase) {
       setHealthPhase(mapSafeBuildToHealthPhase(j.safeBuild.phase));
@@ -2091,6 +2096,7 @@ export function ChatPanel({
       reply: softenRoboticReply(userTextForTone, typeof j.reply === "string" ? j.reply : "Listo."),
       files: Array.isArray(j.files) ? j.files : [],
       safeBuild: j.safeBuild,
+      validationBlocked: j.validationBlocked === true,
     };
   };
 
@@ -2107,6 +2113,7 @@ export function ChatPanel({
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
     safeBuild?: SafeBuildMeta;
+    validationBlocked?: boolean;
   }> => {
     /** Cerebro: siempre /complete (agente 3 intentos + Safe-Build). El stream no reintenta y dejaba el preview vacío. */
     return fetchGafcoreChatComplete(
@@ -3036,6 +3043,8 @@ export function ChatPanel({
       let result: {
         reply: string;
         files: Array<{ name: string; language?: string; content: string }>;
+        safeBuild?: SafeBuildMeta;
+        validationBlocked?: boolean;
       };
 
       if (effectiveBuild && factoryMode && (activeProjectIdRef.current ?? projectId)) {
@@ -3099,6 +3108,7 @@ export function ChatPanel({
       }));
 
       let filesToApply: Array<{ name: string; language?: string; content: string }> = [];
+      let generationValidationBlocked = result.validationBlocked === true;
 
       if (effectiveBuild) {
         let delivery = finalizeGafcoreBuildDelivery(
@@ -3139,6 +3149,7 @@ export function ChatPanel({
             { preferReliableJson: true },
           );
           if (staleDrop(replyText)) return;
+          generationValidationBlocked = customized.validationBlocked === true;
           delivery = finalizeGafcoreBuildDelivery(
             raw || coreText,
             filesToApply,
@@ -3147,7 +3158,7 @@ export function ChatPanel({
           );
           filesToApply = delivery.files;
           replyText = sanitizeUserFacingAiText(
-            softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto aplicado al preview.`),
+            softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto personalizado.`),
           );
         } else if (filesToApply.length === 0 && !/\[GUÍA GAFCORE/i.test(instruction)) {
           setLoading(true);
@@ -3171,6 +3182,7 @@ export function ChatPanel({
             { preferReliableJson: true },
           );
           if (staleDrop(replyText)) return;
+          generationValidationBlocked = strictRetry.validationBlocked === true;
           delivery = finalizeGafcoreBuildDelivery(
             raw || coreText,
             contextForDelivery,
@@ -3186,16 +3198,18 @@ export function ChatPanel({
           );
         }
 
-        if (filesToApply.length > 0) {
-          toast.success("Proyecto aplicado al preview", { duration: 5000 });
-          if (effectiveBuild && !aiReplyNeedsUserInput(replyText)) {
-            scheduleGuideAfterBuild = true;
+        if (filesToApply.length === 0) {
+          if (generationValidationBlocked) {
+            toast.error(
+              "La validación bloqueó los archivos generados (errores de sintaxis o estructura). Pide una versión más simple o revisa el mensaje de la IA.",
+              { duration: 12_000 },
+            );
+          } else {
+            toast.error(
+              "No pude generar archivos. Prueba: «Crea landing de [tu negocio] con hero y formulario».",
+              { duration: 12_000 },
+            );
           }
-        } else {
-          toast.error(
-            "No pude generar archivos. Prueba: «Crea landing de [tu negocio] con hero y formulario».",
-            { duration: 12_000 },
-          );
         }
       } else if (Array.isArray(result.files) && result.files.length > 0) {
         filesToApply = result.files;
@@ -3222,11 +3236,11 @@ export function ChatPanel({
         );
 
         const appAfterBuild = merged.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
-        if (
-          appAfterBuild &&
+        const stillWelcomeTemplate =
+          !!appAfterBuild &&
           isGafcoreDefaultTemplateApp(appAfterBuild.content) &&
-          isSubstantiveBuildRequest(raw)
-        ) {
+          isSubstantiveBuildRequest(raw);
+        if (stillWelcomeTemplate) {
           if (isPreviewAutofixAiEnabled()) {
             toast.message("Reemplazando pantalla de bienvenida por tu proyecto…", { duration: 8000 });
             scheduleRuntimeAutofixRef.current(
@@ -3237,6 +3251,11 @@ export function ChatPanel({
               "El preview sigue en plantilla de bienvenida. Escribe de nuevo qué proyecto quieres en el chat.",
               { duration: 10_000 },
             );
+          }
+        } else {
+          toast.success("Proyecto aplicado al preview", { duration: 5000 });
+          if (effectiveBuild && !aiReplyNeedsUserInput(replyText)) {
+            scheduleGuideAfterBuild = true;
           }
         }
 

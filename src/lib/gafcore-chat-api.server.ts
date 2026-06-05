@@ -537,5 +537,6 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     files: finalized.files,
     balance: balanceAfterConsume,
     safeBuild: finalized.safeBuild,
+    validationBlocked: agentResult.validationBlocked && finalized.files.length === 0,
   });
 }
