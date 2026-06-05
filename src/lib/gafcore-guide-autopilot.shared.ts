@@ -28,6 +28,13 @@ export function shouldUseFastChatPipeline(instruction: string): boolean {
   return /\[GUÍA GAFCORE/i.test(instruction);
 }
 
+/** Burbuja corta en el chat (el prompt completo solo va al backend). */
+export function formatGuideAutopilotUserBubble(instruction: string): string | null {
+  if (!shouldUseFastChatPipeline(instruction)) return null;
+  const m = /\[GUÍA GAFCORE — paso (\d+): ([^\]]+)\]/i.exec(instruction);
+  return m ? `▶ Guía automática · ${m[2]}` : "▶ Guía automática";
+}
+
 const AI_NEEDS_USER_RE =
   /\?(?:\s|$)|¿|necesito que (?:me )?(?:digas|indiques|confirmes|elijas)|ind[ií]came|confirma(?:me)?|cu[aá]l prefieres|qu[eé] (?:color|nombre|texto|logo)|antes de continuar|falta (?:que|informaci)/i;
 

@@ -56,6 +56,7 @@ import {
   aiReplyNeedsUserInput,
   allGuideStepsCompleted,
   buildAutopilotInstruction,
+  formatGuideAutopilotUserBubble,
   createGuideAutopilotState,
   extractGuidePauseHint,
   GUIDE_AUTOPILOT_DELAY_MS,
@@ -2922,7 +2923,9 @@ export function ChatPanel({
     const userDisplay = [raw, pendingSnapshot.length > 0 ? `📎 ${pendingSnapshot.length} imagen` : ""]
       .filter(Boolean)
       .join("\n");
-    const userBubble = userDisplay || "📎 Imagen de referencia";
+    const guideBubble = formatGuideAutopilotUserBubble(coreText);
+    const userBubble =
+      guideBubble ?? (userDisplay || "📎 Imagen de referencia");
     stickToBottomRef.current = true;
     appendMessageDeduped("user", userBubble);
     stickToBottomRef.current = true;

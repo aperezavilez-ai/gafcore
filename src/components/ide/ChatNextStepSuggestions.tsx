@@ -17,7 +17,8 @@ export function ChatNextStepSuggestions({
   onSelect,
   autopilotStatus,
 }: Props) {
-  if (steps.length === 0) return null;
+  const visibleSteps = steps.filter((s) => s.status !== "completed");
+  if (visibleSteps.length === 0) return null;
 
   const recommended = getRecommendedNextStep(steps);
   const completedCount = steps.filter((s) => s.status === "completed").length;
@@ -42,7 +43,7 @@ export function ChatNextStepSuggestions({
         role="group"
         aria-label="Sugerencias para continuar tu proyecto"
       >
-        {steps.map((step) => {
+        {visibleSteps.map((step) => {
           const isCurrent = step.status === "current";
           const isDone = step.status === "completed";
           return (
