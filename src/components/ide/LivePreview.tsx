@@ -72,6 +72,32 @@ function findFile(files: FileItem[], baseNoExt: string): FileItem | undefined {
   return undefined;
 }
 
+function isMainBootstrapFile(file: FileItem): boolean {
+  return (
+    /\bcreateRoot\s*\(|ReactDOM\.render\s*\(/i.test(file.content) &&
+    !/export\s+default\s+function\s+Main\b/i.test(file.content)
+  );
+}
+
+/** Prefer App + error boundary cuando main.tsx solo hace bootstrap (CSS ya en cssPayload). */
+function resolvePreviewEntry(userJsFiles: FileItem[]): string {
+  const appFile = userJsFiles.find((f) => /(^|\/)app\.(jsx?|tsx?)$/i.test(f.name));
+  const mainFile = userJsFiles.find((f) => /(^|\/)main\.(jsx?|tsx?)$/i.test(f.name));
+  if (appFile && mainFile && isMainBootstrapFile(mainFile)) {
+    return appFile.name;
+  }
+
+  return (
+    mainFile?.name ??
+    userJsFiles.find((f) => /(^|\/)index\.(jsx?|tsx?)$/i.test(f.name))?.name ??
+    appFile?.name ??
+    userJsFiles.find((f) => /(^|\/)aplicaci[oó]n\.(jsx?|tsx?)$/i.test(f.name))?.name ??
+    userJsFiles.find((f) => /createRoot\s*\(|ReactDOM\.render\s*\(/i.test(f.content))?.name ??
+    userJsFiles[0]?.name ??
+    "App.tsx"
+  );
+}
+
 /** Rewrite import/export specifiers in source code. */
 function rewriteImports(
   source: string,
@@ -193,13 +219,7 @@ export function LivePreview({ files }: { files: FileItem[] }) {
 
     const cssPayload = cssFiles.map((f) => f.content).join("\n");
 
-    const entry =
-      userJsFiles.find((f) => /(^|\/)main\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      userJsFiles.find((f) => /(^|\/)index\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      userJsFiles.find((f) => /(^|\/)app\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      userJsFiles.find((f) => /(^|\/)aplicaci[oó]n\.(jsx?|tsx?)$/i.test(f.name))?.name ??
-      userJsFiles.find((f) => /createRoot\s*\(|ReactDOM\.render\s*\(/.test(f.content))?.name ??
-      userJsFiles[0]?.name!;
+    const entry = resolvePreviewEntry(userJsFiles);
 
     const importMap = {
       imports: {
