@@ -27,6 +27,13 @@ check(
   parseJsonLoose('{"reply":"usa `npm install`"}'),
   { reply: "usa `npm install`" },
 );
+check(
+  "prosa con llaves falsas antes de files",
+  parseJsonLoose(
+    'Nota: usa { hooks } aquí.\n{"reply":"","files":[{"name":"App.tsx","content":"ok"}]}',
+  ),
+  { reply: "", files: [{ name: "App.tsx", content: "ok" }] },
+);
 
 console.log(`\n${fail === 0 ? "[smoke-json-loose] OK" : `[smoke-json-loose] FAIL (${fail})`}`);
 process.exit(fail === 0 ? 0 : 1);

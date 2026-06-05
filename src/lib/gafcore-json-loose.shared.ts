@@ -41,7 +41,13 @@ export function parseJsonLoose<T = unknown>(raw: string): T | null {
     }
   }
 
-  // 4) Primer array [...] balanceado
+  // 4) Objeto con clave "files" (prosa previa con llaves que confunden el primer bloque)
+  const withFiles = tryParseObjectContainingFiles(trimmed);
+  if (withFiles !== null) {
+    return withFiles as T;
+  }
+
+  // 5) Primer array [...] balanceado
   const arr = findFirstBalancedBlock(trimmed, "[", "]");
   if (arr) {
     try {
@@ -52,6 +58,21 @@ export function parseJsonLoose<T = unknown>(raw: string): T | null {
   }
 
   return null;
+}
+
+/** Busca el objeto `{ ... "files": ... }` aunque haya texto antes con `{` sueltos. */
+function tryParseObjectContainingFiles(raw: string): unknown | null {
+  const idx = raw.search(/"files"\s*:/);
+  if (idx < 0) return null;
+  const start = raw.lastIndexOf("{", idx);
+  if (start < 0) return null;
+  const block = findFirstBalancedBlock(raw.slice(start), "{", "}");
+  if (!block) return null;
+  try {
+    return JSON.parse(block);
+  } catch {
+    return null;
+  }
 }
 
 /** Devuelve el primer bloque balanceado entre open y close, respetando strings. */
