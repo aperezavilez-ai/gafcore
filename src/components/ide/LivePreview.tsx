@@ -534,7 +534,9 @@ export function LivePreview({ files }: { files: FileItem[] }) {
 
         const Picked = pickComponent(Entry);
         const el = document.getElementById('root');
-        if (Picked && typeof Picked === "function") {
+        if (el && el.hasChildNodes()) {
+          /* Entry o dependencia ya montó en #root durante import — evitar double createRoot. */
+        } else if (Picked && typeof Picked === "function") {
           const Comp = gafcoreSafeRender(Picked);
           try {
             createRoot(el).render(
