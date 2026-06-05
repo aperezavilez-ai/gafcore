@@ -728,6 +728,40 @@ export function ChatPanel({
     return { ok: true };
   };
 
+  /** Persiste el árbol completo del workspace (evita reload con DB parcial/desactualizada). */
+  const persistMergedToProjectDb = async (
+    mergedFiles: FileItem[],
+  ): Promise<{ ok: boolean; detail?: string }> => {
+    const pid = activeProjectIdRef.current ?? projectId;
+    if (!pid || !user?.id || mergedFiles.length === 0) {
+      return { ok: false, detail: "no_project" };
+    }
+    const { saveProjectFilesDetailed } = await import("@/lib/userSupabase");
+    const result = await saveProjectFilesDetailed(
+      mergedFiles.map((f) => ({
+        name: f.name,
+        language: f.language ?? "typescript",
+        content: f.content,
+      })),
+      pid,
+    );
+    if (!result.ok) {
+      logClientWarn("gafcore-persist-merged", {
+        reason: result.reason,
+        detail: result.detail,
+        fileCount: mergedFiles.length,
+      });
+      toast.error("No se guardaron los archivos en el proyecto", {
+        description:
+          result.detail ??
+          result.reason ??
+          "Revisa la conexión e inténtalo de nuevo.",
+        duration: 8000,
+      });
+    }
+    return { ok: result.ok, detail: result.detail ?? result.reason };
+  };
+
   const {
     balance,
     monthlyAllowance,
@@ -1689,7 +1723,7 @@ export function ChatPanel({
     setFiles(merged);
     filesRef.current = merged;
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
-    void syncFilesToDb(toPersist);
+    await persistMergedToProjectDb(merged);
     onCodeGenerated?.();
 
     try {
@@ -1729,13 +1763,7 @@ export function ChatPanel({
         mergedForReturn = mergeGeneratedFiles(merged, validation.patchedFiles);
         setFiles(mergedForReturn);
         filesRef.current = mergedForReturn;
-        void syncFilesToDb(
-          validation.patchedFiles.map((f) => ({
-            name: f.name,
-            content: f.content,
-            language: f.language,
-          })),
-        );
+        await persistMergedToProjectDb(mergedForReturn);
       }
       if (issues.length > 0) {
         const blocking = issues.filter((i) => i.severity === "error");
