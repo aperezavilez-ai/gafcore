@@ -407,6 +407,18 @@ export async function listSnapshots(explicitProjectId?: string | null): Promise<
   return (data ?? []) as SnapshotRow[];
 }
 
+/** Última captura cuya etiqueta empieza por un prefijo (p. ej. «antes:»). */
+export async function findLatestSnapshotByLabelPrefix(
+  explicitProjectId: string,
+  prefix: string,
+): Promise<SnapshotRow | null> {
+  const trimmed = prefix.trim();
+  if (!trimmed) return null;
+  const list = await listSnapshots(explicitProjectId);
+  const lower = trimmed.toLowerCase();
+  return list.find((s) => s.label?.toLowerCase().startsWith(lower)) ?? null;
+}
+
 export async function createSnapshot(
   files: FileItem[],
   label?: string,

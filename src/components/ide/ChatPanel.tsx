@@ -167,6 +167,10 @@ import {
 } from "@/lib/gafcore-chat-intent.shared";
 import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
 import {
+  dispatchVersionRestored,
+  prepareFilesForEditorRestore,
+} from "@/lib/gafcore-snapshot-restore.shared";
+import {
   finalizeGafcoreBuildDelivery,
   GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
   GAFCORE_FORCE_FILES_BUILD_PREFIX,
@@ -786,6 +790,8 @@ export function ChatPanel({
 
   const filesRef = useRef(files);
   filesRef.current = files;
+  /** Baseline in-memory para deshacer la última generación aplicada al preview. */
+  const rollbackBaselineRef = useRef<FileItem[] | null>(null);
   const autofixDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoFixToastIdRef = useRef<string | number | null>(null);
   const scheduleRuntimeAutofixRef = useRef<(msg: string) => void>(() => {});
@@ -840,10 +846,54 @@ export function ChatPanel({
     }
   }, []);
 
+  const rollbackLastGeneration = useCallback(async () => {
+    cancelPreviewAutofixInFlight();
+    let baseline = rollbackBaselineRef.current;
+    const pid = activeProjectIdRef.current ?? projectId;
+    if (!baseline?.length && pid) {
+      const { findLatestSnapshotByLabelPrefix, loadSnapshotFiles } = await import(
+        "@/lib/userSupabase"
+      );
+      const snap = await findLatestSnapshotByLabelPrefix(pid, "antes:");
+      if (snap) {
+        const restored = await loadSnapshotFiles(snap.id, pid);
+        if (restored?.length) baseline = prepareFilesForEditorRestore(restored);
+      }
+    }
+    if (!baseline?.length) {
+      toast.message("No hay versión anterior en memoria. Usa Historial (reloj).", {
+        duration: 8000,
+      });
+      return;
+    }
+    rollbackBaselineRef.current = null;
+    dispatchVersionRestored();
+    setFiles(baseline);
+    filesRef.current = baseline;
+    queueMicrotask(() => onCodeGenerated?.());
+    if (pid) await persistMergedToProjectDb(baseline);
+    toast.success("Versión anterior restaurada");
+  }, [cancelPreviewAutofixInFlight, onCodeGenerated, projectId]);
+
+  const offerGenerationRollback = useCallback(
+    (reason: string) => {
+      if (!rollbackBaselineRef.current?.length) return;
+      toast.error(reason, {
+        duration: 14_000,
+        action: {
+          label: "Deshacer",
+          onClick: () => void rollbackLastGeneration(),
+        },
+      });
+    },
+    [rollbackLastGeneration],
+  );
+
   const resetAfterVersionRestore = useCallback(() => {
     cancelPreviewAutofixInFlight();
     autoFixAttemptedErrorsRef.current.clear();
     autoFixSessionCountRef.current = 0;
+    rollbackBaselineRef.current = null;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     sendInFlightRef.current = false;
@@ -1665,6 +1715,12 @@ export function ChatPanel({
       issues: [],
     });
 
+    rollbackBaselineRef.current = baseFiles.map((f) => ({
+      name: f.name,
+      content: f.content,
+      language: f.language ?? "typescript",
+    }));
+
     const snapLabel = options.snapshotLabel?.trim();
     if (
       snapLabel &&
@@ -1674,8 +1730,8 @@ export function ChatPanel({
       try {
         const { createSnapshot } = await import("@/lib/userSupabase");
         void createSnapshot(baseFiles, snapLabel, projectId ?? undefined);
-      } catch {
-        /* */
+      } catch (err) {
+        logClientWarn("gafcore-snapshot-before-apply", err);
       }
     }
     let outFiles = repairGafcoreProjectMedia(
@@ -1740,7 +1796,10 @@ export function ChatPanel({
     filesRef.current = merged;
     queueMicrotask(() => onCodeGenerated?.());
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
-    await persistMergedToProjectDb(merged);
+    const persistResult = await persistMergedToProjectDb(merged);
+    if (!persistResult.ok) {
+      offerGenerationRollback("No se guardó en la nube. Puedes deshacer el último cambio.");
+    }
 
     try {
       const v = await callValidateSources({
@@ -2187,9 +2246,9 @@ export function ChatPanel({
         if (!Array.isArray(result.files) || result.files.length === 0) {
           autoFixAttemptedErrorsRef.current.delete(attemptKey);
           toast.dismiss(toastId);
-          toast.warning("No se pudo auto-corregir. Usa «Intenta arreglarlo» o describe el cambio.", {
-            duration: 7000,
-          });
+          offerGenerationRollback(
+            "No se pudo auto-corregir. Puedes deshacer el último cambio o usar Historial (reloj).",
+          );
           return;
         }
 
@@ -2208,9 +2267,8 @@ export function ChatPanel({
           );
           setLastError(blockText);
           toast.dismiss(toastId);
-          toast.warning(
-            "Auto-corrección detenida para no seguir modificando archivos. Usa el historial (reloj) o describe el cambio en el chat.",
-            { duration: 10_000 },
+          offerGenerationRollback(
+            "Auto-corrección detenida. Puedes deshacer el último cambio o restaurar desde Historial (reloj).",
           );
           return;
         }
@@ -2244,6 +2302,7 @@ export function ChatPanel({
       isFairUseCreadorPlan,
       isUnlimitedDaily,
       onCodeGenerated,
+      offerGenerationRollback,
       projectId,
     ],
   );
@@ -2991,18 +3050,16 @@ export function ChatPanel({
     void persistMessage("user", userBubble);
     if (effectiveBuild && (activeProjectIdRef.current ?? projectId)) void startPipelineRun(instruction);
     if (effectiveBuild && buildContextFiles.length > 0) {
-      void (async () => {
-        try {
-          const { createSnapshot } = await import("@/lib/userSupabase");
-          await createSnapshot(
-            buildContextFiles,
-            `antes: ${(raw || "build").slice(0, 48)}`,
-            projectId ?? undefined,
-          );
-        } catch {
-          /* best-effort */
-        }
-      })();
+      try {
+        const { createSnapshot } = await import("@/lib/userSupabase");
+        await createSnapshot(
+          buildContextFiles,
+          `antes: ${(raw || "build").slice(0, 48)}`,
+          projectId ?? undefined,
+        );
+      } catch (err) {
+        logClientWarn("gafcore-snapshot-before-build", err);
+      }
     }
     setStreamChars(null);
     const ac = new AbortController();
@@ -3252,6 +3309,7 @@ export function ChatPanel({
               "El preview sigue en plantilla de bienvenida. Escribe de nuevo qué proyecto quieres en el chat.",
               { duration: 10_000 },
             );
+            offerGenerationRollback("El build no reemplazó la plantilla de bienvenida.");
           }
         } else {
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
@@ -3335,6 +3393,7 @@ export function ChatPanel({
                   toast.warning("Hay errores de validación. Corrígelos en el chat o restaura una versión (reloj).", {
                     duration: 10_000,
                   });
+                  offerGenerationRollback("La corrección automática dejó errores de validación.");
                 }
               }
             }

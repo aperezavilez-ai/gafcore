@@ -97,11 +97,16 @@ export function HistoryDialog({
         return;
       }
 
-      void createSnapshot(
+      const backupOk = await createSnapshot(
         files,
         `respaldo · antes de restaurar (${new Date().toLocaleTimeString()})`,
         projectId,
       );
+      if (!backupOk) {
+        toast.message("Restaurando sin respaldo previo (no se pudo guardar copia).", {
+          duration: 6000,
+        });
+      }
 
       await onRestore(restored);
       toast.success(`Versión restaurada (${restored.length} archivos)`, {
