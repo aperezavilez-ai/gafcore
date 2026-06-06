@@ -6,9 +6,9 @@ import {
   buildGafcoreMessages,
   cacheGet,
   cacheSet,
+  buildGafcoreChatCacheKey,
+  shouldWriteGafcoreChatCache,
   fetchBalance,
-  instructionKey,
-  projectCacheFingerprint,
   COST_PER_REQUEST,
   type ProjFile,
 } from "@/lib/gafcore-chat.shared";
@@ -115,7 +115,13 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       [...memory.priorityPaths, ...snapshotPriority],
     );
 
-    const cacheKey = `${userId}:${model}:${instructionKey(data.instruction)}:${projectCacheFingerprint(data.files as ProjFile[])}`;
+    const cacheKey = buildGafcoreChatCacheKey({
+      userId,
+      model,
+      instruction: data.instruction,
+      files: data.files as ProjFile[],
+      projectId: data.projectId,
+    });
     let cached = shouldBypassGafcoreChatCache(data.instruction) ? null : cacheGet(cacheKey);
     if (!cached && !shouldBypassGafcoreChatCache(data.instruction)) {
       cached = await getPersistedChatCache(cacheKey);
@@ -188,8 +194,10 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       softenRoboticReply(data.instruction, agentResult.reply),
     );
 
-    cacheSet(cacheKey, { reply, files: safeFiles });
-    void setPersistedChatCache(cacheKey, userId, model, { reply, files: safeFiles });
+    if (shouldWriteGafcoreChatCache(safeFiles, { validationBlocked: agentResult.validationBlocked })) {
+      cacheSet(cacheKey, { reply, files: safeFiles });
+      void setPersistedChatCache(cacheKey, userId, model, { reply, files: safeFiles });
+    }
 
     auditAiActionCompleted({
       userId,

@@ -317,11 +317,33 @@ function djb2(s: string): number {
 
 export function projectCacheFingerprint(files: ProjFile[]): string {
   const parts = files.map((f) => {
-    const head = f.content.slice(0, 600);
-    return `${f.name}:${f.content.length}:${djb2(head)}`;
+    return `${f.name}:${f.content.length}:${djb2(f.content)}`;
   });
   parts.sort();
   return parts.join(">");
+}
+
+/** Clave de caché por usuario + proyecto + instrucción + huella del workspace. */
+export function buildGafcoreChatCacheKey(input: {
+  userId: string;
+  model: string;
+  instruction: string;
+  files: ProjFile[];
+  projectId?: string | null;
+  brandName?: string | null;
+}): string {
+  const projectPart = input.projectId?.trim() ? input.projectId.trim() : "_";
+  const brandPart = input.brandName?.trim() ?? "";
+  return `${input.userId}:${input.model}:${instructionKey(input.instruction)}:${projectCacheFingerprint(input.files)}:${projectPart}:${brandPart}`;
+}
+
+/** No persistir respuestas vacías o bloqueadas por validación (evita cache hits silenciosos). */
+export function shouldWriteGafcoreChatCache(
+  files: ProjFile[],
+  options?: { validationBlocked?: boolean },
+): boolean {
+  if (options?.validationBlocked) return false;
+  return files.length > 0;
 }
 
 export function instructionKey(instr: string): string {

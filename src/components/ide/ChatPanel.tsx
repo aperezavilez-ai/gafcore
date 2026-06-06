@@ -606,6 +606,7 @@ export function ChatPanel({
   // Load chat history for current project
   useEffect(() => {
     if (!projectId || !user?.id) return;
+    setMessages([]);
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
