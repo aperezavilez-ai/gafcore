@@ -39,7 +39,7 @@ const AI_NEEDS_USER_RE =
   /\?(?:\s|$)|¿|necesito que (?:me )?(?:digas|indiques|confirmes|elijas)|ind[ií]came|confirma(?:me)?|cu[aá]l prefieres|qu[eé] (?:color|nombre|texto|logo)|antes de continuar|falta (?:que|informaci)/i;
 
 const BLOCKING_PREVIEW_RE =
-  /syntaxerror|unexpected token|react is not defined|already been declared|script error/i;
+  /syntaxerror|unexpected token|react is not defined|already been declared|script error|react error #31|objects are not valid|validation/i;
 
 export function createGuideAutopilotState(): GuideAutopilotState {
   return { active: false, paused: false, pauseReason: null, lastStepId: null, autoStepsRun: 0 };
@@ -47,6 +47,7 @@ export function createGuideAutopilotState(): GuideAutopilotState {
 
 export function shouldEnableGuideAutopilot(ctx: GafcoreChatSuggestionContext): boolean {
   if (ctx.mode !== "build" || ctx.factoryMode || ctx.visualEditOn) return false;
+  if (isBlockingPreviewError(ctx.lastError)) return false;
   return hasSubstantiveUserIntent(ctx.messages);
 }
 

@@ -48,7 +48,15 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import type { ChatMsg } from "@/lib/openaiChat";
 import { gafcoreChat } from "@/lib/gafcore-chat.functions";
-import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
+import {
+  evaluateCoreOrchestrationGate,
+  GAFCORE_BUILD_CONFIRMED_PREFIX,
+  markBuildConfirmedInstruction,
+} from "@/core/behavior/gafcore-core-rules.shared";
+import {
+  buildLocalProjectAnalysis,
+  formatProjectAnalysisForChat,
+} from "@/core/behavior/gafcore-project-analysis.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
@@ -193,6 +201,11 @@ type Msg = { role: "user" | "ai"; content: string; ts?: number };
 const CHAT_REQUEST_TIMEOUT_MS = 120_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
+
+type PendingBuildConfirmation = {
+  raw: string;
+  pendingImages: PendingComposerImage[];
+};
 
 async function readSseJsonPayload(
   res: Response,
@@ -527,6 +540,9 @@ export function ChatPanel({
     createGuideAutopilotState,
   );
   const guideAutopilotRef = useRef<GuideAutopilotState>(createGuideAutopilotState());
+  const [pendingBuildConfirmation, setPendingBuildConfirmation] =
+    useState<PendingBuildConfirmation | null>(null);
+  const pendingBuildRef = useRef<PendingBuildConfirmation | null>(null);
   const lastErrorRef = useRef<string | null>(null);
   const guideAutopilotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [healthPhase, setHealthPhase] = useState<HealthStatusPhase | null>(null);
@@ -2889,26 +2905,15 @@ export function ChatPanel({
 
     const err = lastErrorRef.current;
     if (isBlockingPreviewError(err)) {
-      const steps = getGafcoreChatNextSteps(ctx);
-      const fixStep =
-        steps.find((s) => s.id === "guide-fix-now") ??
-        steps.find((s) => s.status === "current") ??
-        null;
-      if (fixStep && fixStep.id !== ga.lastStepId) {
-        guideAutopilotRef.current = { ...guideAutopilotRef.current, lastStepId: fixStep.id };
-        setGuideAutopilotUi(guideAutopilotRef.current);
-        toast.message("Guía: corrigiendo error del preview…", { duration: 5000 });
-        await sendRef.current?.(buildAutopilotInstruction(fixStep));
-      } else {
-        const paused = {
-          ...guideAutopilotRef.current,
-          active: true,
-          paused: true,
-          pauseReason: "Corrige el error del preview (Empezar de cero o responde en el chat).",
-        };
-        guideAutopilotRef.current = paused;
-        setGuideAutopilotUi(paused);
-      }
+      const paused = {
+        ...guideAutopilotRef.current,
+        active: true,
+        paused: true,
+        pauseReason:
+          "Hay un error en el preview. Corrige manualmente, usa Deshacer o restaura una versión antes de continuar la guía.",
+      };
+      guideAutopilotRef.current = paused;
+      setGuideAutopilotUi(paused);
       return;
     }
 
@@ -2933,14 +2938,41 @@ export function ChatPanel({
   ]);
 
   const scheduleGuideAutopilotAdvance = useCallback(() => {
+    const gate = evaluateCoreOrchestrationGate({
+      instruction: "",
+      rawUserText: "",
+      mode,
+      factoryMode,
+      multiAgentMode,
+      visualEditOn,
+      buildConfirmed: true,
+      blockingError: lastErrorRef.current,
+      validationBlocked: false,
+    });
+    if (gate.blockAutonomousAdvance) return;
     if (guideAutopilotTimerRef.current) clearTimeout(guideAutopilotTimerRef.current);
     guideAutopilotTimerRef.current = setTimeout(() => {
       guideAutopilotTimerRef.current = null;
       void tryAdvanceGuideAutopilot();
     }, GUIDE_AUTOPILOT_DELAY_MS);
-  }, [tryAdvanceGuideAutopilot]);
+  }, [tryAdvanceGuideAutopilot, mode, factoryMode, multiAgentMode, visualEditOn]);
 
-  const send = async (text?: string) => {
+  const cancelPendingBuildConfirmation = useCallback(() => {
+    pendingBuildRef.current = null;
+    setPendingBuildConfirmation(null);
+    toast.message("Plan cancelado. Puedes ajustar tu pedido y volver a enviar.");
+  }, []);
+
+  const confirmPendingBuildConfirmation = useCallback(() => {
+    const pending = pendingBuildRef.current;
+    if (!pending) return;
+    pendingBuildRef.current = null;
+    setPendingBuildConfirmation(null);
+    setPendingComposerImages(pending.pendingImages);
+    void sendRef.current?.(markBuildConfirmedInstruction(pending.raw), { confirmed: true });
+  }, []);
+
+  const send = async (text?: string, options?: { confirmed?: boolean }) => {
     const raw = (text ?? input).trim();
     const pendingSnapshot = [...pendingComposerImages];
     const refNames = pendingSnapshot.map((p) => p.fileName).join(", ");
@@ -2978,6 +3010,63 @@ export function ChatPanel({
     const conversational = isConversationalOnly(raw) && pendingSnapshot.length === 0;
     const effectiveBuild = mode === "build" && !conversational;
     let scheduleGuideAfterBuild = false;
+
+    const buildConfirmed =
+      options?.confirmed === true || raw.startsWith(GAFCORE_BUILD_CONFIRMED_PREFIX.trim());
+    const userFacingRaw =
+      buildConfirmed && raw.startsWith(GAFCORE_BUILD_CONFIRMED_PREFIX.trim())
+        ? raw.slice(GAFCORE_BUILD_CONFIRMED_PREFIX.length).trim()
+        : raw;
+
+    if (pendingBuildRef.current && !buildConfirmed) {
+      const attempt = (userFacingRaw || coreText).trim();
+      if (/^(s[ií]|ok|vale|adelante|comenzar|empieza|confirmo|yes|go)\b/i.test(attempt)) {
+        const p = pendingBuildRef.current;
+        pendingBuildRef.current = null;
+        setPendingBuildConfirmation(null);
+        setPendingComposerImages(p.pendingImages);
+        return send(markBuildConfirmedInstruction(p.raw), { confirmed: true });
+      }
+      toast.message("Tienes un plan pendiente. Pulsa «Comenzar construcción» o escribe «sí, adelante».", {
+        duration: 6000,
+      });
+      return;
+    }
+
+    if (effectiveBuild && !buildConfirmed && !factoryMode && !multiAgentMode && !visualEditOn) {
+      const orchestrationGate = evaluateCoreOrchestrationGate({
+        instruction: coreText,
+        rawUserText: userFacingRaw || coreText,
+        mode,
+        factoryMode,
+        multiAgentMode,
+        visualEditOn,
+        buildConfirmed,
+        blockingError: lastErrorRef.current,
+        validationBlocked: false,
+      });
+      if (orchestrationGate.requiresBuildConfirmation) {
+        const analysis = buildLocalProjectAnalysis(userFacingRaw || coreText, files.length);
+        const analysisText = formatProjectAnalysisForChat(analysis);
+        const payload: PendingBuildConfirmation = {
+          raw: userFacingRaw || coreText,
+          pendingImages: pendingSnapshot,
+        };
+        pendingBuildRef.current = payload;
+        setPendingBuildConfirmation(payload);
+        const userBubble = [userFacingRaw, pendingSnapshot.length > 0 ? `📎 ${pendingSnapshot.length} imagen` : ""]
+          .filter(Boolean)
+          .join("\n");
+        appendMessageDeduped("user", userBubble || "Pedido de proyecto");
+        appendMessageDeduped("ai", analysisText);
+        scrollChatToBottomSoon("auto");
+        void persistMessage("user", userBubble || "Pedido de proyecto");
+        void persistMessage("ai", analysisText);
+        setInput("");
+        setPendingComposerImages([]);
+        return;
+      }
+    }
 
     let buildContextFiles = files;
     let isFreshProject = false;
@@ -3427,9 +3516,6 @@ export function ChatPanel({
           }
         } else {
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
-          if (effectiveBuild && !aiReplyNeedsUserInput(replyText)) {
-            scheduleGuideAfterBuild = true;
-          }
         }
 
         if (
@@ -3610,7 +3696,20 @@ export function ChatPanel({
         setLoading(false);
         setHealthPhase(null);
         if (scheduleGuideAfterBuild && effectiveBuild && !guideAutopilotRef.current.paused) {
-          scheduleGuideAutopilotAdvance();
+          const advanceGate = evaluateCoreOrchestrationGate({
+            instruction: "",
+            rawUserText: "",
+            mode,
+            factoryMode,
+            multiAgentMode,
+            visualEditOn,
+            buildConfirmed: true,
+            blockingError: lastErrorRef.current,
+            validationBlocked: false,
+          });
+          if (!advanceGate.blockAutonomousAdvance) {
+            scheduleGuideAutopilotAdvance();
+          }
         }
       }
       refreshCredits();
@@ -3946,6 +4045,37 @@ export function ChatPanel({
                 </button>
               </div>
             ))}
+          </div>
+        ) : null}
+        {pendingBuildConfirmation ? (
+          <div className="mb-2 rounded-lg border border-primary/35 bg-primary/5 px-3 py-2.5">
+            <p className="text-[11px] font-medium leading-snug text-foreground">
+              Plan listo — confirma para comenzar la construcción
+            </p>
+            <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+              {pendingBuildConfirmation.raw}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={loading}
+                onClick={() => confirmPendingBuildConfirmation()}
+              >
+                Comenzar construcción
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={loading}
+                onClick={() => cancelPendingBuildConfirmation()}
+              >
+                Cancelar
+              </Button>
+            </div>
           </div>
         ) : null}
         <ChatNextStepSuggestions
