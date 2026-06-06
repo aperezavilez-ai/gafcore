@@ -6,6 +6,8 @@
  *
  * El usuario solo conoce GafCore como marca.
  */
+import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
+
 const PROVIDER_NAME_RE =
   /\b(openrouter|open[\s-]?ai|anthropic|claude(\s+sonnet|\s+opus|\s+haiku)?(\s+\d[\d.\-]*)?|gpt-?\d[\w.-]*|o\d-[\w.-]*|gemini[\w.-]*|google\s+ai|chatgpt|mistral|llama|deepseek)\b/gi;
 const ENV_VAR_RE = /\b[A-Z][A-Z0-9_]{2,}_(API_KEY|TOKEN|SECRET|URL)\b/g;
@@ -86,6 +88,13 @@ export function sanitizeUserFacingAiText(text: string): string {
   }
   if (/^http \d{3}$/i.test(t)) {
     return "El asistente IA respondió con un error. Inténtalo de nuevo en unos minutos.";
+  }
+  if (t.startsWith("{") && /"files"\s*:/.test(t)) {
+    const parsed = parseJsonLoose<{ reply?: string }>(t);
+    if (parsed && typeof parsed.reply === "string" && parsed.reply.trim()) {
+      return stripMisleadingStepChecklist(maskProviderNames(parsed.reply.trim()));
+    }
+    return "Listo. Si el preview no cambió, pulsa Construir de nuevo o escribe qué quieres ver en pantalla.";
   }
   // Caso general: censurar cualquier mención a proveedor que se haya colado.
   return stripMisleadingStepChecklist(maskProviderNames(raw));

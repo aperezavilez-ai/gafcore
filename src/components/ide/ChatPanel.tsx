@@ -175,6 +175,7 @@ import {
   GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
   GAFCORE_FORCE_FILES_BUILD_PREFIX,
   outputReplacesWelcome,
+  unwrapGafcoreChatPayload,
 } from "@/lib/gafcore-chat-delivery.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
@@ -3239,6 +3240,15 @@ export function ChatPanel({
         ),
       );
 
+      const unwrappedChat = unwrapGafcoreChatPayload(result.reply ?? "", result.files ?? []);
+      result = {
+        ...result,
+        reply: unwrappedChat.reply,
+        files: Array.isArray(unwrappedChat.files)
+          ? (unwrappedChat.files as Array<{ name: string; language?: string; content: string }>)
+          : result.files,
+      };
+
       if (
         staleDrop(
           sanitizeUserFacingAiText(softenRoboticReply(raw, result.reply || "Listo.")),
@@ -3322,7 +3332,7 @@ export function ChatPanel({
           replyText = sanitizeUserFacingAiText(
             softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto personalizado.`),
           );
-        } else if (filesToApply.length === 0 && !/\[GUÍA GAFCORE/i.test(instruction)) {
+        } else if (filesToApply.length === 0) {
           setLoading(true);
           setHealthPhase("optimizing_design");
           const strictInstruction =

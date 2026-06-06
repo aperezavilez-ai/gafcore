@@ -18,6 +18,7 @@ import {
   prepareIncrementalEditSession,
 } from "@/lib/gafcore-incremental-edit.shared";
 import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
+import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
 
 export type GafcoreDeliveredFile = {
   name: string;
@@ -71,6 +72,43 @@ export function shouldBootstrapBuildDelivery(
   return false;
 }
 
+/**
+ * Si la IA metió el JSON entero en `reply` o dejó `files` vacío, extrae reply + files.
+ */
+export function unwrapGafcoreChatPayload(
+  reply: string,
+  files: unknown,
+): { reply: string; files: unknown } {
+  let outReply = typeof reply === "string" ? reply : "";
+  let outFiles = files;
+
+  const tryExtract = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (!trimmed.startsWith("{") && !trimmed.includes('"files"')) return false;
+    const parsed = parseJsonLoose<{ reply?: string; files?: unknown }>(trimmed);
+    if (!parsed) return false;
+    let changed = false;
+    if (typeof parsed.reply === "string" && parsed.reply.trim()) {
+      outReply = parsed.reply;
+      changed = true;
+    }
+    if (Array.isArray(parsed.files) && validateOutputFiles(parsed.files).length > 0) {
+      outFiles = parsed.files;
+      changed = true;
+    }
+    return changed;
+  };
+
+  if (validateOutputFiles(outFiles).length === 0) {
+    tryExtract(outReply);
+  }
+  if (outReply.trim().startsWith("{") && /"files"\s*:/.test(outReply)) {
+    tryExtract(outReply);
+  }
+
+  return { reply: outReply, files: outFiles };
+}
+
 /** Repara, bootstrap plantilla y asegura package.json cuando hace falta. */
 export function finalizeGafcoreBuildDelivery(
   instruction: string,
@@ -78,8 +116,9 @@ export function finalizeGafcoreBuildDelivery(
   reply: string,
   rawFiles: unknown,
 ): FinalizeBuildResult {
-  const planOnly = aiReplyLooksLikePlanOnly(reply);
-  let files = repairGafcoreOutputFiles(validateOutputFiles(rawFiles));
+  const unwrapped = unwrapGafcoreChatPayload(reply, rawFiles);
+  const planOnly = aiReplyLooksLikePlanOnly(unwrapped.reply);
+  let files = repairGafcoreOutputFiles(validateOutputFiles(unwrapped.files));
   let source: FinalizeBuildResult["source"] = "ai";
 
   if (files.length === 0) {
@@ -97,7 +136,7 @@ export function finalizeGafcoreBuildDelivery(
     }
   }
 
-  if (shouldBootstrapBuildDelivery(instruction, contextFiles, files, reply)) {
+  if (shouldBootstrapBuildDelivery(instruction, contextFiles, files, unwrapped.reply)) {
     /* Sin plantillas predefinidas — confiar en la respuesta de la IA o reintento del usuario. */
   } else if (files.length > 0) {
     files = ensureReactPackageJson(files);
@@ -113,7 +152,7 @@ export function finalizeGafcoreBuildDelivery(
     files = shield.files;
   }
 
-  return { reply, files, source, planOnly };
+  return { reply: unwrapped.reply, files, source, planOnly };
 }
 
 export const GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX =
