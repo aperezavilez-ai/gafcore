@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
+import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
 
 export type SaveProjectFilesResult =
@@ -314,7 +315,15 @@ async function writeProjectFilesToDb(
   projectId: string,
   generation: number,
 ): Promise<SaveProjectFilesResult> {
-  if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
+  if (isProjectSaveGenerationStale(projectId, generation)) {
+    logPipelineEvent("warn", "persist.stale_discarded", {
+      projectId,
+      generation,
+      fileCount: files.length,
+      phase: "persist",
+    });
+    return { ok: true };
+  }
 
   const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
   if (!owned?.id) {
@@ -326,7 +335,15 @@ async function writeProjectFilesToDb(
     return { ok: false, reason: "no_project", detail: "project_not_visible" };
   }
 
-  if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
+  if (isProjectSaveGenerationStale(projectId, generation)) {
+    logPipelineEvent("warn", "persist.stale_discarded", {
+      projectId,
+      generation,
+      phase: "persist",
+      step: "post_project_check",
+    });
+    return { ok: true };
+  }
 
   const { error: delErr } = await sb.from("project_files").delete().eq("project_id", projectId);
   if (delErr) {
@@ -339,7 +356,15 @@ async function writeProjectFilesToDb(
 
   if (files.length === 0) return { ok: true };
 
-  if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
+  if (isProjectSaveGenerationStale(projectId, generation)) {
+    logPipelineEvent("warn", "persist.stale_discarded", {
+      projectId,
+      generation,
+      phase: "persist",
+      step: "pre_insert",
+    });
+    return { ok: true };
+  }
 
   const map = new Map<string, FileItem>();
   for (const f of files) map.set(f.name, f);

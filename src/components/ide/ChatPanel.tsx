@@ -90,7 +90,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
-import { logClientError, logClientWarn } from "@/lib/gafcore-client-logger";
+import { logClientError, logClientWarn, logPipelineEvent, pipelineTraceMeta } from "@/lib/gafcore-client-logger";
 import {
   createCodeSnapshot,
   validateAndHealBeforePreview,
@@ -878,6 +878,19 @@ export function ChatPanel({
   const offerGenerationRollback = useCallback(
     (reason: string) => {
       if (!rollbackBaselineRef.current?.length) return;
+      logPipelineEvent(
+        "warn",
+        "rollback.offered",
+        pipelineTraceMeta(
+          {
+            traceId: requestEpochRef.current,
+            projectId: activeProjectIdRef.current ?? projectId,
+            phase: "rollback",
+            pipelineRunId: pipelineRunIdRef.current,
+          },
+          { reason: reason.slice(0, 160) },
+        ),
+      );
       toast.error(reason, {
         duration: 14_000,
         action: {
@@ -1422,6 +1435,20 @@ export function ChatPanel({
       }
       previewErrorCooldownRef.current = { msg, at: now };
 
+      logPipelineEvent(
+        "warn",
+        "preview.error",
+        pipelineTraceMeta(
+          {
+            traceId: requestEpochRef.current,
+            projectId: activeProjectIdRef.current ?? projectId,
+            phase: "preview",
+            pipelineRunId: pipelineRunIdRef.current,
+          },
+          { message: msg.slice(0, 200) },
+        ),
+      );
+
       const errKey = msg.slice(0, 120);
       const looksLikeJsxGlue =
         /SyntaxError|Unexpected token/i.test(msg) ||
@@ -1721,6 +1748,20 @@ export function ChatPanel({
       language: f.language ?? "typescript",
     }));
 
+    logPipelineEvent(
+      "info",
+      "apply.start",
+      pipelineTraceMeta(
+        {
+          traceId: requestEpochRef.current,
+          projectId: genProjectId,
+          phase: "apply",
+          pipelineRunId: pipelineRunIdRef.current,
+        },
+        { deltaCount: generated.length },
+      ),
+    );
+
     const snapLabel = options.snapshotLabel?.trim();
     if (
       snapLabel &&
@@ -1798,6 +1839,19 @@ export function ChatPanel({
     const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
     const persistResult = await persistMergedToProjectDb(merged);
     if (!persistResult.ok) {
+      logPipelineEvent(
+        "warn",
+        "persist.failed",
+        pipelineTraceMeta(
+          {
+            traceId: requestEpochRef.current,
+            projectId: genProjectId,
+            phase: "persist",
+            pipelineRunId: pipelineRunIdRef.current,
+          },
+          { reason: persistResult.detail ?? "unknown", fileCount: merged.length },
+        ),
+      );
       offerGenerationRollback("No se guardó en la nube. Puedes deshacer el último cambio.");
     }
 
@@ -1872,6 +1926,25 @@ export function ChatPanel({
         }
       }
     }
+    logPipelineEvent(
+      "info",
+      "apply.done",
+      pipelineTraceMeta(
+        {
+          traceId: requestEpochRef.current,
+          projectId: genProjectId,
+          phase: "apply",
+          pipelineRunId: pipelineRunIdRef.current,
+        },
+        {
+          fileCount: mergedForReturn.length,
+          deltaCount: outFiles.length,
+          persistOk: persistResult.ok,
+          issueCount: issues.length,
+          blockingCount: issues.filter((i) => i.severity === "error").length,
+        },
+      ),
+    );
     return { merged: mergedForReturn, issues };
   };
 
@@ -3033,6 +3106,19 @@ export function ChatPanel({
       setHealthPhase(null);
     }
     const myEpoch = ++requestEpochRef.current;
+    logPipelineEvent(
+      "info",
+      "chat.request",
+      pipelineTraceMeta(
+        {
+          traceId: myEpoch,
+          projectId: activeProjectIdRef.current ?? projectId,
+          phase: "chat",
+          pipelineRunId: pipelineRunIdRef.current,
+        },
+        { build: effectiveBuild, instructionLen: raw.length },
+      ),
+    );
     validationAutoRetryUsedRef.current = false;
     setInput("");
     setPendingComposerImages([]);
@@ -3134,6 +3220,24 @@ export function ChatPanel({
           { preferReliableJson: isSubstantiveBuildRequest(raw || coreText) },
         );
       }
+
+      logPipelineEvent(
+        "info",
+        "chat.response",
+        pipelineTraceMeta(
+          {
+            traceId: myEpoch,
+            projectId: activeProjectIdRef.current ?? projectId,
+            phase: "chat",
+            pipelineRunId: pipelineRunIdRef.current,
+          },
+          {
+            filesOut: result.files?.length ?? 0,
+            validationBlocked: result.validationBlocked === true,
+            safeBuildPhase: result.safeBuild?.phase ?? null,
+          },
+        ),
+      );
 
       if (
         staleDrop(

@@ -20,6 +20,9 @@ export function logClientError(event: string, meta?: unknown): void {
   console.error(`[gafcore] ${event}`, meta ?? "");
 }
 
+export { logPipelineEvent, pipelineTraceMeta } from "@/lib/gafcore-pipeline-telemetry.shared";
+export type { PipelineLogLevel, PipelinePhase } from "@/lib/gafcore-pipeline-telemetry.shared";
+
 /** QA debug panel: diagnóstico estructurado solo en dev. */
 export function logClientDebugGroup(title: string, payload: Record<string, unknown>): void {
   if (!IS_DEV) return;

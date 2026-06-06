@@ -34,7 +34,7 @@ import {
   getPersistedChatCache,
   setPersistedChatCache,
 } from "@/lib/gafcore-chat-cache.server";
-import { logDev } from "@/lib/gafcore-logger.server";
+import { logDev, logWarn } from "@/lib/gafcore-logger.server";
 import {
   sanitizeApiErrorDetail,
   sanitizeUserFacingAiText,
@@ -564,6 +564,14 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     risk: gov.risk,
     metadata: { mode: "complete", safeBuild: finalized.safeBuild },
   });
+
+  if (agentResult.validationBlocked && finalized.files.length === 0) {
+    logWarn("gafcore_chat_validation_blocked", {
+      projectId: data.projectId,
+      instructionLen: data.instruction.length,
+      agentAttempts: agentResult.attempts,
+    });
+  }
 
   return jsonResponse({
     reply,
