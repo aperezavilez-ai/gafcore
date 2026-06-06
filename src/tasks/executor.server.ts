@@ -39,9 +39,24 @@ export async function executeAgentTask(opts: {
   }
 
   if (task.agent_type === "deployment") {
-    const reply =
-      "Despliegue: usa el botón **Publicar** en la barra del IDE (GitHub + Vercel). Esta tarea no publica automáticamente en v1.";
-    await appendTaskLog(task.id, "deploy_hint", reply);
+    const { verifyProjectDeploymentIntegrations } = await import(
+      "@/lib/gafcore-project-state.server"
+    );
+    const check = await verifyProjectDeploymentIntegrations(
+      task.project_id,
+      task.user_id,
+      task.workflow_run_id,
+    );
+    const reply = check.ok
+      ? check.message
+      : `${check.message}\n\nPasos:\n${check.guidance.map((g) => `• ${g}`).join("\n")}`;
+    await appendTaskLog(
+      task.id,
+      check.ok ? "deploy_verified" : "deploy_pending",
+      reply,
+      check.ok ? "info" : "warn",
+      { githubOk: check.githubOk, vercelOk: check.vercelOk, siteOk: check.siteOk },
+    );
     return { reply, patches: [] };
   }
 

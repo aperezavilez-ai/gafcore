@@ -45,6 +45,7 @@ type Props = {
   planSummary?: string | null;
   workflowState?: string | null;
   metrics?: WorkflowMetricsUi | null;
+  integrationStatus?: string | null;
   className?: string;
   onCancel?: () => void;
   cancelPending?: boolean;
@@ -55,6 +56,7 @@ export function WorkflowTaskStrip({
   planSummary,
   workflowState,
   metrics,
+  integrationStatus,
   className,
   onCancel,
   cancelPending,
@@ -81,6 +83,9 @@ export function WorkflowTaskStrip({
         <p className="mb-1.5 line-clamp-2 text-muted-foreground">
           <span className="font-medium text-foreground">Plan:</span> {planSummary}
         </p>
+      ) : null}
+      {integrationStatus ? (
+        <p className="mb-1.5 text-[10px] font-medium text-muted-foreground">{integrationStatus}</p>
       ) : null}
       {metrics?.quota || metrics?.run?.durationMs != null ? (
         <p className="mb-1.5 text-muted-foreground">

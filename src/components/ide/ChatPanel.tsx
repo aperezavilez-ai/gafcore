@@ -62,6 +62,15 @@ import {
   pickCurrentOrchestrationTask,
   workflowPanelProgress,
 } from "@/core/orchestration/workflow-panel.shared";
+import {
+  formatOrchestrationStatusLine,
+  type ProjectOrchestrationState,
+} from "@/core/orchestration/project-state.shared";
+import {
+  getProjectOrchestrationState,
+  syncProjectOrchestrationState,
+  verifyProjectDeploymentStep,
+} from "@/lib/gafcore-project-state.functions";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
 import {
@@ -497,6 +506,8 @@ export function ChatPanel({
   const [orchestrationWorkflowRunId, setOrchestrationWorkflowRunId] = useState<string | null>(
     null,
   );
+  const [orchestrationState, setOrchestrationState] =
+    useState<ProjectOrchestrationState | null>(null);
   const orchestrationActiveTaskIdRef = useRef<string | null>(null);
   const [backgroundWorkflowRunId, setBackgroundWorkflowRunId] = useState<string | null>(null);
   const [workflowTasks, setWorkflowTasks] = useState<WorkflowTaskUi[]>([]);
@@ -1586,6 +1597,9 @@ export function ChatPanel({
   const callRunWorkflowWave = useServerFn(runGafcoreWorkflowWave);
   const callGetWorkflowStatus = useServerFn(getGafcoreWorkflowStatus);
   const callCompleteWorkflowTask = useServerFn(completeGafcoreWorkflowTask);
+  const callGetOrchestrationState = useServerFn(getProjectOrchestrationState);
+  const callSyncOrchestrationState = useServerFn(syncProjectOrchestrationState);
+  const callVerifyDeploymentStep = useServerFn(verifyProjectDeploymentStep);
   const callCancelWorkflow = useServerFn(cancelGafcoreWorkflow);
   const callSyncPipelineWorkflow = useServerFn(syncGafcorePipelineWorkflow);
   const callValidateSources = useServerFn(validateGafcoreSources);
@@ -1984,6 +1998,7 @@ export function ChatPanel({
     async (runId?: string | null) => {
       const id = runId ?? orchestrationWorkflowRunId;
       if (!id) return;
+      const pid = projectId ?? activeProjectIdRef.current;
       try {
         const snap = await callGetWorkflowStatus({ data: { workflowRunId: id } });
         if (!snap.ok) {
@@ -1995,6 +2010,7 @@ export function ChatPanel({
             }
           }
           setOrchestrationWorkflowRunId(null);
+          setOrchestrationState(null);
           if (!multiAgentMode) {
             setWorkflowTasks([]);
             setWorkflowPlanSummary(null);
@@ -2007,11 +2023,45 @@ export function ChatPanel({
         setWorkflowPlanSummary(snap.planSummary ?? null);
         setWorkflowState(snap.run.state);
         if (snap.metrics) setWorkflowMetrics(snap.metrics as WorkflowMetricsUi);
+        if (pid) {
+          const st = await callGetOrchestrationState({
+            data: { projectId: pid, workflowRunId: id },
+          });
+          if (st.ok && st.state) setOrchestrationState(st.state);
+        }
       } catch (e) {
         logClientWarn("orchestration-workflow-refresh", e);
       }
     },
-    [orchestrationWorkflowRunId, callGetWorkflowStatus, orchestrationStorageKey, multiAgentMode],
+    [
+      orchestrationWorkflowRunId,
+      callGetWorkflowStatus,
+      callGetOrchestrationState,
+      orchestrationStorageKey,
+      multiAgentMode,
+      projectId,
+    ],
+  );
+
+  const syncOrchestrationPreviewState = useCallback(
+    async (previewOk: boolean, previewError: string | null) => {
+      const runId = orchestrationWorkflowRunId;
+      const pid = projectId ?? activeProjectIdRef.current;
+      if (!runId || !pid) return;
+      try {
+        const res = await callSyncOrchestrationState({
+          data: {
+            projectId: pid,
+            workflowRunId: runId,
+            preview: { ok: previewOk, lastError: previewError },
+          },
+        });
+        if (res.ok && res.state) setOrchestrationState(res.state);
+      } catch (e) {
+        logClientWarn("orchestration-state-sync", e);
+      }
+    },
+    [orchestrationWorkflowRunId, projectId, callSyncOrchestrationState],
   );
 
   const syncWorkflowToPipeline = useCallback(
@@ -2234,6 +2284,12 @@ export function ChatPanel({
       cancelled = true;
     };
   }, [projectId, multiAgentMode, factoryMode, orchestrationStorageKey, refreshOrchestrationWorkflow]);
+
+  useEffect(() => {
+    if (!orchestrationWorkflowRunId || !projectId) return;
+    const err = lastError?.trim() || null;
+    void syncOrchestrationPreviewState(!err, err);
+  }, [lastError, orchestrationWorkflowRunId, projectId, syncOrchestrationPreviewState]);
 
   useEffect(() => {
     const runId = backgroundWorkflowRunId;
@@ -3778,16 +3834,53 @@ export function ChatPanel({
         !hasBlockingValidationIssues(issues) &&
         !generationValidationBlocked
       ) {
-        try {
-          await callCompleteWorkflowTask({
-            data: { taskId: orchestrationActiveTaskIdRef.current, outcome: "succeeded" },
-          });
-          await refreshOrchestrationWorkflow(orchestrationWorkflowRunId);
-        } catch (e) {
-          logClientWarn("orchestration-task-complete", e);
-        } finally {
-          orchestrationActiveTaskIdRef.current = null;
+        const activeTask = workflowTasks.find(
+          (t) => t.id === orchestrationActiveTaskIdRef.current,
+        );
+        const pid = activeProjectIdRef.current ?? projectId;
+        let canComplete = true;
+
+        if (activeTask?.agent_type === "deployment" && pid) {
+          try {
+            const verify = await callVerifyDeploymentStep({
+              data: {
+                projectId: pid,
+                workflowRunId: orchestrationWorkflowRunId,
+                preview: {
+                  ok: !lastErrorRef.current?.trim(),
+                  lastError: lastErrorRef.current,
+                },
+              },
+            });
+            if (verify.ok && verify.state) {
+              setOrchestrationState(verify.state);
+            }
+            if (!verify.ok || !verify.ready) {
+              canComplete = false;
+              toast.message(verify.message ?? "Paso de despliegue pendiente", {
+                description: (verify.guidance ?? []).join(" · ") || undefined,
+                duration: 10_000,
+              });
+            } else {
+              toast.success("Deploy verificado: GitHub, Vercel y sitio OK", { duration: 6000 });
+            }
+          } catch (e) {
+            logClientWarn("orchestration-deploy-verify", e);
+          }
         }
+
+        if (canComplete) {
+          try {
+            await callCompleteWorkflowTask({
+              data: { taskId: orchestrationActiveTaskIdRef.current, outcome: "succeeded" },
+            });
+            await refreshOrchestrationWorkflow(orchestrationWorkflowRunId);
+            await syncOrchestrationPreviewState(true, null);
+          } catch (e) {
+            logClientWarn("orchestration-task-complete", e);
+          }
+        }
+        orchestrationActiveTaskIdRef.current = null;
       }
 
       if (effectiveBuild && aiReplyNeedsUserInput(replyText)) {
@@ -3895,11 +3988,17 @@ export function ChatPanel({
   const workflowPanelStatus = useMemo(() => {
     if (!orchestrationWorkflowRunId || workflowTasks.length === 0) return null;
     const { completed, total } = workflowPanelProgress(workflowTasks);
-    if (workflowPlanSummary) {
-      return `Workflow ${completed}/${total} · ${workflowPlanSummary.slice(0, 90)}`;
-    }
-    return `Workflow ${completed}/${total} tareas`;
-  }, [orchestrationWorkflowRunId, workflowTasks, workflowPlanSummary]);
+    const integrationLine = formatOrchestrationStatusLine(orchestrationState);
+    const head = workflowPlanSummary
+      ? `Workflow ${completed}/${total} · ${workflowPlanSummary.slice(0, 70)}`
+      : `Workflow ${completed}/${total} tareas`;
+    return integrationLine ? `${head} · ${integrationLine}` : head;
+  }, [
+    orchestrationWorkflowRunId,
+    workflowTasks,
+    workflowPlanSummary,
+    orchestrationState,
+  ]);
 
   const openPinConvention = (content: string) => {
     setPinConventionBody(content);
@@ -3990,6 +4089,7 @@ export function ChatPanel({
             planSummary={workflowPlanSummary}
             workflowState={workflowState}
             metrics={workflowMetrics}
+            integrationStatus={formatOrchestrationStatusLine(orchestrationState)}
             onCancel={
               activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
             }

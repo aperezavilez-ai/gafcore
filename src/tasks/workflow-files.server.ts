@@ -10,6 +10,7 @@ export type WorkflowPayload = {
   filesSnapshot?: ProjFile[];
   mergedPatches?: FilePatch[];
   planSummary?: string;
+  orchestrationState?: import("@/core/orchestration/project-state.shared").ProjectOrchestrationState;
 };
 
 export function trimFilesForWorkflowSnapshot(files: ProjFile[]): ProjFile[] {
