@@ -8,6 +8,7 @@ export type WorkflowTaskUi = {
   agent_type: AgentType | string;
   state: string;
   title: string;
+  instruction?: string;
   error_message?: string | null;
 };
 

@@ -5,6 +5,7 @@
 import { classifyUserIntent } from "@/orchestrator/intent.classifier";
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { shouldUseFastChatPipeline } from "@/lib/gafcore-guide-autopilot.shared";
+import { GAFCORE_WORKFLOW_STEP_PREFIX } from "@/core/orchestration/workflow-panel.shared";
 
 export type CoreOrchestrationGateInput = {
   instruction: string;
@@ -38,6 +39,7 @@ export function isInternalOrchestrationInstruction(text: string): boolean {
   const t = text.trim();
   return (
     shouldUseFastChatPipeline(t) ||
+    t.includes(GAFCORE_WORKFLOW_STEP_PREFIX) ||
     /^\[GAFCORE_BUILD_CONFIRMED\]/i.test(t) ||
     /^\[PROYECTO NUEVO GafCore\]/i.test(t) ||
     /^\[FUNCTIONAL-FIRST\]/i.test(t)

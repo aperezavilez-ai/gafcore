@@ -8,6 +8,8 @@ type Props = {
   /** Rellena el compositor con el prompt (no envía; el usuario pulsa Construir). */
   onSelect: (step: GafcoreChatNextStep) => void;
   autopilotStatus?: string | null;
+  /** Etiqueta del panel (workflow vs guía legacy). */
+  panelLabel?: string;
 };
 
 /** Chips horizontales encima del recuadro de escritura (no dentro del hilo del chat). */
@@ -16,6 +18,7 @@ export function ChatNextStepSuggestions({
   disabled,
   onSelect,
   autopilotStatus,
+  panelLabel = "Pasos del proyecto",
 }: Props) {
   const visibleSteps = steps.filter((s) => s.status !== "completed");
   if (visibleSteps.length === 0) return null;
@@ -24,7 +27,7 @@ export function ChatNextStepSuggestions({
   const completedCount = steps.filter((s) => s.status === "completed").length;
 
   return (
-    <div className="mb-2 min-w-0" aria-label="Pasos del proyecto">
+    <div className="mb-2 min-w-0" aria-label={panelLabel}>
       {autopilotStatus ? (
         <p className="mb-1.5 line-clamp-2 text-[10px] font-medium leading-snug text-primary">
           {autopilotStatus}

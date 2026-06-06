@@ -3,7 +3,7 @@ import { completeChatMessageViaWorkflowQueue } from "@/tasks/workflow-ai-queue.s
 import { taskPlanSchema, type TaskPlan } from "@/tasks/artifacts.shared";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 
-const PLANNER_SYSTEM = `Eres el planificador de GafCore. Divide el trabajo en un DAG pequeño (2-6 tareas).
+const PLANNER_SYSTEM = `Eres el planificador de GafCore. Divide el trabajo en un DAG pequeño (3-8 tareas) según el pedido del usuario.
 Responde SOLO JSON válido con esta forma exacta:
 {
   "version": 1,
@@ -11,7 +11,7 @@ Responde SOLO JSON válido con esta forma exacta:
   "tasks": [
     {
       "id": "t1",
-      "agentType": "frontend|backend|validation|documentation|refactor|debug",
+      "agentType": "frontend|backend|validation|documentation|refactor|debug|deployment",
       "title": "título corto",
       "instruction": "qué debe hacer este agente",
       "dependsOn": [],
@@ -20,8 +20,10 @@ Responde SOLO JSON válido con esta forma exacta:
   ]
 }
 Reglas:
-- NO incluyas tareas con agentType "planner", "database" ni "deployment" salvo petición explícita de migraciones o deploy.
-- Si hay cambios de código, la última tarea debe ser "validation" que depende de las de código.
+- Genera tareas DINÁMICAS según tipo de proyecto (landing, tienda, SaaS, app, etc.).
+- Incluye etapas de preview/UI primero; validation al final del código.
+- Si el usuario menciona publicar, deploy, dominio, GitHub o Vercel, añade tarea "deployment" al final.
+- NO incluyas agentType "planner". "database" solo si pide migraciones/Supabase explícito.
 - ids únicos (t1, t2, …), sin ciclos en dependsOn.
 - Instrucciones concretas por tarea, no copiar el mensaje del usuario entero en cada una.`;
 

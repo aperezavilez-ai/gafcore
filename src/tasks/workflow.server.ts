@@ -78,7 +78,7 @@ export async function getWorkflowSnapshot(workflowRunId: string, userId: string)
 
   const { data: tasks } = await supabaseAdmin
     .from("gafcore_agent_tasks")
-    .select("id, agent_type, state, priority, title, error_message, started_at, finished_at")
+    .select("id, agent_type, state, priority, title, instruction, error_message, started_at, finished_at")
     .eq("workflow_run_id", workflowRunId)
     .order("created_at", { ascending: true });
 

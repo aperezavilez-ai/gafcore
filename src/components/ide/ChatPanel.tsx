@@ -57,8 +57,12 @@ import {
   buildLocalProjectAnalysis,
   formatProjectAnalysisForChat,
 } from "@/core/behavior/gafcore-project-analysis.shared";
+import {
+  mapWorkflowTasksToPanelSteps,
+  pickCurrentOrchestrationTask,
+  workflowPanelProgress,
+} from "@/core/orchestration/workflow-panel.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
-import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
 import {
   aiReplyNeedsUserInput,
@@ -137,6 +141,7 @@ import {
 } from "@/lib/gafcore-orchestrator.functions";
 import {
   cancelGafcoreWorkflow,
+  completeGafcoreWorkflowTask,
   getGafcoreWorkflowStatus,
   planAndStartGafcoreWorkflow,
   runGafcoreWorkflowWave,
@@ -489,6 +494,10 @@ export function ChatPanel({
   const localMessageEchoRef = useRef<Set<string>>(new Set());
   const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
   const [activeWorkflowRunId, setActiveWorkflowRunId] = useState<string | null>(null);
+  const [orchestrationWorkflowRunId, setOrchestrationWorkflowRunId] = useState<string | null>(
+    null,
+  );
+  const orchestrationActiveTaskIdRef = useRef<string | null>(null);
   const [backgroundWorkflowRunId, setBackgroundWorkflowRunId] = useState<string | null>(null);
   const [workflowTasks, setWorkflowTasks] = useState<WorkflowTaskUi[]>([]);
   const [workflowPlanSummary, setWorkflowPlanSummary] = useState<string | null>(null);
@@ -1576,6 +1585,7 @@ export function ChatPanel({
   const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);
   const callRunWorkflowWave = useServerFn(runGafcoreWorkflowWave);
   const callGetWorkflowStatus = useServerFn(getGafcoreWorkflowStatus);
+  const callCompleteWorkflowTask = useServerFn(completeGafcoreWorkflowTask);
   const callCancelWorkflow = useServerFn(cancelGafcoreWorkflow);
   const callSyncPipelineWorkflow = useServerFn(syncGafcorePipelineWorkflow);
   const callValidateSources = useServerFn(validateGafcoreSources);
@@ -1966,6 +1976,43 @@ export function ChatPanel({
   };
 
   const workflowStorageKey = projectId ? `gafcore_workflow_${projectId}` : null;
+  const orchestrationStorageKey = projectId
+    ? `gafcore_orchestration_workflow_${projectId}`
+    : null;
+
+  const refreshOrchestrationWorkflow = useCallback(
+    async (runId?: string | null) => {
+      const id = runId ?? orchestrationWorkflowRunId;
+      if (!id) return;
+      try {
+        const snap = await callGetWorkflowStatus({ data: { workflowRunId: id } });
+        if (!snap.ok) {
+          if (orchestrationStorageKey) {
+            try {
+              localStorage.removeItem(orchestrationStorageKey);
+            } catch {
+              /* */
+            }
+          }
+          setOrchestrationWorkflowRunId(null);
+          if (!multiAgentMode) {
+            setWorkflowTasks([]);
+            setWorkflowPlanSummary(null);
+            setWorkflowState(null);
+          }
+          return;
+        }
+        setOrchestrationWorkflowRunId(id);
+        setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
+        setWorkflowPlanSummary(snap.planSummary ?? null);
+        setWorkflowState(snap.run.state);
+        if (snap.metrics) setWorkflowMetrics(snap.metrics as WorkflowMetricsUi);
+      } catch (e) {
+        logClientWarn("orchestration-workflow-refresh", e);
+      }
+    },
+    [orchestrationWorkflowRunId, callGetWorkflowStatus, orchestrationStorageKey, multiAgentMode],
+  );
 
   const syncWorkflowToPipeline = useCallback(
     async (workflowRunId: string, workflowState: string, planSummary: string) => {
@@ -1980,6 +2027,60 @@ export function ChatPanel({
       }
     },
     [callSyncPipelineWorkflow],
+  );
+
+  const planOrchestrationWorkflow = useCallback(
+    async (instruction: string, pid: string, contextFiles: FileItem[]) => {
+      if (factoryMode || multiAgentMode || visualEditOn) return null;
+      try {
+        const res = await callPlanAndStartWorkflow({
+          data: {
+            projectId: pid,
+            instruction,
+            files: contextFiles.map((f) => ({
+              name: f.name,
+              content: f.content,
+              language: f.language,
+            })),
+            pipelineRunId: pipelineRunIdRef.current ?? undefined,
+          },
+        });
+        if (!res.ok) {
+          if (res.error === "workflow_limit_reached") {
+            toast.message("Límite de workflows activos. Puedes seguir construyendo manualmente.", {
+              duration: 6000,
+            });
+          }
+          return null;
+        }
+        if (orchestrationStorageKey) {
+          try {
+            localStorage.setItem(orchestrationStorageKey, res.workflowRunId);
+          } catch {
+            /* */
+          }
+        }
+        setOrchestrationWorkflowRunId(res.workflowRunId);
+        await refreshOrchestrationWorkflow(res.workflowRunId);
+        if (res.planSummary) setWorkflowPlanSummary(res.planSummary);
+        if (pipelineRunIdRef.current) {
+          await syncWorkflowToPipeline(res.workflowRunId, "executing", res.planSummary ?? "");
+        }
+        return res.workflowRunId;
+      } catch (e) {
+        logClientWarn("orchestration-workflow-plan", e);
+        return null;
+      }
+    },
+    [
+      factoryMode,
+      multiAgentMode,
+      visualEditOn,
+      callPlanAndStartWorkflow,
+      orchestrationStorageKey,
+      refreshOrchestrationWorkflow,
+      syncWorkflowToPipeline,
+    ],
   );
 
   const clearBackgroundWorkflow = useCallback(
@@ -2114,6 +2215,25 @@ export function ChatPanel({
       /* */
     }
   }, [projectId, multiAgentBg, workflowStorageKey, backgroundWorkflowRunId]);
+
+  useEffect(() => {
+    if (!projectId || multiAgentMode || factoryMode) return;
+    if (!orchestrationStorageKey) return;
+    let cancelled = false;
+    try {
+      const stored = localStorage.getItem(orchestrationStorageKey);
+      if (!stored) return;
+      void (async () => {
+        await refreshOrchestrationWorkflow(stored);
+        if (cancelled) return;
+      })();
+    } catch {
+      /* */
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, multiAgentMode, factoryMode, orchestrationStorageKey, refreshOrchestrationWorkflow]);
 
   useEffect(() => {
     const runId = backgroundWorkflowRunId;
@@ -2865,6 +2985,7 @@ export function ChatPanel({
   ]);
 
   const tryAdvanceGuideAutopilot = useCallback(async () => {
+    if (orchestrationWorkflowRunId) return;
     if (loading || sendInFlightRef.current || factoryMode || visualEditOn || mode !== "build") {
       return;
     }
@@ -2935,6 +3056,7 @@ export function ChatPanel({
     visualEditOn,
     mode,
     buildGuideSuggestionContext,
+    orchestrationWorkflowRunId,
   ]);
 
   const scheduleGuideAutopilotAdvance = useCallback(() => {
@@ -3126,6 +3248,20 @@ export function ChatPanel({
       return;
     }
 
+    if (
+      effectiveBuild &&
+      buildConfirmed &&
+      !factoryMode &&
+      !multiAgentMode &&
+      !visualEditOn &&
+      !orchestrationWorkflowRunId
+    ) {
+      const pid = activeProjectIdRef.current ?? projectId;
+      if (pid) {
+        await planOrchestrationWorkflow(userFacingRaw || coreText, pid, buildContextFiles);
+      }
+    }
+
     const functionalPrefix =
       effectiveBuild && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
     const welcomeApp = buildContextFiles.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
@@ -3177,6 +3313,12 @@ export function ChatPanel({
       coreText +
       pendingRef;
     if (!instruction.trim() || loading || sendInFlightRef.current) return;
+    if (orchestrationWorkflowRunId && workflowTasks.length > 0 && effectiveBuild) {
+      orchestrationActiveTaskIdRef.current =
+        pickCurrentOrchestrationTask(workflowTasks)?.id ?? null;
+    } else {
+      orchestrationActiveTaskIdRef.current = null;
+    }
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (
       lastUser &&
@@ -3621,10 +3763,30 @@ export function ChatPanel({
           if (
             !hasBlockingValidationIssues(issues) &&
             !isBlockingPreviewError(lastErrorRef.current) &&
-            !aiReplyNeedsUserInput(replyText)
+            !aiReplyNeedsUserInput(replyText) &&
+            !orchestrationWorkflowRunId
           ) {
             scheduleGuideAfterBuild = true;
           }
+        }
+      }
+
+      if (
+        effectiveBuild &&
+        orchestrationWorkflowRunId &&
+        orchestrationActiveTaskIdRef.current &&
+        !hasBlockingValidationIssues(issues) &&
+        !generationValidationBlocked
+      ) {
+        try {
+          await callCompleteWorkflowTask({
+            data: { taskId: orchestrationActiveTaskIdRef.current, outcome: "succeeded" },
+          });
+          await refreshOrchestrationWorkflow(orchestrationWorkflowRunId);
+        } catch (e) {
+          logClientWarn("orchestration-task-complete", e);
+        } finally {
+          orchestrationActiveTaskIdRef.current = null;
         }
       }
 
@@ -3718,33 +3880,26 @@ export function ChatPanel({
 
   const empty = messages.length === 0;
 
-  const nextSteps = useMemo(
-    () =>
-      getGafcoreChatNextSteps({
-        messages,
-        files: files.map((f) => ({ name: f.name, content: f.content })),
-        mode,
-        factoryMode,
-        visualEditOn,
-        multiAgentMode,
-        factoryAutoDeploy,
-        lastError,
-        pipelineStatus,
-        validationLabel,
-      }),
-    [
-      messages,
-      files,
-      mode,
-      factoryMode,
-      visualEditOn,
-      multiAgentMode,
-      factoryAutoDeploy,
-      lastError,
-      pipelineStatus,
-      validationLabel,
-    ],
-  );
+  const nextSteps = useMemo(() => {
+    if (
+      orchestrationWorkflowRunId &&
+      workflowTasks.length > 0 &&
+      !multiAgentMode &&
+      !factoryMode
+    ) {
+      return mapWorkflowTasksToPanelSteps(workflowTasks);
+    }
+    return [];
+  }, [orchestrationWorkflowRunId, workflowTasks, multiAgentMode, factoryMode]);
+
+  const workflowPanelStatus = useMemo(() => {
+    if (!orchestrationWorkflowRunId || workflowTasks.length === 0) return null;
+    const { completed, total } = workflowPanelProgress(workflowTasks);
+    if (workflowPlanSummary) {
+      return `Workflow ${completed}/${total} · ${workflowPlanSummary.slice(0, 90)}`;
+    }
+    return `Workflow ${completed}/${total} tareas`;
+  }, [orchestrationWorkflowRunId, workflowTasks, workflowPlanSummary]);
 
   const openPinConvention = (content: string) => {
     setPinConventionBody(content);
@@ -3825,7 +3980,10 @@ export function ChatPanel({
               .join(" · ")}
           </p>
         ) : null}
-        {activeWorkflowRunId || backgroundWorkflowRunId || workflowTasks.length > 0 ? (
+        {orchestrationWorkflowRunId ||
+        activeWorkflowRunId ||
+        backgroundWorkflowRunId ||
+        workflowTasks.length > 0 ? (
           <WorkflowTaskStrip
             className="mt-2"
             tasks={workflowTasks}
@@ -4080,8 +4238,13 @@ export function ChatPanel({
         ) : null}
         <ChatNextStepSuggestions
           steps={nextSteps}
+          panelLabel="Workflow del proyecto"
           disabled={loading}
-          autopilotStatus={guideAutopilotStatusMessage(guideAutopilotUi)}
+          autopilotStatus={
+            orchestrationWorkflowRunId
+              ? workflowPanelStatus
+              : guideAutopilotStatusMessage(guideAutopilotUi)
+          }
           onSelect={(step) => {
             if (loading) return;
             setInput(step.prompt);
