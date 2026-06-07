@@ -51,6 +51,24 @@ function AdminOpsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Administración GafCore
+            </p>
+            <h1 className="text-lg font-semibold text-foreground">Panel Ops</h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/gafcore/app">Volver al IDE</Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/gafcore">Inicio</Link>
+            </Button>
+          </div>
+        </div>
+      </header>
       <AiMonitorPanel />
       <GovernanceOpsPanel />
       <div className="border-t border-border">

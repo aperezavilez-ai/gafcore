@@ -176,11 +176,7 @@ function GafCoreLanding() {
   const { theme, setTheme } = useGafcoreTheme();
   const [checkoutPriceId, setCheckoutPriceId] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
-  const panelHref = user?.id
-    ? isAdmin
-      ? "/gafcore/admin/ops"
-      : "/gafcore/app"
-    : "/gafcore/login";
+  const panelHref = user?.id ? "/gafcore/app" : "/gafcore/login";
 
   const resolveUserId = useCallback(async (): Promise<string | undefined> => {
     if (user?.id) return user.id;
@@ -205,23 +201,15 @@ function GafCoreLanding() {
         return false;
       }
       clearPlanChoicePending(uid);
-      if (opts?.adminOps || isAdmin) {
+      if (opts?.adminOps) {
         window.location.assign(`${window.location.origin}/gafcore/admin/ops`);
         return true;
       }
       window.location.assign(`${window.location.origin}/gafcore/app`);
       return true;
     },
-    [resolveUserId, navigate, isAdmin],
+    [resolveUserId, navigate],
   );
-
-  /** Admin con sesión: no debe quedarse en tabla de planes. */
-  useEffect(() => {
-    if (authLoading || roleLoading) return;
-    if (!user?.id || !isAdmin) return;
-    clearPlanChoicePending(user.id);
-    void navigate({ to: "/gafcore/admin/ops", replace: true });
-  }, [authLoading, roleLoading, user?.id, isAdmin, navigate]);
 
   /** Sesión activa en #plan-free → entrar al editor (el ancla sola no basta). */
   useEffect(() => {
@@ -234,10 +222,10 @@ function GafCoreLanding() {
       if (!uid) return;
       if (hash === "plan-free") {
         toast.success("Entrando al plan gratis…");
-        await enterGafcoreApp({ adminOps: isAdmin });
+        await enterGafcoreApp();
       }
     })();
-  }, [authLoading, roleLoading, planFromUrl, resolveUserId, enterGafcoreApp, isAdmin]);
+  }, [authLoading, roleLoading, planFromUrl, resolveUserId, enterGafcoreApp]);
 
   /** Tras verificar correo: URL con ?pick_plan=1 → tabla de planes (añadir en Supabase Auth URL redirects). */
   useEffect(() => {
@@ -289,17 +277,13 @@ function GafCoreLanding() {
       if (planFromUrl === "free") {
         clearPlanChoicePending(uid);
         toast.success("Plan gratis: entrando al editor…");
-        if (isAdmin) {
-          window.location.assign(`${window.location.origin}/gafcore/admin/ops`);
-        } else {
-          window.location.assign(`${window.location.origin}/gafcore/app`);
-        }
+        window.location.assign(`${window.location.origin}/gafcore/app`);
         return;
       }
       setCheckoutPriceId(planFromUrl);
       navigate({ to: "/gafcore", search: {}, hash: "planes", replace: true });
     })();
-  }, [planFromUrl, user?.id, navigate, isAdmin]);
+  }, [planFromUrl, user?.id, navigate]);
 
   const choosePlan = (planId: string) => {
     void (async () => {
@@ -353,14 +337,27 @@ function GafCoreLanding() {
           <div className="hidden items-center gap-2 sm:gap-3 md:flex">
             <LanguageSwitcher variant="compact" />
             {user?.id ? (
-              <Button
-                type="button"
-                size="sm"
-                className="gc-cta rounded-full px-4"
-                onClick={() => void enterGafcoreApp({ adminOps: isAdmin })}
-              >
-                {isAdmin ? "Panel admin" : "Ir al panel"}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gc-cta rounded-full px-4"
+                  onClick={() => void enterGafcoreApp()}
+                >
+                  Ir al panel
+                </Button>
+                {isAdmin ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full px-4"
+                    onClick={() => void enterGafcoreApp({ adminOps: true })}
+                  >
+                    Ops admin
+                  </Button>
+                ) : null}
+              </>
             ) : (
               <>
                 <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
@@ -444,7 +441,7 @@ function GafCoreLanding() {
               onClick={(e) => {
                 if (!user?.id) return;
                 e.preventDefault();
-                void enterGafcoreApp({ adminOps: isAdmin });
+                void enterGafcoreApp();
               }}
             >
               {t("gc.hero.cta")}
