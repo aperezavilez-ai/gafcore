@@ -58,19 +58,9 @@ import {
   formatProjectAnalysisForChat,
 } from "@/core/behavior/gafcore-project-analysis.shared";
 import {
-  mapWorkflowTasksToPanelSteps,
-  pickCurrentOrchestrationTask,
-  workflowPanelProgress,
-} from "@/core/orchestration/workflow-panel.shared";
-import {
-  formatOrchestrationStatusLine,
-  type ProjectOrchestrationState,
-} from "@/core/orchestration/project-state.shared";
-import {
-  getProjectOrchestrationState,
-  syncProjectOrchestrationState,
-  verifyProjectDeploymentStep,
-} from "@/lib/gafcore-project-state.functions";
+  useGafcoreOrchestration,
+  type OrchestrationWorkflowUi,
+} from "@/hooks/useGafcoreOrchestration";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
 import {
@@ -150,7 +140,6 @@ import {
 } from "@/lib/gafcore-orchestrator.functions";
 import {
   cancelGafcoreWorkflow,
-  completeGafcoreWorkflowTask,
   getGafcoreWorkflowStatus,
   planAndStartGafcoreWorkflow,
   runGafcoreWorkflowWave,
@@ -503,12 +492,6 @@ export function ChatPanel({
   const localMessageEchoRef = useRef<Set<string>>(new Set());
   const [pipelineStatus, setPipelineStatus] = useState<string | null>(null);
   const [activeWorkflowRunId, setActiveWorkflowRunId] = useState<string | null>(null);
-  const [orchestrationWorkflowRunId, setOrchestrationWorkflowRunId] = useState<string | null>(
-    null,
-  );
-  const [orchestrationState, setOrchestrationState] =
-    useState<ProjectOrchestrationState | null>(null);
-  const orchestrationActiveTaskIdRef = useRef<string | null>(null);
   const [backgroundWorkflowRunId, setBackgroundWorkflowRunId] = useState<string | null>(null);
   const [workflowTasks, setWorkflowTasks] = useState<WorkflowTaskUi[]>([]);
   const [workflowPlanSummary, setWorkflowPlanSummary] = useState<string | null>(null);
@@ -1596,10 +1579,6 @@ export function ChatPanel({
   const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);
   const callRunWorkflowWave = useServerFn(runGafcoreWorkflowWave);
   const callGetWorkflowStatus = useServerFn(getGafcoreWorkflowStatus);
-  const callCompleteWorkflowTask = useServerFn(completeGafcoreWorkflowTask);
-  const callGetOrchestrationState = useServerFn(getProjectOrchestrationState);
-  const callSyncOrchestrationState = useServerFn(syncProjectOrchestrationState);
-  const callVerifyDeploymentStep = useServerFn(verifyProjectDeploymentStep);
   const callCancelWorkflow = useServerFn(cancelGafcoreWorkflow);
   const callSyncPipelineWorkflow = useServerFn(syncGafcorePipelineWorkflow);
   const callValidateSources = useServerFn(validateGafcoreSources);
@@ -1611,6 +1590,32 @@ export function ChatPanel({
   const callFinalizePipeline = useServerFn(finalizeGafcorePipelineRun);
   const callRunFactory = useServerFn(runGafcoreFactory);
   const callGetFactoryStatus = useServerFn(getGafcoreFactoryStatus);
+
+  const applyOrchestrationWorkflowUi = useCallback((patch: OrchestrationWorkflowUi) => {
+    setWorkflowTasks(patch.tasks);
+    setWorkflowPlanSummary(patch.planSummary);
+    setWorkflowState(patch.state);
+    setWorkflowMetrics(patch.metrics);
+  }, []);
+
+  const clearOrchestrationWorkflowUi = useCallback(() => {
+    setWorkflowTasks([]);
+    setWorkflowPlanSummary(null);
+    setWorkflowState(null);
+    setWorkflowMetrics(null);
+  }, []);
+
+  const orchestration = useGafcoreOrchestration({
+    projectId,
+    multiAgentMode,
+    factoryMode,
+    visualEditOn,
+    lastError,
+    pipelineRunIdRef,
+    activeProjectIdRef,
+    applyWorkflowUi: applyOrchestrationWorkflowUi,
+    clearWorkflowUi: clearOrchestrationWorkflowUi,
+  });
 
   const usePipelineOrchestrator = Boolean(
     projectId && mode === "build" && !visualEditOn,
@@ -1990,79 +1995,6 @@ export function ChatPanel({
   };
 
   const workflowStorageKey = projectId ? `gafcore_workflow_${projectId}` : null;
-  const orchestrationStorageKey = projectId
-    ? `gafcore_orchestration_workflow_${projectId}`
-    : null;
-
-  const refreshOrchestrationWorkflow = useCallback(
-    async (runId?: string | null) => {
-      const id = runId ?? orchestrationWorkflowRunId;
-      if (!id) return;
-      const pid = projectId ?? activeProjectIdRef.current;
-      try {
-        const snap = await callGetWorkflowStatus({ data: { workflowRunId: id } });
-        if (!snap.ok) {
-          if (orchestrationStorageKey) {
-            try {
-              localStorage.removeItem(orchestrationStorageKey);
-            } catch {
-              /* */
-            }
-          }
-          setOrchestrationWorkflowRunId(null);
-          setOrchestrationState(null);
-          if (!multiAgentMode) {
-            setWorkflowTasks([]);
-            setWorkflowPlanSummary(null);
-            setWorkflowState(null);
-          }
-          return;
-        }
-        setOrchestrationWorkflowRunId(id);
-        setWorkflowTasks(snap.tasks as WorkflowTaskUi[]);
-        setWorkflowPlanSummary(snap.planSummary ?? null);
-        setWorkflowState(snap.run.state);
-        if (snap.metrics) setWorkflowMetrics(snap.metrics as WorkflowMetricsUi);
-        if (pid) {
-          const st = await callGetOrchestrationState({
-            data: { projectId: pid, workflowRunId: id },
-          });
-          if (st.ok && st.state) setOrchestrationState(st.state);
-        }
-      } catch (e) {
-        logClientWarn("orchestration-workflow-refresh", e);
-      }
-    },
-    [
-      orchestrationWorkflowRunId,
-      callGetWorkflowStatus,
-      callGetOrchestrationState,
-      orchestrationStorageKey,
-      multiAgentMode,
-      projectId,
-    ],
-  );
-
-  const syncOrchestrationPreviewState = useCallback(
-    async (previewOk: boolean, previewError: string | null) => {
-      const runId = orchestrationWorkflowRunId;
-      const pid = projectId ?? activeProjectIdRef.current;
-      if (!runId || !pid) return;
-      try {
-        const res = await callSyncOrchestrationState({
-          data: {
-            projectId: pid,
-            workflowRunId: runId,
-            preview: { ok: previewOk, lastError: previewError },
-          },
-        });
-        if (res.ok && res.state) setOrchestrationState(res.state);
-      } catch (e) {
-        logClientWarn("orchestration-state-sync", e);
-      }
-    },
-    [orchestrationWorkflowRunId, projectId, callSyncOrchestrationState],
-  );
 
   const syncWorkflowToPipeline = useCallback(
     async (workflowRunId: string, workflowState: string, planSummary: string) => {
@@ -2077,60 +2009,6 @@ export function ChatPanel({
       }
     },
     [callSyncPipelineWorkflow],
-  );
-
-  const planOrchestrationWorkflow = useCallback(
-    async (instruction: string, pid: string, contextFiles: FileItem[]) => {
-      if (factoryMode || multiAgentMode || visualEditOn) return null;
-      try {
-        const res = await callPlanAndStartWorkflow({
-          data: {
-            projectId: pid,
-            instruction,
-            files: contextFiles.map((f) => ({
-              name: f.name,
-              content: f.content,
-              language: f.language,
-            })),
-            pipelineRunId: pipelineRunIdRef.current ?? undefined,
-          },
-        });
-        if (!res.ok) {
-          if (res.error === "workflow_limit_reached") {
-            toast.message("Límite de workflows activos. Puedes seguir construyendo manualmente.", {
-              duration: 6000,
-            });
-          }
-          return null;
-        }
-        if (orchestrationStorageKey) {
-          try {
-            localStorage.setItem(orchestrationStorageKey, res.workflowRunId);
-          } catch {
-            /* */
-          }
-        }
-        setOrchestrationWorkflowRunId(res.workflowRunId);
-        await refreshOrchestrationWorkflow(res.workflowRunId);
-        if (res.planSummary) setWorkflowPlanSummary(res.planSummary);
-        if (pipelineRunIdRef.current) {
-          await syncWorkflowToPipeline(res.workflowRunId, "executing", res.planSummary ?? "");
-        }
-        return res.workflowRunId;
-      } catch (e) {
-        logClientWarn("orchestration-workflow-plan", e);
-        return null;
-      }
-    },
-    [
-      factoryMode,
-      multiAgentMode,
-      visualEditOn,
-      callPlanAndStartWorkflow,
-      orchestrationStorageKey,
-      refreshOrchestrationWorkflow,
-      syncWorkflowToPipeline,
-    ],
   );
 
   const clearBackgroundWorkflow = useCallback(
@@ -2265,31 +2143,6 @@ export function ChatPanel({
       /* */
     }
   }, [projectId, multiAgentBg, workflowStorageKey, backgroundWorkflowRunId]);
-
-  useEffect(() => {
-    if (!projectId || multiAgentMode || factoryMode) return;
-    if (!orchestrationStorageKey) return;
-    let cancelled = false;
-    try {
-      const stored = localStorage.getItem(orchestrationStorageKey);
-      if (!stored) return;
-      void (async () => {
-        await refreshOrchestrationWorkflow(stored);
-        if (cancelled) return;
-      })();
-    } catch {
-      /* */
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, multiAgentMode, factoryMode, orchestrationStorageKey, refreshOrchestrationWorkflow]);
-
-  useEffect(() => {
-    if (!orchestrationWorkflowRunId || !projectId) return;
-    const err = lastError?.trim() || null;
-    void syncOrchestrationPreviewState(!err, err);
-  }, [lastError, orchestrationWorkflowRunId, projectId, syncOrchestrationPreviewState]);
 
   useEffect(() => {
     const runId = backgroundWorkflowRunId;
@@ -3041,7 +2894,7 @@ export function ChatPanel({
   ]);
 
   const tryAdvanceGuideAutopilot = useCallback(async () => {
-    if (orchestrationWorkflowRunId) return;
+    if (orchestration.isActive) return;
     if (loading || sendInFlightRef.current || factoryMode || visualEditOn || mode !== "build") {
       return;
     }
@@ -3112,7 +2965,7 @@ export function ChatPanel({
     visualEditOn,
     mode,
     buildGuideSuggestionContext,
-    orchestrationWorkflowRunId,
+    orchestration.isActive,
   ]);
 
   const scheduleGuideAutopilotAdvance = useCallback(() => {
@@ -3310,11 +3163,11 @@ export function ChatPanel({
       !factoryMode &&
       !multiAgentMode &&
       !visualEditOn &&
-      !orchestrationWorkflowRunId
+      !orchestration.isActive
     ) {
       const pid = activeProjectIdRef.current ?? projectId;
       if (pid) {
-        await planOrchestrationWorkflow(userFacingRaw || coreText, pid, buildContextFiles);
+        await orchestration.planWorkflow(userFacingRaw || coreText, pid, buildContextFiles);
       }
     }
 
@@ -3369,12 +3222,7 @@ export function ChatPanel({
       coreText +
       pendingRef;
     if (!instruction.trim() || loading || sendInFlightRef.current) return;
-    if (orchestrationWorkflowRunId && workflowTasks.length > 0 && effectiveBuild) {
-      orchestrationActiveTaskIdRef.current =
-        pickCurrentOrchestrationTask(workflowTasks)?.id ?? null;
-    } else {
-      orchestrationActiveTaskIdRef.current = null;
-    }
+    orchestration.assignActiveTaskBeforeBuild(effectiveBuild);
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (
       lastUser &&
@@ -3820,68 +3668,19 @@ export function ChatPanel({
             !hasBlockingValidationIssues(issues) &&
             !isBlockingPreviewError(lastErrorRef.current) &&
             !aiReplyNeedsUserInput(replyText) &&
-            !orchestrationWorkflowRunId
+            !orchestration.isActive
           ) {
             scheduleGuideAfterBuild = true;
           }
         }
       }
 
-      if (
-        effectiveBuild &&
-        orchestrationWorkflowRunId &&
-        orchestrationActiveTaskIdRef.current &&
-        !hasBlockingValidationIssues(issues) &&
-        !generationValidationBlocked
-      ) {
-        const activeTask = workflowTasks.find(
-          (t) => t.id === orchestrationActiveTaskIdRef.current,
-        );
-        const pid = activeProjectIdRef.current ?? projectId;
-        let canComplete = true;
-
-        if (activeTask?.agent_type === "deployment" && pid) {
-          try {
-            const verify = await callVerifyDeploymentStep({
-              data: {
-                projectId: pid,
-                workflowRunId: orchestrationWorkflowRunId,
-                preview: {
-                  ok: !lastErrorRef.current?.trim(),
-                  lastError: lastErrorRef.current,
-                },
-              },
-            });
-            if (verify.ok && verify.state) {
-              setOrchestrationState(verify.state);
-            }
-            if (!verify.ok || !verify.ready) {
-              canComplete = false;
-              toast.message(verify.message ?? "Paso de despliegue pendiente", {
-                description: (verify.guidance ?? []).join(" · ") || undefined,
-                duration: 10_000,
-              });
-            } else {
-              toast.success("Deploy verificado: GitHub, Vercel y sitio OK", { duration: 6000 });
-            }
-          } catch (e) {
-            logClientWarn("orchestration-deploy-verify", e);
-          }
-        }
-
-        if (canComplete) {
-          try {
-            await callCompleteWorkflowTask({
-              data: { taskId: orchestrationActiveTaskIdRef.current, outcome: "succeeded" },
-            });
-            await refreshOrchestrationWorkflow(orchestrationWorkflowRunId);
-            await syncOrchestrationPreviewState(true, null);
-          } catch (e) {
-            logClientWarn("orchestration-task-complete", e);
-          }
-        }
-        orchestrationActiveTaskIdRef.current = null;
-      }
+      await orchestration.completeTaskAfterBuild({
+        effectiveBuild,
+        hasBlockingValidation: hasBlockingValidationIssues(issues),
+        generationValidationBlocked,
+        previewError: lastErrorRef.current,
+      });
 
       if (effectiveBuild && aiReplyNeedsUserInput(replyText)) {
         const paused = {
@@ -3973,32 +3772,8 @@ export function ChatPanel({
 
   const empty = messages.length === 0;
 
-  const nextSteps = useMemo(() => {
-    if (
-      orchestrationWorkflowRunId &&
-      workflowTasks.length > 0 &&
-      !multiAgentMode &&
-      !factoryMode
-    ) {
-      return mapWorkflowTasksToPanelSteps(workflowTasks);
-    }
-    return [];
-  }, [orchestrationWorkflowRunId, workflowTasks, multiAgentMode, factoryMode]);
-
-  const workflowPanelStatus = useMemo(() => {
-    if (!orchestrationWorkflowRunId || workflowTasks.length === 0) return null;
-    const { completed, total } = workflowPanelProgress(workflowTasks);
-    const integrationLine = formatOrchestrationStatusLine(orchestrationState);
-    const head = workflowPlanSummary
-      ? `Workflow ${completed}/${total} · ${workflowPlanSummary.slice(0, 70)}`
-      : `Workflow ${completed}/${total} tareas`;
-    return integrationLine ? `${head} · ${integrationLine}` : head;
-  }, [
-    orchestrationWorkflowRunId,
-    workflowTasks,
-    workflowPlanSummary,
-    orchestrationState,
-  ]);
+  const nextSteps = orchestration.nextSteps;
+  const workflowPanelStatus = orchestration.panelStatus;
 
   const openPinConvention = (content: string) => {
     setPinConventionBody(content);
@@ -4079,7 +3854,7 @@ export function ChatPanel({
               .join(" · ")}
           </p>
         ) : null}
-        {orchestrationWorkflowRunId ||
+        {orchestration.workflowRunId ||
         activeWorkflowRunId ||
         backgroundWorkflowRunId ||
         workflowTasks.length > 0 ? (
@@ -4089,7 +3864,7 @@ export function ChatPanel({
             planSummary={workflowPlanSummary}
             workflowState={workflowState}
             metrics={workflowMetrics}
-            integrationStatus={formatOrchestrationStatusLine(orchestrationState)}
+            integrationStatus={orchestration.integrationStatusLine}
             onCancel={
               activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
             }
@@ -4341,7 +4116,7 @@ export function ChatPanel({
           panelLabel="Workflow del proyecto"
           disabled={loading}
           autopilotStatus={
-            orchestrationWorkflowRunId
+            orchestration.isActive
               ? workflowPanelStatus
               : guideAutopilotStatusMessage(guideAutopilotUi)
           }
