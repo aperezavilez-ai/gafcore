@@ -20,8 +20,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 
-/** Máximo tiempo mostrando «Verificando acceso…» antes de dejar pasar. */
-const APP_BOOT_MAX_MS = 900;
+/** Máximo tiempo mostrando «Verificando acceso…» antes de fallback de sesión. */
+const APP_BOOT_MAX_MS = 4_000;
 
 export const Route = createFileRoute("/gafcore_/app")({
   component: GafCoreAppPage,
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/gafcore_/app")({
 });
 
 function GafCoreAppPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
 
   const [bootDone, setBootDone] = useState(false);
@@ -49,8 +49,10 @@ function GafCoreAppPage() {
   useEffect(() => {
     let cancelled = false;
 
+    let bootFinished = false;
     const finishBoot = (session: boolean) => {
-      if (cancelled) return;
+      if (cancelled || bootFinished) return;
+      bootFinished = true;
       forceAuthLoadingComplete();
       setHasSession(session);
       setBootDone(true);
@@ -65,7 +67,7 @@ function GafCoreAppPage() {
           finishBoot(true);
           return;
         }
-        const hydrated = await hydrateAuthFromStorage(800);
+        const hydrated = await hydrateAuthFromStorage(2_500);
         if (hydrated) {
           finishBoot(true);
           return;
@@ -77,9 +79,10 @@ function GafCoreAppPage() {
     })();
 
     const cap = window.setTimeout(() => {
+      if (cancelled || bootFinished) return;
       void (async () => {
-        if (cancelled) return;
         try {
+          await initAuthOnce();
           const sb = await getGafcoreSupabaseBrowser();
           const { data } = await sb.auth.getSession();
           finishBoot(Boolean(data.session?.user));
@@ -151,6 +154,17 @@ function GafCoreAppPage() {
   }
 
   if (!sessionKnown) {
+    if (authLoading) {
+      return (
+        <div className="flex min-h-screen flex-col bg-background text-foreground">
+          <DevPortBanner />
+          <div className="flex flex-1 flex-col items-center justify-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden />
+            <p className="text-sm text-muted-foreground">Verificando sesión…</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen flex-col bg-background text-foreground">
         <DevPortBanner />

@@ -338,23 +338,12 @@ function GafCoreLanding() {
             <LanguageSwitcher variant="compact" />
             {user?.id ? (
               <>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gc-cta rounded-full px-4"
-                  onClick={() => void enterGafcoreApp()}
-                >
-                  Ir al panel
+                <Button asChild size="sm" className="gc-cta rounded-full px-4">
+                  <Link to="/gafcore/app">Ir al panel</Link>
                 </Button>
                 {isAdmin ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="rounded-full px-4"
-                    onClick={() => void enterGafcoreApp({ adminOps: true })}
-                  >
-                    Ops admin
+                  <Button asChild size="sm" variant="outline" className="rounded-full px-4">
+                    <Link to="/gafcore/admin/ops">Ops admin</Link>
                   </Button>
                 ) : null}
               </>
@@ -395,12 +384,33 @@ function GafCoreLanding() {
                   <a href="#empresa" className="rounded-md px-2 py-2 hover:opacity-80">
                     {t("gc.nav.company")}
                   </a>
-                  <a href="/gafcore/login" className="rounded-md px-2 py-2 hover:opacity-80">
-                    {t("gc.auth.login")}
-                  </a>
-                  <a href="/gafcore/register" className="gc-cta rounded-md px-2 py-2 text-center font-semibold">
-                    {t("gc.auth.register")}
-                  </a>
+                  {user?.id ? (
+                    <>
+                      <Link
+                        to="/gafcore/app"
+                        className="gc-cta rounded-md px-2 py-2 text-center font-semibold"
+                      >
+                        Ir al panel
+                      </Link>
+                      {isAdmin ? (
+                        <Link
+                          to="/gafcore/admin/ops"
+                          className="rounded-md px-2 py-2 hover:opacity-80"
+                        >
+                          Ops admin
+                        </Link>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <a href="/gafcore/login" className="rounded-md px-2 py-2 hover:opacity-80">
+                        {t("gc.auth.login")}
+                      </a>
+                      <a href="/gafcore/register" className="gc-cta rounded-md px-2 py-2 text-center font-semibold">
+                        {t("gc.auth.register")}
+                      </a>
+                    </>
+                  )}
                 </nav>
               </div>
             </details>
@@ -435,18 +445,24 @@ function GafCoreLanding() {
             {t("gc.hero.subtitle")}
           </p>
           <div className="mx-auto mt-8 flex w-full max-w-sm flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
-            <a
-              href={panelHref}
-              className="gc-cta inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-full px-7 text-base font-semibold sm:w-auto"
-              onClick={(e) => {
-                if (!user?.id) return;
-                e.preventDefault();
-                void enterGafcoreApp();
-              }}
-            >
-              {t("gc.hero.cta")}
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </a>
+            {user?.id ? (
+              <Link
+                to="/gafcore/app"
+                className="gc-cta inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-full px-7 text-base font-semibold sm:w-auto"
+              >
+                {t("gc.hero.cta")}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            ) : (
+              <Link
+                to="/gafcore/login"
+                search={{ redirect: "/gafcore/app" }}
+                className="gc-cta inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-full px-7 text-base font-semibold sm:w-auto"
+              >
+                {t("gc.hero.cta")}
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            )}
           </div>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
             <span className="gc-chip"><Check className="h-3 w-3" /> {t("gc.hero.trust0")}</span>
@@ -532,7 +548,9 @@ function GafCoreLanding() {
                   <a
                     href={
                       plan.id === "free"
-                        ? panelHref
+                        ? user?.id
+                          ? "/gafcore/app"
+                          : panelHref
                         : `/gafcore/register?plan=${encodeURIComponent(plan.id)}`
                     }
                     className={
@@ -549,11 +567,6 @@ function GafCoreLanding() {
                             background: "transparent",
                           }
                     }
-                    onClick={(e) => {
-                      if (plan.id !== "free" || !user?.id) return;
-                      e.preventDefault();
-                      void enterGafcoreApp();
-                    }}
                   >
                     {plan.id === "free" ? t("gc.plan.ctaFree") : t("gc.plan.ctaPaid")}
                     <ArrowRight className="ml-2 h-4 w-4" />
