@@ -57,10 +57,12 @@ import {
   buildLocalProjectAnalysis,
   formatProjectAnalysisForChat,
 } from "@/core/behavior/gafcore-project-analysis.shared";
+import { useGafcoreOrchestration, type OrchestrationWorkflowUi } from "@/hooks/useGafcoreOrchestration";
 import {
-  useGafcoreOrchestration,
-  type OrchestrationWorkflowUi,
-} from "@/hooks/useGafcoreOrchestration";
+  persistProjectWorkspaceFiles,
+  useGafcoreFilePipeline,
+} from "@/hooks/useGafcoreFilePipeline";
+import { resolveBuildDelivery } from "@/core/pipeline/build-delivery.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
 import {
@@ -80,15 +82,12 @@ import {
 } from "@/lib/gafcore-guide-autopilot.shared";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import {
-  validateGafcoreSources,
   validateGafcoreProject,
 } from "@/lib/gafcore-validate.functions";
-import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import {
   patchProjectFilesVisually,
   repairCommonJsxSyntaxErrors,
   repairGeneratedSourceFiles,
-  repairGafcoreProjectMedia,
   neutralizeCssImportsInSource,
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
@@ -102,11 +101,6 @@ import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";
 import { COST_PER_REQUEST } from "@/lib/gafcore-chat.shared";
 import { logClientError, logClientWarn, logPipelineEvent, pipelineTraceMeta } from "@/lib/gafcore-client-logger";
-import {
-  createCodeSnapshot,
-  validateAndHealBeforePreview,
-} from "@/lib/gafcore-incremental-edit.shared";
-import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import {
   FUNCTIONAL_FIRST_BUILD_PREFIX,
   buildPreserveExistingPrefix,
@@ -182,7 +176,6 @@ import {
   prepareFilesForEditorRestore,
 } from "@/lib/gafcore-snapshot-restore.shared";
 import {
-  finalizeGafcoreBuildDelivery,
   GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
   GAFCORE_FORCE_FILES_BUILD_PREFIX,
   outputReplacesWelcome,
@@ -756,36 +749,12 @@ export function ChatPanel({
   /** Persiste el árbol completo del workspace (evita reload con DB parcial/desactualizada). */
   const persistMergedToProjectDb = async (
     mergedFiles: FileItem[],
-  ): Promise<{ ok: boolean; detail?: string }> => {
-    const pid = activeProjectIdRef.current ?? projectId;
-    if (!pid || !user?.id || mergedFiles.length === 0) {
-      return { ok: false, detail: "no_project" };
-    }
-    const { saveProjectFilesDetailed } = await import("@/lib/userSupabase");
-    const result = await saveProjectFilesDetailed(
-      mergedFiles.map((f) => ({
-        name: f.name,
-        language: f.language ?? "typescript",
-        content: f.content,
-      })),
-      pid,
+  ): Promise<{ ok: boolean; detail?: string }> =>
+    persistProjectWorkspaceFiles(
+      mergedFiles,
+      activeProjectIdRef.current ?? projectId,
+      user?.id,
     );
-    if (!result.ok) {
-      logClientWarn("gafcore-persist-merged", {
-        reason: result.reason,
-        detail: result.detail,
-        fileCount: mergedFiles.length,
-      });
-      toast.error("No se guardaron los archivos en el proyecto", {
-        description:
-          result.detail ??
-          result.reason ??
-          "Revisa la conexión e inténtalo de nuevo.",
-        duration: 8000,
-      });
-    }
-    return { ok: result.ok, detail: result.detail ?? result.reason };
-  };
 
   const {
     balance,
@@ -1581,10 +1550,8 @@ export function ChatPanel({
   const callGetWorkflowStatus = useServerFn(getGafcoreWorkflowStatus);
   const callCancelWorkflow = useServerFn(cancelGafcoreWorkflow);
   const callSyncPipelineWorkflow = useServerFn(syncGafcorePipelineWorkflow);
-  const callValidateSources = useServerFn(validateGafcoreSources);
   const callValidateProject = useServerFn(validateGafcoreProject);
   const callRecordMemory = useServerFn(recordProjectAiMemory);
-  const callEnrichMedia = useServerFn(enrichGafcoreMedia);
   const callStartPipeline = useServerFn(startGafcorePipelineRun);
   const callAdvancePipeline = useServerFn(advanceGafcorePipelineStep);
   const callFinalizePipeline = useServerFn(finalizeGafcorePipelineRun);
@@ -1661,21 +1628,6 @@ export function ChatPanel({
     } catch {
       /* opcional si falta migración */
     }
-  };
-
-  const mergeGeneratedFiles = (
-    currentFiles: FileItem[],
-    generatedFiles: Array<{ name: string; language?: string; content: string }>,
-  ): FileItem[] => {
-    const byName = new Map(currentFiles.map((file) => [file.name, file]));
-    for (const file of generatedFiles) {
-      byName.set(file.name, {
-        name: file.name,
-        language: file.language ?? byName.get(file.name)?.language ?? "typescript",
-        content: file.content,
-      });
-    }
-    return Array.from(byName.values());
   };
 
   const persistValidationMemory = async (
@@ -1773,226 +1725,25 @@ export function ChatPanel({
     }
   };
 
-  const applyGenerationFiles = async (
-    baseFiles: FileItem[],
-    generated: Array<{ name: string; language?: string; content: string }>,
-    userInstruction: string,
-    userRaw: string,
-    options: { runFunctionalAudit: boolean; snapshotLabel?: string },
-  ): Promise<{ merged: FileItem[]; issues: ProjectValidationIssue[] }> => {
-    const genProjectId = activeProjectIdRef.current ?? projectId ?? null;
-    const resolveActiveProjectId = () => activeProjectIdRef.current ?? projectId ?? null;
-    const isStaleProject = () => genProjectId !== resolveActiveProjectId();
-    const staleReturn = (): { merged: FileItem[]; issues: ProjectValidationIssue[] } => ({
-      merged: filesRef.current.length > 0 ? filesRef.current : baseFiles,
-      issues: [],
-    });
+  const filePipeline = useGafcoreFilePipeline({
+    projectId,
+    userId: user?.id,
+    activeProjectIdRef,
+    filesRef,
+    setFiles,
+    onCodeGenerated,
+    rollbackBaselineRef,
+    pipelineRunIdRef,
+    requestEpochRef,
+    validationAutoRetryUsedRef,
+    scheduleRuntimeAutofixRef,
+    runProjectValidation,
+    offerGenerationRollback,
+    setLastError,
+    persistValidationMemory,
+  });
 
-    rollbackBaselineRef.current = baseFiles.map((f) => ({
-      name: f.name,
-      content: f.content,
-      language: f.language ?? "typescript",
-    }));
-
-    logPipelineEvent(
-      "info",
-      "apply.start",
-      pipelineTraceMeta(
-        {
-          traceId: requestEpochRef.current,
-          projectId: genProjectId,
-          phase: "apply",
-          pipelineRunId: pipelineRunIdRef.current,
-        },
-        { deltaCount: generated.length },
-      ),
-    );
-
-    const snapLabel = options.snapshotLabel?.trim();
-    if (
-      snapLabel &&
-      !snapLabel.toLowerCase().startsWith("auto-fix:") &&
-      !snapLabel.toLowerCase().startsWith("auto:")
-    ) {
-      try {
-        const { createSnapshot } = await import("@/lib/userSupabase");
-        void createSnapshot(baseFiles, snapLabel, projectId ?? undefined);
-      } catch (err) {
-        logClientWarn("gafcore-snapshot-before-apply", err);
-      }
-    }
-    let outFiles = repairGafcoreProjectMedia(
-      repairGeneratedSourceFiles(generated),
-      baseFiles.map((f) => ({ name: f.name, content: f.content, language: f.language })),
-      userInstruction,
-    );
-    try {
-      const enriched = await callEnrichMedia({
-        data: {
-          files: outFiles,
-          projectFiles: baseFiles.map((f) => ({
-            name: f.name,
-            content: f.content,
-            language: f.language,
-          })),
-          instruction: userInstruction,
-        },
-      });
-      if (enriched?.files?.length) outFiles = enriched.files;
-    } catch {
-      /* reparación local ya aplicada */
-    }
-    let merged = ensureReactPackageJson(
-      sanitizeProjectJsxFiles(mergeGeneratedFiles(baseFiles, outFiles)),
-    );
-    const snapshot = createCodeSnapshot(
-      baseFiles.map((f) => ({
-        name: f.name,
-        content: f.content,
-        language: f.language,
-      })),
-    );
-    const baselineProj = baseFiles.map((f) => ({
-      name: f.name,
-      content: f.content,
-      language: f.language,
-    }));
-    const mergedProj = merged.map((f) => ({
-      name: f.name,
-      content: f.content,
-      language: f.language,
-    }));
-    const heal = validateAndHealBeforePreview(baselineProj, mergedProj, snapshot);
-    const shield = runIntegrityShield(baselineProj, heal.files, snapshot, {
-      deltaPaths: outFiles.map((f) => f.name),
-      instruction: userInstruction,
-    });
-    merged = shield.files.map((f) => ({
-      name: f.name,
-      content: f.content,
-      language: f.language ?? "typescript",
-    }));
-    if (isStaleProject()) {
-      logClientWarn("gafcore-apply-files-stale-project", {
-        expected: genProjectId,
-        current: resolveActiveProjectId(),
-      });
-      return staleReturn();
-    }
-    setFiles(merged);
-    filesRef.current = merged;
-    queueMicrotask(() => onCodeGenerated?.());
-    const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
-    const persistResult = await persistMergedToProjectDb(merged);
-    if (!persistResult.ok) {
-      logPipelineEvent(
-        "warn",
-        "persist.failed",
-        pipelineTraceMeta(
-          {
-            traceId: requestEpochRef.current,
-            projectId: genProjectId,
-            phase: "persist",
-            pipelineRunId: pipelineRunIdRef.current,
-          },
-          { reason: persistResult.detail ?? "unknown", fileCount: merged.length },
-        ),
-      );
-      offerGenerationRollback("No se guardó en la nube. Puedes deshacer el último cambio.");
-    }
-
-    try {
-      const v = await callValidateSources({
-        data: toPersist.map((f) => ({ name: f.name, content: f.content })),
-      });
-      if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
-        const jsxErrors = v.errors.filter((e) => /\.(tsx|jsx)$/i.test(e.name));
-        const otherErrors = v.errors.filter((e) => !/\.(tsx|jsx)$/i.test(e.name));
-        if (jsxErrors.length > 0) {
-          const sourceErr = jsxErrors.map((e) => `${e.name}: ${e.message}`).join("\n");
-          setLastError(sourceErr);
-          if (
-            isPreviewAutofixAiEnabled() &&
-            shouldAttemptAiAutofix(sourceErr) &&
-            !validationAutoRetryUsedRef.current
-          ) {
-            scheduleRuntimeAutofixRef.current(sourceErr);
-          }
-        } else if (otherErrors.length > 0) {
-          toast.message("Aviso en archivos auxiliares (no bloquea el preview).", {
-            description: otherErrors[0].message.slice(0, 120),
-            duration: 5000,
-          });
-        }
-      }
-    } catch (err) {
-      logClientWarn("gafcore-validate-sources", err);
-      toast.message("No se pudo verificar el código generado. El preview puede tener errores.", {
-        duration: 6000,
-      });
-    }
-
-    let issues: ProjectValidationIssue[] = [];
-    let mergedForReturn = merged;
-    if (options.runFunctionalAudit) {
-      const validation = await runProjectValidation(merged);
-      issues = validation.issues;
-      if (validation.patchedFiles?.length) {
-        mergedForReturn = mergeGeneratedFiles(merged, validation.patchedFiles);
-        if (isStaleProject()) {
-          logClientWarn("gafcore-apply-files-stale-project", {
-            expected: genProjectId,
-            current: resolveActiveProjectId(),
-            phase: "validation_patch",
-          });
-          return staleReturn();
-        }
-        setFiles(mergedForReturn);
-        filesRef.current = mergedForReturn;
-        queueMicrotask(() => onCodeGenerated?.());
-        await persistMergedToProjectDb(mergedForReturn);
-      }
-      if (issues.length > 0) {
-        const blocking = issues.filter((i) => i.severity === "error");
-        const warnings = issues.filter((i) => i.severity !== "error");
-        if (blocking.length > 0) {
-          const text = formatValidationForUser(blocking);
-          setLastError((prev) =>
-            prev ? `${prev}\n\n[Validación GafCore]\n${text}` : `[Validación GafCore]\n${text}`,
-          );
-          if (isPreviewAutofixAiEnabled()) scheduleRuntimeAutofixRef.current(text);
-        } else if (warnings.length > 0) {
-          toast.message("Listo con avisos menores", {
-            description: formatValidationForUser(warnings).slice(0, 240),
-            duration: 6000,
-          });
-        }
-        if (!pipelineRunIdRef.current) {
-          void persistValidationMemory(blocking, false);
-        }
-      }
-    }
-    logPipelineEvent(
-      "info",
-      "apply.done",
-      pipelineTraceMeta(
-        {
-          traceId: requestEpochRef.current,
-          projectId: genProjectId,
-          phase: "apply",
-          pipelineRunId: pipelineRunIdRef.current,
-        },
-        {
-          fileCount: mergedForReturn.length,
-          deltaCount: outFiles.length,
-          persistOk: persistResult.ok,
-          issueCount: issues.length,
-          blockingCount: issues.filter((i) => i.severity === "error").length,
-        },
-      ),
-    );
-    return { merged: mergedForReturn, issues };
-  };
+  const { applyGenerationFiles, mergeGeneratedFiles } = filePipeline;
 
   const workflowStorageKey = projectId ? `gafcore_workflow_${projectId}` : null;
 
@@ -3418,12 +3169,12 @@ export function ChatPanel({
       let generationValidationBlocked = result.validationBlocked === true;
 
       if (effectiveBuild) {
-        let delivery = finalizeGafcoreBuildDelivery(
-          raw || coreText,
-          contextForDelivery,
-          result.reply || "",
-          result.files ?? [],
-        );
+        let delivery = resolveBuildDelivery({
+          instruction: raw || coreText,
+          contextFiles: contextForDelivery,
+          reply: result.reply || "",
+          rawFiles: result.files ?? [],
+        });
         filesToApply = delivery.files;
 
         const needsCustomize = filesToApply.length > 0 && delivery.planOnly;
@@ -3457,12 +3208,12 @@ export function ChatPanel({
           );
           if (staleDrop(replyText)) return;
           generationValidationBlocked = customized.validationBlocked === true;
-          delivery = finalizeGafcoreBuildDelivery(
-            raw || coreText,
-            filesToApply,
-            customized.reply || "",
-            customized.files ?? [],
-          );
+          delivery = resolveBuildDelivery({
+            instruction: raw || coreText,
+            contextFiles: filesToApply,
+            reply: customized.reply || "",
+            rawFiles: customized.files ?? [],
+          });
           filesToApply = delivery.files;
           replyText = sanitizeUserFacingAiText(
             softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto personalizado.`),
@@ -3490,12 +3241,12 @@ export function ChatPanel({
           );
           if (staleDrop(replyText)) return;
           generationValidationBlocked = strictRetry.validationBlocked === true;
-          delivery = finalizeGafcoreBuildDelivery(
-            raw || coreText,
-            contextForDelivery,
-            strictRetry.reply || "",
-            strictRetry.files ?? [],
-          );
+          delivery = resolveBuildDelivery({
+            instruction: raw || coreText,
+            contextFiles: contextForDelivery,
+            reply: strictRetry.reply || "",
+            rawFiles: strictRetry.files ?? [],
+          });
           filesToApply = delivery.files;
           replyText = sanitizeUserFacingAiText(
             softenRoboticReply(
