@@ -794,6 +794,10 @@ export function ChatPanel({
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
 
   useEffect(() => {
+    if (isAdmin && creditsOut) setCreditsOut(false);
+  }, [isAdmin, creditsOut]);
+
+  useEffect(() => {
     if (user?.id !== freeCreditsRescueUserId.current) {
       freeCreditsRescueUserId.current = user?.id ?? null;
       freeCreditsRescueDone.current = false;
@@ -1371,7 +1375,7 @@ export function ChatPanel({
   const initialFiredRef = useRef(false);
   useEffect(() => {
     if (initialFiredRef.current) return;
-    if (!user?.id || loading) return;
+    if (!user?.id || loading || subLoading || creditsLoading) return;
     if (messages.length > 0) {
       // Proyecto con historial → no auto-disparar
       initialFiredRef.current = true;
@@ -1400,14 +1404,14 @@ export function ChatPanel({
       }
     }, 400);
     return () => window.clearTimeout(t);
-  }, [user?.id, loading, messages.length, initialInstruction]);
+  }, [user?.id, loading, subLoading, creditsLoading, messages.length, initialInstruction]);
 
   // Si el usuario describió el proyecto en NewProjectDialog, lo recogemos del sessionStorage
   // y lo autoenvíamos al cerebro la primera vez que abre el editor del proyecto recién creado.
   // Solo se dispara cuando el proyecto no tiene aún mensajes (proyecto fresco).
   const initialAutoSentRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!projectId || loading) return;
+    if (!projectId || loading || subLoading || creditsLoading) return;
     if (initialAutoSentRef.current === projectId) return;
     if (messages.length > 0) {
       initialAutoSentRef.current = projectId;
@@ -1430,7 +1434,7 @@ export function ChatPanel({
       void sendRef.current?.(pending!);
     }, 350);
     return () => window.clearTimeout(t);
-  }, [projectId, messages.length, loading]);
+  }, [projectId, messages.length, loading, subLoading, creditsLoading]);
 
   // Estado para auto-fix con IA cuando el preview falla por error de runtime.
   // Evita loops: solo bloquea reintentos si el MISMO error ya fue intentado y falló.
@@ -2822,14 +2826,11 @@ export function ChatPanel({
       guideAutopilotRef.current = resumed;
       setGuideAutopilotUi(resumed);
     }
-    /** Bloquear si no alcanza 1 crédito: el denominador de la UI puede ser 10 aunque `balance` sea 0 (plan gratis), y antes no se bloqueaba y el error del proveedor parecía “fallo de conexión”. */
-    const noQuota =
-      !isAdmin &&
-      !isUnlimitedDaily &&
-      !isFairUseCreadorPlan &&
-      !creditsLoading &&
-      !!user?.id &&
-      balance < COST_PER_REQUEST;
+    /** Bloquear solo cuando rol y saldo ya cargaron; evita modal falso si isAdmin tarda (RPC has_role). */
+    const quotaResolved = !creditsLoading && !subLoading;
+    const hasAiQuota =
+      isAdmin || isUnlimitedDaily || isFairUseCreadorPlan || balance >= COST_PER_REQUEST;
+    const noQuota = quotaResolved && !!user?.id && !hasAiQuota;
     if (noQuota) {
       toast.error("No tienes créditos de IA. Recarga o elige un plan.", { duration: 6000 });
       setCreditsOut(true);
