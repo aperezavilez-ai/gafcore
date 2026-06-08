@@ -3650,10 +3650,16 @@ export function ChatPanel({
             <HealthStatus phase={healthPhase} />
           </div>
         ) : null}
-        {/* Estado técnico — solo visible cuando hay algo relevante para el usuario */}
-        {(loading || (pipelineStatus && /construy|generat|corrigi/i.test(pipelineStatus ?? ""))) ? (
-          <p className="mt-1 truncate text-[10px] text-primary/80 animate-pulse">
-            {loading ? "Generando tu proyecto…" : pipelineStatus}
+        {pipelineStatus || validationLabel || factoryMode ? (
+          <p
+            className="mt-1 truncate text-[10px] text-muted-foreground"
+            title={[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
+              .filter(Boolean)
+              .join(" · ")}
+          >
+            {[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         ) : null}
         {orchestration.workflowRunId ||
