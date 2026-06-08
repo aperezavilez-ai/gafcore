@@ -1,13 +1,3 @@
-/**
- * Módulo 3 — Code Generator (pendiente)
- */
-import type { AppBlueprint } from "../../types/blueprint";
-
-export type GeneratedApp = {
-  rootDir: string;
-  files: Array<{ path: string; content: string }>;
-};
-
-export function generateCode(_blueprint: AppBlueprint): GeneratedApp {
-  throw new Error("Code Generator not implemented yet.");
-}
+export { generateCode } from "./generate-code";
+export { writeGeneratedApp } from "./write-app";
+export type { GeneratedApp, GeneratedFile, GenerateCodeOptions } from "./types";

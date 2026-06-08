@@ -14,7 +14,7 @@ User idea  →  Input Parser  →  Blueprint  →  Code Generator  →  Runner  
 |---|--------|--------|-----------------|
 | 1 | **Input Parser** | ✅ Implementado | Idea en lenguaje natural → JSON estructurado |
 | 2 | **Blueprint Generator** | ✅ Implementado | JSON → tablas SQL, rutas API, páginas, archivos |
-| 3 | **Code Generator** | 🔲 Pendiente | Blueprint → backend + schema + frontend conectado |
+| 3 | **Code Generator** | ✅ Implementado | Blueprint → Express + SQLite + React conectados |
 | 4 | **Runner** | 🔲 Pendiente | Build + run local sin errores de runtime |
 
 ## Estructura
@@ -44,16 +44,17 @@ npm run gafcore:parse -- "todo app with login"
 
 # Módulos 1 + 2 — idea → blueprint completo
 npm run gafcore:blueprint -- "todo app with login"
-npm run gafcore:blueprint -- "tienda de zapatos con carrito y login"
+
+# Módulos 1 + 2 + 3 — genera app en disco
+npm run gafcore:generate -- "todo app with login"
+cd generated-apps/todo-app-with-login && npm install && npm run db:push && npm run dev
 ```
 
 ```ts
-import { parseAndBlueprint } from "../gafcore-core/src";
+import { parseBlueprintAndCode } from "../gafcore-core/src";
 
-const { parsed, blueprint } = parseAndBlueprint("todo app with login");
-// blueprint.apiRoutes  → rutas Express reales
-// blueprint.tables     → schema SQLite/Drizzle
-// blueprint.outputFiles → lista para Code Generator
+const { parsed, blueprint, app } = parseBlueprintAndCode("todo app with login");
+// app.files → código listo para escribir o empaquetar
 ```
 
 ## Reglas del core
