@@ -3656,13 +3656,17 @@ export function ChatPanel({
             {loading ? "Generando tu proyecto…" : pipelineStatus}
           </p>
         ) : null}
-        {/* Tareas del workflow — solo mostrar si hay error o el usuario cancela */}
-        {(workflowTasks.some(t => t.state === "failed") || workflowCancelPending) ? (
+        {orchestration.workflowRunId ||
+        activeWorkflowRunId ||
+        backgroundWorkflowRunId ||
+        workflowTasks.length > 0 ? (
           <WorkflowTaskStrip
             className="mt-2"
-            tasks={workflowTasks.filter(t => t.state === "failed")}
-            planSummary={null}
+            tasks={workflowTasks}
+            planSummary={workflowPlanSummary}
             workflowState={workflowState}
+            metrics={workflowMetrics}
+            integrationStatus={orchestration.integrationStatusLine}
             onCancel={
               activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
             }
