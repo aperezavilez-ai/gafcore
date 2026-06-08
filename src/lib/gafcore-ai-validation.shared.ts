@@ -257,7 +257,17 @@ export function hasBlockingValidationIssues(issues: ProjectValidationIssue[]): b
 }
 
 export function shouldAutoRetryValidation(issues: ProjectValidationIssue[]): boolean {
-  return hasBlockingValidationIssues(issues);
+  if (!hasBlockingValidationIssues(issues)) return false;
+  const syntaxLike = issues.some(
+    (i) =>
+      i.severity === "error" &&
+      (i.category === "syntax" ||
+        /syntax|sintáct|jsx|desbalancead|unexpected token|react error #31/i.test(
+          `${i.file} ${i.message}`,
+        )),
+  );
+  if (syntaxLike) return false;
+  return true;
 }
 
 export function buildValidationFixInstruction(

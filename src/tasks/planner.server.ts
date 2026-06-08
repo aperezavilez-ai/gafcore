@@ -21,6 +21,7 @@ Responde SOLO JSON válido con esta forma exacta:
 }
 Reglas:
 - Genera tareas DINÁMICAS según tipo de proyecto (landing, tienda, SaaS, app, etc.).
+- Máximo 5 tareas por plan (prioriza lo esencial: UI, lógica, validación, deploy si aplica).
 - Incluye etapas de preview/UI primero; validation al final del código.
 - Si el usuario menciona publicar, deploy, dominio, GitHub o Vercel, añade tarea "deployment" al final.
 - NO incluyas agentType "planner". "database" solo si pide migraciones/Supabase explícito.
@@ -77,7 +78,7 @@ export async function generateTaskPlan(
     const raw = JSON.parse(content || "{}");
     const parsed = taskPlanSchema.safeParse(raw);
     if (parsed.success) {
-      const tasks = parsed.data.tasks.filter((t) => t.agentType !== "planner");
+      const tasks = parsed.data.tasks.filter((t) => t.agentType !== "planner").slice(0, 5);
       if (tasks.length > 0) {
         return { ...parsed.data, tasks };
       }

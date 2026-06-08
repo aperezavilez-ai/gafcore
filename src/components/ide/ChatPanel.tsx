@@ -195,7 +195,7 @@ import {
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
 /** Evita chat/preview “trabado” si el stream o la validación no terminan. */
-const CHAT_REQUEST_TIMEOUT_MS = 120_000;
+const CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
 
@@ -2909,20 +2909,6 @@ export function ChatPanel({
       return;
     }
 
-    if (
-      effectiveBuild &&
-      buildConfirmed &&
-      !factoryMode &&
-      !multiAgentMode &&
-      !visualEditOn &&
-      !orchestration.isActive
-    ) {
-      const pid = activeProjectIdRef.current ?? projectId;
-      if (pid) {
-        await orchestration.planWorkflow(userFacingRaw || coreText, pid, buildContextFiles);
-      }
-    }
-
     const functionalPrefix =
       effectiveBuild && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
     const welcomeApp = buildContextFiles.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
@@ -3041,7 +3027,7 @@ export function ChatPanel({
     const chatTimeoutId = window.setTimeout(() => {
       if (!sendInFlightRef.current) return;
       ac.abort();
-      toast.error("La solicitud tardó demasiado (2 min). Pulsa el cuadrado para detener o envía de nuevo.", {
+      toast.error("La solicitud tardó demasiado (3 min). Pulsa el cuadrado para detener o envía de nuevo.", {
         duration: 8000,
       });
     }, CHAT_REQUEST_TIMEOUT_MS);
@@ -3314,6 +3300,25 @@ export function ChatPanel({
           }
         } else {
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
+        }
+
+        const buildSucceeded =
+          !hasBlockingValidationIssues(issues) &&
+          !generationValidationBlocked &&
+          !stillWelcomeTemplate;
+
+        if (
+          buildSucceeded &&
+          buildConfirmed &&
+          !factoryMode &&
+          !multiAgentMode &&
+          !visualEditOn &&
+          !orchestration.isActive
+        ) {
+          const pid = activeProjectIdRef.current ?? projectId;
+          if (pid) {
+            void orchestration.planWorkflow(userFacingRaw || coreText, pid, merged);
+          }
         }
 
         if (
