@@ -13,7 +13,7 @@ User idea  →  Input Parser  →  Blueprint  →  Code Generator  →  Runner  
 | # | Módulo | Estado | Responsabilidad |
 |---|--------|--------|-----------------|
 | 1 | **Input Parser** | ✅ Implementado | Idea en lenguaje natural → JSON estructurado |
-| 2 | **Blueprint Generator** | 🔲 Pendiente | JSON → páginas, features, entidades, auth |
+| 2 | **Blueprint Generator** | ✅ Implementado | JSON → tablas SQL, rutas API, páginas, archivos |
 | 3 | **Code Generator** | 🔲 Pendiente | Blueprint → backend + schema + frontend conectado |
 | 4 | **Runner** | 🔲 Pendiente | Build + run local sin errores de runtime |
 
@@ -36,18 +36,24 @@ gafcore-core/
     parse-cli.ts             # Probar el parser desde terminal
 ```
 
-## Uso (Input Parser)
+## Uso
 
 ```bash
+# Módulo 1 — solo parser
 npm run gafcore:parse -- "todo app with login"
-npm run gafcore:parse -- "tienda de zapatos con carrito y login"
+
+# Módulos 1 + 2 — idea → blueprint completo
+npm run gafcore:blueprint -- "todo app with login"
+npm run gafcore:blueprint -- "tienda de zapatos con carrito y login"
 ```
 
 ```ts
-import { parseUserIdea } from "../gafcore-core/src";
+import { parseAndBlueprint } from "../gafcore-core/src";
 
-const parsed = parseUserIdea("todo app with login");
-console.log(JSON.stringify(parsed, null, 2));
+const { parsed, blueprint } = parseAndBlueprint("todo app with login");
+// blueprint.apiRoutes  → rutas Express reales
+// blueprint.tables     → schema SQLite/Drizzle
+// blueprint.outputFiles → lista para Code Generator
 ```
 
 ## Reglas del core

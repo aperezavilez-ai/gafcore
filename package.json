@@ -18,6 +18,7 @@
     "format": "prettier --write .",
     "purge-users": "node scripts/delete-users-except-admin.mjs",
     "gafcore:parse": "npx tsx gafcore-core/scripts/parse-cli.ts",
+    "gafcore:blueprint": "npx tsx gafcore-core/scripts/blueprint-cli.ts",
     "gafcore:doctor": "node scripts/check-gafcore-setup.mjs",
     "gafcore:stability": "node scripts/smoke-gafcore-stability.mjs",
     "gafcore:smoke-login": "node scripts/smoke-gafcore-login.mjs",
