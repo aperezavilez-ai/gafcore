@@ -64,6 +64,7 @@ import {
 } from "@/hooks/useGafcoreFilePipeline";
 import { resolveBuildDelivery } from "@/core/pipeline/build-delivery.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
+import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
 import {
   aiReplyNeedsUserInput,
