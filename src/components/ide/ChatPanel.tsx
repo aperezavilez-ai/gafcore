@@ -158,6 +158,7 @@ import {
   type WorkflowMetricsUi,
   type WorkflowTaskUi,
 } from "@/components/ide/WorkflowTaskStrip";
+import { DeployWizardPanel } from "@/components/ide/DeployWizardPanel";
 import { agentTypeLabel } from "@/tasks/artifacts.shared";
 import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
 import {
@@ -426,7 +427,11 @@ export function ChatPanel({
   onProjectCreated,
   projectId,
   projectName,
-  initialInstruction,
+  onDeploy,
+  deploying,
+  deployLiveStatus,
+  deploySiteHost,
+  githubRepo: externalGithubRepo,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -434,15 +439,17 @@ export function ChatPanel({
   onOpenSettings?: () => void;
   onOpenHistory?: () => void;
   onOpenConnectors?: () => void;
-  /** Tras crear proyecto desde el chat (auto-provisión del cerebro). */
   onProjectCreated?: (
     created: { id: string; name: string; created_at: string },
     nextFiles: FileItem[],
   ) => void | Promise<void>;
   projectId?: string | null;
   projectName?: string | null;
-  /** Prompt inicial desde BuilderShell o sessionStorage — se envía automáticamente al montar. */
-  initialInstruction?: string | null;
+  onDeploy?: () => Promise<{ ok: boolean; message: string; repoUrl?: string; siteHost?: string }>;
+  deploying?: boolean;
+  deployLiveStatus?: "idle" | "building" | "ready" | "error";
+  deploySiteHost?: string | null;
+  githubRepo?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -792,10 +799,6 @@ export function ChatPanel({
   const runPreviewAutofixRef = useRef<(msg: string) => Promise<void>>(async () => {});
 
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
-
-  useEffect(() => {
-    if (isAdmin && creditsOut) setCreditsOut(false);
-  }, [isAdmin, creditsOut]);
 
   useEffect(() => {
     if (user?.id !== freeCreditsRescueUserId.current) {
@@ -1368,50 +1371,12 @@ export function ChatPanel({
     sendRef.current = send;
   });
 
-  // ── Bug Fix #1: consume el prompt inicial desde GafCoreBuilderShell ────────
-  // BuilderShell guarda el prompt en sessionStorage["gafcore_initial_prompt"].
-  // Lo enviamos directamente via sendRef una vez que el user está listo y
-  // el proyecto no tiene mensajes previos (proyecto recién creado / vacío).
-  const initialFiredRef = useRef(false);
-  useEffect(() => {
-    if (initialFiredRef.current) return;
-    if (!user?.id || loading || subLoading || creditsLoading) return;
-    if (messages.length > 0) {
-      // Proyecto con historial → no auto-disparar
-      initialFiredRef.current = true;
-      return;
-    }
-
-    // 1. Prioridad: prop directa (desktop layout)
-    let prompt = initialInstruction?.trim() ?? "";
-
-    // 2. Fallback: sessionStorage global (cualquier layout)
-    if (!prompt) {
-      try {
-        prompt = sessionStorage.getItem("gafcore_initial_prompt")?.trim() ?? "";
-        if (prompt) sessionStorage.removeItem("gafcore_initial_prompt");
-      } catch { /* ignore */ }
-    }
-
-    if (!prompt) return;
-    initialFiredRef.current = true;
-
-    const t = window.setTimeout(() => {
-      if (sendRef.current) {
-        void sendRef.current(prompt);
-      } else {
-        setInput(prompt);
-      }
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [user?.id, loading, subLoading, creditsLoading, messages.length, initialInstruction]);
-
   // Si el usuario describió el proyecto en NewProjectDialog, lo recogemos del sessionStorage
   // y lo autoenvíamos al cerebro la primera vez que abre el editor del proyecto recién creado.
   // Solo se dispara cuando el proyecto no tiene aún mensajes (proyecto fresco).
   const initialAutoSentRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!projectId || loading || subLoading || creditsLoading) return;
+    if (!projectId || loading) return;
     if (initialAutoSentRef.current === projectId) return;
     if (messages.length > 0) {
       initialAutoSentRef.current = projectId;
@@ -1434,7 +1399,7 @@ export function ChatPanel({
       void sendRef.current?.(pending!);
     }, 350);
     return () => window.clearTimeout(t);
-  }, [projectId, messages.length, loading, subLoading, creditsLoading]);
+  }, [projectId, messages.length, loading]);
 
   // Estado para auto-fix con IA cuando el preview falla por error de runtime.
   // Evita loops: solo bloquea reintentos si el MISMO error ya fue intentado y falló.
@@ -2826,11 +2791,14 @@ export function ChatPanel({
       guideAutopilotRef.current = resumed;
       setGuideAutopilotUi(resumed);
     }
-    /** Bloquear solo cuando rol y saldo ya cargaron; evita modal falso si isAdmin tarda (RPC has_role). */
-    const quotaResolved = !creditsLoading && !subLoading;
-    const hasAiQuota =
-      isAdmin || isUnlimitedDaily || isFairUseCreadorPlan || balance >= COST_PER_REQUEST;
-    const noQuota = quotaResolved && !!user?.id && !hasAiQuota;
+    /** Bloquear si no alcanza 1 crédito: el denominador de la UI puede ser 10 aunque `balance` sea 0 (plan gratis), y antes no se bloqueaba y el error del proveedor parecía “fallo de conexión”. */
+    const noQuota =
+      !isAdmin &&
+      !isUnlimitedDaily &&
+      !isFairUseCreadorPlan &&
+      !creditsLoading &&
+      !!user?.id &&
+      balance < COST_PER_REQUEST;
     if (noQuota) {
       toast.error("No tienes créditos de IA. Recarga o elige un plan.", { duration: 6000 });
       setCreditsOut(true);
@@ -3711,6 +3679,20 @@ export function ChatPanel({
             cancelPending={workflowCancelPending}
           />
         ) : null}
+        {/* Deploy Wizard — guía al usuario paso a paso hacia publicación */}
+        <DeployWizardPanel
+          files={files}
+          projectName={projectName}
+          projectId={projectId}
+          loading={loading}
+          deploying={deploying}
+          deployLiveStatus={deployLiveStatus}
+          deploySiteHost={deploySiteHost}
+          githubRepo={externalGithubRepo}
+          onOpenSettings={onOpenSettings}
+          onDeploy={onDeploy}
+          className="mt-2"
+        />
         {!isAdmin ? (
           <Button
             type="button"
@@ -4429,7 +4411,6 @@ export function ChatPanel({
                   send();
                 }}
                 disabled={!loading && !input.trim()}
-                data-gafcore-send="1"
                 className="h-9 w-9 shrink-0 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-40 sm:h-7 sm:w-7"
                 title={loading ? "Detener / descartar respuesta pendiente" : "Enviar"}
                 aria-label={loading ? "Detener" : "Enviar"}

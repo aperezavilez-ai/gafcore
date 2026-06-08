@@ -92,9 +92,7 @@ import {
   Search,
   Package,
   Trash2,
-  Wand2,
 } from "lucide-react";
-import { setGafcoreAdminBuilderView } from "@/lib/gafcore-admin-builder-view.shared";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -899,7 +897,7 @@ export function GafCoreIDE() {
       >
         <div className="flex h-11 items-center justify-between gap-1 border-b border-border/40 px-2 md:h-12 md:gap-2 md:px-3 md:border-b-0">
         {/* Left: logo + selector de proyecto */}
-        <div className="flex min-w-0 flex-1 items-center gap-0.5 md:gap-1 md:flex-none">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden md:gap-1 md:flex-none">
           <GafcoreLogo variant="toolbar" linkTo="/gafcore" className="shrink-0" />
           {userShortLabel ? (
             <DropdownMenu modal={false}>
@@ -1080,7 +1078,59 @@ export function GafCoreIDE() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          <div className="ml-1 flex shrink-0 items-center gap-1">
+          <div className="ml-0.5 hidden min-w-0 items-center gap-1.5 md:flex">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Historial de versiones"
+            >
+              <History className="h-4 w-4" />
+            </button>
+          </div>
+          {isAdmin ? (
+            <>
+              <Link
+                to="/gafcore/admin/ops"
+                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+                title="Ops — diagnóstico y aprobación (admin)"
+              >
+                <ShieldAlert className="h-4 w-4" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setSecretsOpen(true)}
+                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+                title="Secretos del proyecto (solo administración)"
+              >
+                <KeyRound className="h-4 w-4" />
+              </button>
+            </>
+          ) : null}
+          {isAdmin && (
+            <button
+              onClick={async () => {
+                setUsersOpen(true);
+                setUsersLoading(true);
+                setUsersError(null);
+                try {
+                  const stats = await getUserStats();
+                  setUserStats(stats);
+                } catch (err) {
+                  setUsersError("No se pudieron cargar las estadísticas");
+                  toast.error("No se pudieron cargar las estadísticas");
+                  logClientError("GafCoreIDE publish", err);
+                } finally {
+                  setUsersLoading(false);
+                }
+              }}
+              className="hidden h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+              title="Estadísticas de usuarios"
+            >
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Usuarios</span>
+            </button>
+          )}
           <DropdownMenu
             modal={false}
             open={projectMenuOpen}
@@ -1270,71 +1320,6 @@ export function GafCoreIDE() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {isAdmin ? (
-            <button
-              type="button"
-              onClick={() => setGafcoreAdminBuilderView(true)}
-              className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 text-[11px] font-medium text-primary hover:bg-primary/10"
-              title="Abrir IA Builder (panel de administración)"
-            >
-              <Wand2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">IA Builder</span>
-            </button>
-          ) : null}
-          </div>
-          <div className="ml-0.5 hidden min-w-0 items-center gap-1.5 md:flex">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen(true)}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Historial de versiones"
-            >
-              <History className="h-4 w-4" />
-            </button>
-          </div>
-          {isAdmin ? (
-            <>
-              <Link
-                to="/gafcore/admin/ops"
-                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
-                title="Ops — diagnóstico y aprobación (admin)"
-              >
-                <ShieldAlert className="h-4 w-4" />
-              </Link>
-              <button
-                type="button"
-                onClick={() => setSecretsOpen(true)}
-                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
-                title="Secretos del proyecto (solo administración)"
-              >
-                <KeyRound className="h-4 w-4" />
-              </button>
-            </>
-          ) : null}
-          {isAdmin && (
-            <button
-              onClick={async () => {
-                setUsersOpen(true);
-                setUsersLoading(true);
-                setUsersError(null);
-                try {
-                  const stats = await getUserStats();
-                  setUserStats(stats);
-                } catch (err) {
-                  setUsersError("No se pudieron cargar las estadísticas");
-                  toast.error("No se pudieron cargar las estadísticas");
-                  logClientError("GafCoreIDE publish", err);
-                } finally {
-                  setUsersLoading(false);
-                }
-              }}
-              className="hidden h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
-              title="Estadísticas de usuarios"
-            >
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Usuarios</span>
-            </button>
-          )}
         </div>
 
         {/* Centro: vista y herramientas (plan y créditos solo en el panel de chat) */}
@@ -1702,13 +1687,14 @@ export function GafCoreIDE() {
                 onOpenHistory={() => setHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onProjectCreated={onProjectCreatedFromChat}
-                initialInstruction={(() => {
-                  try {
-                    return sessionStorage.getItem("gafcore_initial_prompt") ?? undefined;
-                  } catch {
-                    return undefined;
-                  }
-                })()}
+                onDeploy={async () => {
+                  const r = await onDeploy();
+                  return { ok: r.ok, message: r.message, repoUrl: r.repoUrl, siteHost: r.siteHost };
+                }}
+                deploying={deploying}
+                deployLiveStatus={deployLiveStatus}
+                deploySiteHost={deploySiteHost}
+                githubRepo={deployGithubRepo}
               />
               </div>
             </ResizablePanel>
@@ -1816,13 +1802,14 @@ export function GafCoreIDE() {
                     onOpenHistory={() => setHistoryOpen(true)}
                     onOpenConnectors={() => setConnectorsOpen(true)}
                     onProjectCreated={onProjectCreatedFromChat}
-                    initialInstruction={(() => {
-                      try {
-                        return sessionStorage.getItem("gafcore_initial_prompt") ?? undefined;
-                      } catch {
-                        return undefined;
-                      }
-                    })()}
+                    onDeploy={async () => {
+                      const r = await onDeploy();
+                      return { ok: r.ok, message: r.message, repoUrl: r.repoUrl, siteHost: r.siteHost };
+                    }}
+                    deploying={deploying}
+                    deployLiveStatus={deployLiveStatus}
+                    deploySiteHost={deploySiteHost}
+                    githubRepo={deployGithubRepo}
                   />
                 </div>
                 {/* Pane 2: Workspace */}
