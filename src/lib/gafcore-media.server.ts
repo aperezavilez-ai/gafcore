@@ -1,4 +1,5 @@
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
+import { isFastWelcomeBuildInstruction } from "@/lib/gafcore-fast-build.shared";
 import { logDev } from "@/lib/gafcore-logger.server";
 import {
   applyPicsumFallbacksInSource,
@@ -156,7 +157,7 @@ async function repairBrokenHttpImages(
   let out = files;
   let replicateUsed = 0;
   const wantsGen =
-    /genera|crea.*imagen|foto|fotograf|hero.*imagen|ilustraci|mockup|banner|visual\s+premium|logo|icono?s?\b|avatar|producto/i.test(
+    /genera(r)?\s+(la\s+)?imagen|crea(r)?\s+.*imagen|foto\s+real|ilustraci[oó]n\s+con\s+ia|mockup\s+generado|banner\s+generado/i.test(
       instruction,
     );
 
@@ -194,9 +195,13 @@ export async function enrichGafcoreOutputFiles(
   files = files.map((f) => {
     if (!/\.(html|htm|jsx|tsx|js|css)$/i.test(f.name)) return f;
     let content = repairHtmlMedia(f.content, assetMap);
-    content = applyPicsumFallbacksInSource(content, instruction);
+    if (!isFastWelcomeBuildInstruction(instruction)) {
+      content = applyPicsumFallbacksInSource(content, instruction);
+    }
     return { ...f, content };
   });
-  files = await repairBrokenHttpImages(files, instruction);
+  if (!isFastWelcomeBuildInstruction(instruction)) {
+    files = await repairBrokenHttpImages(files, instruction);
+  }
   return files;
 }

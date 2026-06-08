@@ -108,16 +108,8 @@ export function buildLocalProjectAnalysis(
 }
 
 export function formatProjectAnalysisForChat(analysis: ProjectAnalysisResult): string {
-  const steps = analysis.workflowSteps
-    .map((s, i) => `${i === 0 ? "🔄" : "⬜"} ${i + 1}. ${s}`)
-    .join("\n");
-  const integrations = analysis.integrations.map((i) => `• ${i}`).join("\n");
-
   return (
-    `**Análisis del proyecto**\n\n${analysis.summary}\n\n` +
-    `**Flujo recomendado**\n\`\`\`\n${analysis.diagram}\n\`\`\`\n\n` +
-    `**Etapas planificadas**\n${steps}\n\n` +
-    `**Integraciones posibles**\n${integrations}\n\n` +
-    `¿Deseas comenzar la construcción del proyecto? Pulsa **Comenzar construcción** abajo o escribe «sí, adelante».`
+    `**Listo para construir**\n\n${analysis.summary}\n\n` +
+    `Pulsa **Comenzar construcción** o escribe «sí, adelante».`
   );
 }

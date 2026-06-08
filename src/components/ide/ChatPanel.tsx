@@ -106,6 +106,7 @@ import {
   FUNCTIONAL_FIRST_BUILD_PREFIX,
   buildPreserveExistingPrefix,
 } from "@/lib/gafcore-functional-first.shared";
+import { buildFastWelcomeBuildPrefix } from "@/lib/gafcore-fast-build.shared";
 import {
   auditProjectLocally,
   buildValidationFixInstruction,
@@ -1969,6 +1970,7 @@ export function ChatPanel({
     contextFiles: FileItem[],
     ac: AbortSignal,
     userTextForTone: string,
+    opts?: { forceFastModel?: boolean },
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
@@ -1988,6 +1990,7 @@ export function ChatPanel({
         files: contextFiles,
         deepMode: deepModel,
         ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
+        deepMode: opts?.forceFastModel ? false : deepModel,
       }),
       signal: ac.signal,
     });
@@ -2039,7 +2042,7 @@ export function ChatPanel({
     ac: AbortSignal,
     myEpoch: number,
     userTextForTone: string,
-    _options?: { preferReliableJson?: boolean },
+    _options?: { preferReliableJson?: boolean; forceFastModel?: boolean },
   ): Promise<{
     reply: string;
     files: Array<{ name: string; language?: string; content: string }>;
@@ -2054,6 +2057,7 @@ export function ChatPanel({
       contextFiles,
       ac,
       userTextForTone,
+      { forceFastModel: _options?.forceFastModel },
     );
   };
 
@@ -2909,22 +2913,33 @@ export function ChatPanel({
       return;
     }
 
-    const functionalPrefix =
-      effectiveBuild && !visualEditOn ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
     const welcomeApp = buildContextFiles.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
     const stillOnWelcome = Boolean(
       welcomeApp?.content && isGafcoreDefaultTemplateApp(welcomeApp.content),
     );
+    const fastWelcomeBuild =
+      effectiveBuild &&
+      buildConfirmed &&
+      stillOnWelcome &&
+      !visualEditOn &&
+      !factoryMode &&
+      !multiAgentMode;
+    const functionalPrefix =
+      effectiveBuild && !visualEditOn && !fastWelcomeBuild ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
     const preservePrefix =
       effectiveBuild && !visualEditOn && !isFreshProject && !stillOnWelcome
         ? buildPreserveExistingPrefix(buildContextFiles.length)
         : "";
     const freshProjectPrefix = isFreshProject ? buildFreshProjectInstructionPrefix() : "";
     const conversationalPrefix = conversational ? buildConversationalInstructionPrefix(raw) : "";
+    const fastWelcomePrefix = fastWelcomeBuild
+      ? buildFastWelcomeBuildPrefix(userFacingRaw || coreText)
+      : "";
     const creativePrefix =
-      effectiveBuild && !visualEditOn ? buildCreativeBuildPrefix(raw) : "";
+      effectiveBuild && !visualEditOn && !fastWelcomeBuild ? buildCreativeBuildPrefix(raw) : "";
     const deepPrefix =
-      (deepModel && effectiveBuild) || (effectiveBuild && isSubstantiveBuildRequest(raw))
+      !fastWelcomeBuild &&
+      ((deepModel && effectiveBuild) || (effectiveBuild && isSubstantiveBuildRequest(raw)))
         ? "[modo profundo] Prioriza análisis cuidadoso, UI cuidada y código robusto; la salida sigue siendo solo el JSON del contrato. "
         : "";
     const chatPrefix =
@@ -2942,9 +2957,12 @@ export function ChatPanel({
     const heroBgPrefix = buildHeroBackgroundInstructionPrefix(raw);
     const literalVisualPrefix = buildLiteralVisualChangePrefix(raw);
     const forceBuildPrefix =
-      effectiveBuild && isSubstantiveBuildRequest(coreText) ? GAFCORE_FORCE_FILES_BUILD_PREFIX : "";
+      effectiveBuild && !fastWelcomeBuild && isSubstantiveBuildRequest(coreText)
+        ? GAFCORE_FORCE_FILES_BUILD_PREFIX
+        : "";
     const instruction =
       freshProjectPrefix +
+      fastWelcomePrefix +
       conversationalPrefix +
       forceBuildPrefix +
       creativePrefix +
@@ -2974,7 +2992,11 @@ export function ChatPanel({
     setLoading(true);
     if (effectiveBuild) {
       setHealthPhase(
-        deepModel || isSubstantiveBuildRequest(raw) ? "optimizing_design" : "designing",
+        fastWelcomeBuild
+          ? "designing"
+          : deepModel || isSubstantiveBuildRequest(raw)
+            ? "optimizing_design"
+            : "designing",
       );
     } else {
       setHealthPhase(null);
@@ -3008,29 +3030,37 @@ export function ChatPanel({
     forceScrollToBottom();
     scrollChatToBottomSoon("auto");
     void persistMessage("user", userBubble);
-    if (effectiveBuild && (activeProjectIdRef.current ?? projectId)) void startPipelineRun(instruction);
-    if (effectiveBuild && buildContextFiles.length > 0) {
-      try {
-        const { createSnapshot } = await import("@/lib/userSupabase");
-        await createSnapshot(
-          buildContextFiles,
-          `antes: ${(raw || "build").slice(0, 48)}`,
-          projectId ?? undefined,
-        );
-      } catch (err) {
-        logClientWarn("gafcore-snapshot-before-build", err);
-      }
+    if (effectiveBuild && (activeProjectIdRef.current ?? projectId) && !fastWelcomeBuild) {
+      void startPipelineRun(instruction);
+    }
+    if (effectiveBuild && buildContextFiles.length > 0 && !fastWelcomeBuild) {
+      void (async () => {
+        try {
+          const { createSnapshot } = await import("@/lib/userSupabase");
+          await createSnapshot(
+            buildContextFiles,
+            `antes: ${(raw || "build").slice(0, 48)}`,
+            projectId ?? undefined,
+          );
+        } catch (err) {
+          logClientWarn("gafcore-snapshot-before-build", err);
+        }
+      })();
     }
     setStreamChars(null);
     const ac = new AbortController();
     abortControllerRef.current = ac;
+    const requestTimeoutMs = fastWelcomeBuild ? 90_000 : CHAT_REQUEST_TIMEOUT_MS;
     const chatTimeoutId = window.setTimeout(() => {
       if (!sendInFlightRef.current) return;
       ac.abort();
-      toast.error("La solicitud tardó demasiado (3 min). Pulsa el cuadrado para detener o envía de nuevo.", {
-        duration: 8000,
-      });
-    }, CHAT_REQUEST_TIMEOUT_MS);
+      toast.error(
+        fastWelcomeBuild
+          ? "El build tardó más de 90 s. Pulsa Construir de nuevo (un solo intento rápido)."
+          : "La solicitud tardó demasiado (3 min). Pulsa el cuadrado para detener o envía de nuevo.",
+        { duration: 8000 },
+      );
+    }, requestTimeoutMs);
     try {
       const history: ChatMsg[] = isFreshProject
         ? [{ role: "user", content: conversational ? userBubble : instruction }]
@@ -3082,7 +3112,7 @@ export function ChatPanel({
           visualEditOn,
         );
       } else {
-        await advancePipeline("generate", "generating");
+        if (!fastWelcomeBuild) await advancePipeline("generate", "generating");
         result = await requestGafcoreGeneration(
           tok,
           history,
@@ -3091,7 +3121,7 @@ export function ChatPanel({
           ac.signal,
           myEpoch,
           raw,
-          { preferReliableJson: isSubstantiveBuildRequest(raw || coreText) },
+          { preferReliableJson: isSubstantiveBuildRequest(raw || coreText), forceFastModel: fastWelcomeBuild },
         );
       }
 
@@ -3163,6 +3193,10 @@ export function ChatPanel({
           rawFiles: result.files ?? [],
         });
         filesToApply = delivery.files;
+        if (fastWelcomeBuild && filesToApply.length > 0) {
+          const appOnly = filesToApply.filter((f) => /^app\.(tsx|jsx)$/i.test(f.name));
+          if (appOnly.length > 0) filesToApply = appOnly;
+        }
 
         const needsCustomize = filesToApply.length > 0 && delivery.planOnly;
 
@@ -3174,7 +3208,7 @@ export function ChatPanel({
           toast.message("Proyecto generado. Revisa la vista previa.", { duration: 6000 });
         }
 
-        if (needsCustomize && myEpoch === requestEpochRef.current) {
+        if (needsCustomize && !fastWelcomeBuild && myEpoch === requestEpochRef.current) {
           setLoading(true);
           toast.message("Personalizando proyecto con IA…", { duration: 8000 });
           const customizeInstruction = GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX + (raw || coreText);
@@ -3205,7 +3239,7 @@ export function ChatPanel({
           replyText = sanitizeUserFacingAiText(
             softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto personalizado.`),
           );
-        } else if (filesToApply.length === 0) {
+        } else if (filesToApply.length === 0 && !fastWelcomeBuild) {
           setLoading(true);
           setHealthPhase("optimizing_design");
           const strictInstruction =
@@ -3249,6 +3283,11 @@ export function ChatPanel({
               "La validación bloqueó los archivos generados (errores de sintaxis o estructura). Pide una versión más simple o revisa el mensaje de la IA.",
               { duration: 12_000 },
             );
+          } else if (fastWelcomeBuild) {
+            toast.error(
+              "No se generó App.tsx a tiempo. Pulsa Construir de nuevo (build rápido, un solo intento).",
+              { duration: 10_000 },
+            );
           } else {
             toast.error(
               "No pude generar archivos. Prueba: «Crea landing de [tu negocio] con hero y formulario».",
@@ -3268,7 +3307,7 @@ export function ChatPanel({
       }
 
       if (filesToApply.length > 0 && effectiveBuild) {
-        const runFunctional = effectiveBuild && !visualEditOn;
+        const runFunctional = effectiveBuild && !visualEditOn && !fastWelcomeBuild;
         let { merged, issues } = await applyGenerationFiles(
           buildContextFiles,
           filesToApply,
@@ -3286,16 +3325,13 @@ export function ChatPanel({
           isGafcoreDefaultTemplateApp(appAfterBuild.content) &&
           isSubstantiveBuildRequest(raw);
         if (stillWelcomeTemplate) {
-          if (isPreviewAutofixAiEnabled()) {
-            toast.message("Reemplazando pantalla de bienvenida por tu proyecto…", { duration: 8000 });
-            scheduleRuntimeAutofixRef.current(
-              `App.tsx sigue mostrando «Bienvenidos a GafCore». Reemplázala por el proyecto pedido: ${raw.slice(0, 300)}`,
-            );
-          } else {
-            toast.message(
-              "El preview sigue en plantilla de bienvenida. Escribe de nuevo qué proyecto quieres en el chat.",
-              { duration: 10_000 },
-            );
+          toast.error(
+            fastWelcomeBuild
+              ? "El preview sigue en bienvenida. Pulsa Construir de nuevo."
+              : "El preview sigue en plantilla de bienvenida. Escribe qué proyecto quieres y pulsa Construir.",
+            { duration: 10_000 },
+          );
+          if (!fastWelcomeBuild) {
             offerGenerationRollback("El build no reemplazó la plantilla de bienvenida.");
           }
         } else {
@@ -3323,6 +3359,7 @@ export function ChatPanel({
 
         if (
           runFunctional &&
+          !fastWelcomeBuild &&
           shouldAutoRetryValidation(issues) &&
           !isVisualOnlyTweak(raw) &&
           !validationAutoRetryUsedRef.current
@@ -3405,14 +3442,17 @@ export function ChatPanel({
           const blockText = formatValidationForUser(
             issues.filter((i) => i.severity === "error"),
           );
-          if (isPreviewAutofixAiEnabled()) {
+          setLastError(blockText);
+          if (!fastWelcomeBuild && isPreviewAutofixAiEnabled()) {
             scheduleRuntimeAutofixRef.current(blockText);
             toast.message("Corrigiendo validación automáticamente…", {
               description: issues.find((i) => i.severity === "error")?.message,
               duration: 8000,
             });
-          } else {
-            setLastError(blockText);
+          } else if (fastWelcomeBuild) {
+            toast.error("Hay errores de sintaxis. Pulsa «Intenta arreglarlo» o Construir de nuevo.", {
+              duration: 10_000,
+            });
           }
         } else if (effectiveBuild) {
           if (!issues.some((i) => i.severity === "error")) {
@@ -3422,6 +3462,7 @@ export function ChatPanel({
             duration: 6000,
           });
           if (
+            !fastWelcomeBuild &&
             !hasBlockingValidationIssues(issues) &&
             !isBlockingPreviewError(lastErrorRef.current) &&
             !aiReplyNeedsUserInput(replyText) &&

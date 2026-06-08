@@ -30,6 +30,7 @@ import { runGafcoreAgentChatCompletion } from "@/lib/gafcore-chat-agent.server";
 import { resolveModelForGafcoreChat } from "@/services/ai/chat-brain.server";
 import type { SafeBuildMeta } from "@/services/ai/safe-build.shared";
 import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
+import { isFastWelcomeBuildInstruction } from "@/lib/gafcore-fast-build.shared";
 import {
   getPersistedChatCache,
   setPersistedChatCache,
@@ -203,13 +204,16 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   const recoveryAppend = buildPersistedSnapshotPromptAppend(persistedSnapshot, projFiles);
   const snapshotPriority = priorityPathsFromPersistedSnapshot(persistedSnapshot);
 
-  const memory = await retrieveProjectMemoryContext({
-    projectId: data.projectId,
-    userId,
-    instruction: data.instruction,
-    files: projFiles,
-  });
-  const pluginAppend = await buildAiPluginPromptAppend(userId);
+  const fastWelcome = isFastWelcomeBuildInstruction(data.instruction);
+  const memory = fastWelcome
+    ? { promptAppendix: "", priorityPaths: [] as string[] }
+    : await retrieveProjectMemoryContext({
+        projectId: data.projectId,
+        userId,
+        instruction: data.instruction,
+        files: projFiles,
+      });
+  const pluginAppend = fastWelcome ? "" : await buildAiPluginPromptAppend(userId);
   const promptAppendix = [memory.promptAppendix, pluginAppend, recoveryAppend]
     .filter(Boolean)
     .join("\n\n");
@@ -419,13 +423,16 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   );
   const snapshotPriorityComplete = priorityPathsFromPersistedSnapshot(persistedSnapshotComplete);
 
-  const memory = await retrieveProjectMemoryContext({
-    projectId: data.projectId,
-    userId,
-    instruction: data.instruction,
-    files: projFilesComplete,
-  });
-  const pluginAppend = await buildAiPluginPromptAppend(userId);
+  const fastWelcomeComplete = isFastWelcomeBuildInstruction(data.instruction);
+  const memory = fastWelcomeComplete
+    ? { promptAppendix: "", priorityPaths: [] as string[] }
+    : await retrieveProjectMemoryContext({
+        projectId: data.projectId,
+        userId,
+        instruction: data.instruction,
+        files: projFilesComplete,
+      });
+  const pluginAppend = fastWelcomeComplete ? "" : await buildAiPluginPromptAppend(userId);
   const promptAppendix = [memory.promptAppendix, pluginAppend, recoveryAppendComplete]
     .filter(Boolean)
     .join("\n\n");

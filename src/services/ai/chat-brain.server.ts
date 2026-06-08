@@ -2,6 +2,7 @@
  * Cerebro unificado en el chat: modelos (deep/fast) + motor de diseño.
  */
 import type { GafcoreAiGateway } from "@/lib/gafcore-ai-gateway.server";
+import { isFastWelcomeBuildInstruction } from "@/lib/gafcore-fast-build.shared";
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { inferAiBrainTaskFromInstruction } from "@/services/ai/design-engine.shared";
 import { resolveBrainRoute } from "@/services/ai/aiOrchestrator.server";
@@ -27,6 +28,9 @@ export function resolveModelForGafcoreChat(
   instruction: string,
   opts: { hasVision?: boolean; deepMode?: boolean } = {},
 ): { model: string; task: AiBrainTaskKind; deep: boolean } {
+  if (isFastWelcomeBuildInstruction(instruction)) {
+    return { model: gateway.models.fast, task: "code", deep: false };
+  }
   const deep = opts.deepMode ?? isDeepModeInstruction(instruction);
   const task = inferChatBrainTask(instruction);
 

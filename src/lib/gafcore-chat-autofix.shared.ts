@@ -66,9 +66,16 @@ export function isLocalRepairablePreviewError(message: string): boolean {
   );
 }
 
+export function isSyntaxLikePreviewError(message: string): boolean {
+  return /syntax|sintáct|desbalancead|unexpected token|react error #31|error #31|objects are not valid as a react child/i.test(
+    message,
+  );
+}
+
 export function shouldAttemptAiAutofix(message: string): boolean {
   if (!message.trim()) return false;
   if (isNonAutofixablePreviewError(message)) return false;
+  if (isSyntaxLikePreviewError(message)) return false;
   return true;
 }
 
