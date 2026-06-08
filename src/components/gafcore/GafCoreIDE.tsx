@@ -92,7 +92,9 @@ import {
   Search,
   Package,
   Trash2,
+  Wand2,
 } from "lucide-react";
+import { setGafcoreAdminBuilderView } from "@/lib/gafcore-admin-builder-view.shared";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1320,6 +1322,17 @@ export function GafCoreIDE() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => setGafcoreAdminBuilderView(true)}
+              className="ml-1 hidden h-7 shrink-0 items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 text-[11px] font-medium text-primary hover:bg-primary/10 md:inline-flex"
+              title="Abrir IA Builder (panel de administración)"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">IA Builder</span>
+            </button>
+          ) : null}
         </div>
 
         {/* Centro: vista y herramientas (plan y créditos solo en el panel de chat) */}

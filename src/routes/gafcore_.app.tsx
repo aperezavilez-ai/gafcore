@@ -12,6 +12,12 @@ import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
 import { GafCoreBuilderShell } from "@/components/GafCoreBuilderShell";
+import { useSubscription } from "@/hooks/useSubscription";
+import {
+  GAFCORE_ADMIN_VIEW_CHANGE_EVENT,
+  readGafcoreAdminBuilderView,
+  setGafcoreAdminBuilderView,
+} from "@/lib/gafcore-admin-builder-view.shared";
 
 const GafCoreIDE = lazy(() =>
   import("@/components/gafcore/GafCoreIDE").then((m) => ({ default: m.GafCoreIDE })),
@@ -246,26 +252,33 @@ function AccessMessage({
   );
 }
 
-// ── Bug Fix #2: GafCoreIDEWithShell ──────────────────────────────────────────
-// Muestra el BuilderShell si no hay proyecto activo en sessionStorage.
-// Cuando el usuario escribe y pulsa "Construir", guarda el prompt en
-// sessionStorage y transiciona al IDE — que ahora lee el prompt (Bug Fix #1).
+// Panel creador (GafCoreIDE) por defecto. IA Builder solo para admins vía toggle.
 function GafCoreIDEWithShell({
   user,
 }: {
-  user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined;
+  user: {
+    id?: string;
+    email?: string | null;
+    user_metadata?: Record<string, unknown>;
+  } | null | undefined;
 }) {
-  const [ideStarted, setIdeStarted] = useState(() => {
-    // Si ya hay un proyecto activo (ej: recarga de página), ir directo al IDE
-    try {
-      return Boolean(
-        sessionStorage.getItem("gafcore_active_project_id") ||
-        sessionStorage.getItem("gafcore_open_new_project"),
-      );
-    } catch {
-      return false;
-    }
-  });
+  const { user: authUser } = useAuth();
+  const userId = user?.id ?? authUser?.id;
+  const { isAdmin, loading: subLoading } = useSubscription(userId);
+  const [adminBuilderView, setAdminBuilderView] = useState(readGafcoreAdminBuilderView);
+
+  useEffect(() => {
+    const sync = () => setAdminBuilderView(readGafcoreAdminBuilderView());
+    window.addEventListener(GAFCORE_ADMIN_VIEW_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(GAFCORE_ADMIN_VIEW_CHANGE_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
+    if (subLoading || isAdmin) return;
+    if (!adminBuilderView) return;
+    setGafcoreAdminBuilderView(false);
+    setAdminBuilderView(false);
+  }, [isAdmin, subLoading, adminBuilderView]);
 
   const userName =
     (user?.user_metadata?.["full_name"] as string | undefined) ??
@@ -273,7 +286,9 @@ function GafCoreIDEWithShell({
     user?.email?.split("@")[0] ??
     undefined;
 
-  if (!ideStarted) {
+  const showAdminBuilder = isAdmin && !subLoading && adminBuilderView;
+
+  if (showAdminBuilder) {
     return (
       <GafCoreBuilderShell
         userName={userName}
@@ -283,7 +298,12 @@ function GafCoreIDEWithShell({
           } catch {
             /* ignore */
           }
-          setIdeStarted(true);
+          setGafcoreAdminBuilderView(false);
+          setAdminBuilderView(false);
+        }}
+        onExitToCreator={() => {
+          setGafcoreAdminBuilderView(false);
+          setAdminBuilderView(false);
         }}
       />
     );

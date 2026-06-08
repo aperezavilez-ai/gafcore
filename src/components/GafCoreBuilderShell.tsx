@@ -3,13 +3,14 @@ import {
   Sparkles, Home, FolderKanban, Wand2, Rocket, LayoutTemplate, Database,
   Plug2, Globe, Coins, BookOpen, Users, LifeBuoy, Bell, Send, Paperclip,
   ShoppingBag, Code2, Settings as SettingsIcon, Eye, Smartphone, Monitor,
-  RefreshCw, ChevronDown, History, Crown, Menu, X,
+  RefreshCw, ChevronDown, History, Crown, Menu, X, ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
 
 interface BuilderShellProps {
   onStart: (prompt: string) => void;
+  onExitToCreator?: () => void;
   userName?: string;
 }
 
@@ -41,7 +42,7 @@ const ACTIVITY = [
   { label: "Preparando despliegue", desc: "Casi listo…", color: "bg-slate-500/40" },
 ];
 
-export function GafCoreBuilderShell({ onStart, userName }: BuilderShellProps) {
+export function GafCoreBuilderShell({ onStart, onExitToCreator, userName }: BuilderShellProps) {
   const [active, setActive] = useState<string>("ia");
   const [prompt, setPrompt] = useState("");
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
@@ -173,7 +174,18 @@ export function GafCoreBuilderShell({ onStart, userName }: BuilderShellProps) {
               <span className="truncate max-w-[120px] sm:max-w-none">Mi proyecto</span>
               <ChevronDown size={14} className="text-slate-400 shrink-0" />
             </button>
-            <span className="hidden xs:inline rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] text-slate-300">Borrador</span>
+            {onExitToCreator ? (
+              <button
+                type="button"
+                onClick={onExitToCreator}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-200 hover:bg-violet-500/20"
+                title="Volver al panel creador"
+              >
+                <ArrowLeft size={14} />
+                <span className="hidden sm:inline">Panel creador</span>
+              </button>
+            ) : null}
+            <span className="hidden xs:inline rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] text-slate-300">Admin · IA Builder</span>
           </div>
 
           <div className="hidden lg:flex items-center gap-1 rounded-full border border-white/5 bg-white/[0.03] p-1">
