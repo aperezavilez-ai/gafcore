@@ -1687,6 +1687,13 @@ export function GafCoreIDE() {
                 onOpenHistory={() => setHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onProjectCreated={onProjectCreatedFromChat}
+                initialInstruction={(() => {
+                  try {
+                    return sessionStorage.getItem("gafcore_initial_prompt") ?? undefined;
+                  } catch {
+                    return undefined;
+                  }
+                })()}
               />
               </div>
             </ResizablePanel>
@@ -1794,6 +1801,13 @@ export function GafCoreIDE() {
                     onOpenHistory={() => setHistoryOpen(true)}
                     onOpenConnectors={() => setConnectorsOpen(true)}
                     onProjectCreated={onProjectCreatedFromChat}
+                    initialInstruction={(() => {
+                      try {
+                        return sessionStorage.getItem("gafcore_initial_prompt") ?? undefined;
+                      } catch {
+                        return undefined;
+                      }
+                    })()}
                   />
                 </div>
                 {/* Pane 2: Workspace */}

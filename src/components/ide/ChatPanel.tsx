@@ -426,6 +426,7 @@ export function ChatPanel({
   onProjectCreated,
   projectId,
   projectName,
+  initialInstruction,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -440,6 +441,8 @@ export function ChatPanel({
   ) => void | Promise<void>;
   projectId?: string | null;
   projectName?: string | null;
+  /** Prompt inicial desde BuilderShell o sessionStorage — se envía automáticamente al montar. */
+  initialInstruction?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -1360,6 +1363,44 @@ export function ChatPanel({
   useEffect(() => {
     sendRef.current = send;
   });
+
+  // ── Bug Fix #1: consume el prompt inicial desde GafCoreBuilderShell ────────
+  // BuilderShell guarda el prompt en sessionStorage["gafcore_initial_prompt"].
+  // Lo enviamos directamente via sendRef una vez que el user está listo y
+  // el proyecto no tiene mensajes previos (proyecto recién creado / vacío).
+  const initialFiredRef = useRef(false);
+  useEffect(() => {
+    if (initialFiredRef.current) return;
+    if (!user?.id || loading) return;
+    if (messages.length > 0) {
+      // Proyecto con historial → no auto-disparar
+      initialFiredRef.current = true;
+      return;
+    }
+
+    // 1. Prioridad: prop directa (desktop layout)
+    let prompt = initialInstruction?.trim() ?? "";
+
+    // 2. Fallback: sessionStorage global (cualquier layout)
+    if (!prompt) {
+      try {
+        prompt = sessionStorage.getItem("gafcore_initial_prompt")?.trim() ?? "";
+        if (prompt) sessionStorage.removeItem("gafcore_initial_prompt");
+      } catch { /* ignore */ }
+    }
+
+    if (!prompt) return;
+    initialFiredRef.current = true;
+
+    const t = window.setTimeout(() => {
+      if (sendRef.current) {
+        void sendRef.current(prompt);
+      } else {
+        setInput(prompt);
+      }
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [user?.id, loading, messages.length, initialInstruction]);
 
   // Si el usuario describió el proyecto en NewProjectDialog, lo recogemos del sessionStorage
   // y lo autoenvíamos al cerebro la primera vez que abre el editor del proyecto recién creado.
@@ -4387,6 +4428,7 @@ export function ChatPanel({
                   send();
                 }}
                 disabled={!loading && !input.trim()}
+                data-gafcore-send="1"
                 className="h-9 w-9 shrink-0 rounded-full bg-primary hover:bg-primary/90 disabled:opacity-40 sm:h-7 sm:w-7"
                 title={loading ? "Detener / descartar respuesta pendiente" : "Enviar"}
                 aria-label={loading ? "Detener" : "Enviar"}

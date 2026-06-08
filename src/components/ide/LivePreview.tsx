@@ -607,7 +607,7 @@ ${PREVIEW_IMG_FALLBACK_SCRIPT}
         <iframe
           title="preview"
           srcDoc={srcDoc}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
           className="h-full w-full border-0"
         />
       </div>

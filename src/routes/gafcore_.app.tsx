@@ -11,6 +11,7 @@ import {
 import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
+import { GafCoreBuilderShell } from "@/components/GafCoreBuilderShell";
 
 const GafCoreIDE = lazy(() =>
   import("@/components/gafcore/GafCoreIDE").then((m) => ({ default: m.GafCoreIDE })),
@@ -200,7 +201,7 @@ function GafCoreAppPage() {
           </div>
         }
       >
-        <GafCoreIDE />
+        <GafCoreIDEWithShell user={user} />
       </Suspense>
     </ErrorBoundary>
   );
@@ -243,4 +244,50 @@ function AccessMessage({
       </div>
     </div>
   );
+}
+
+// ── Bug Fix #2: GafCoreIDEWithShell ──────────────────────────────────────────
+// Muestra el BuilderShell si no hay proyecto activo en sessionStorage.
+// Cuando el usuario escribe y pulsa "Construir", guarda el prompt en
+// sessionStorage y transiciona al IDE — que ahora lee el prompt (Bug Fix #1).
+function GafCoreIDEWithShell({
+  user,
+}: {
+  user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined;
+}) {
+  const [ideStarted, setIdeStarted] = useState(() => {
+    // Si ya hay un proyecto activo (ej: recarga de página), ir directo al IDE
+    try {
+      return Boolean(
+        sessionStorage.getItem("gafcore_active_project_id") ||
+        sessionStorage.getItem("gafcore_open_new_project"),
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  const userName =
+    (user?.user_metadata?.["full_name"] as string | undefined) ??
+    (user?.user_metadata?.["name"] as string | undefined) ??
+    user?.email?.split("@")[0] ??
+    undefined;
+
+  if (!ideStarted) {
+    return (
+      <GafCoreBuilderShell
+        userName={userName}
+        onStart={(prompt) => {
+          try {
+            sessionStorage.setItem("gafcore_initial_prompt", prompt);
+          } catch {
+            /* ignore */
+          }
+          setIdeStarted(true);
+        }}
+      />
+    );
+  }
+
+  return <GafCoreIDE />;
 }
