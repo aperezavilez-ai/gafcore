@@ -20,6 +20,7 @@
     "gafcore:parse": "npx tsx gafcore-core/scripts/parse-cli.ts",
     "gafcore:blueprint": "npx tsx gafcore-core/scripts/blueprint-cli.ts",
     "gafcore:generate": "npx tsx gafcore-core/scripts/generate-cli.ts",
+    "gafcore:run": "npx tsx gafcore-core/scripts/run-cli.ts",
     "gafcore:doctor": "node scripts/check-gafcore-setup.mjs",
     "gafcore:stability": "node scripts/smoke-gafcore-stability.mjs",
     "gafcore:smoke-login": "node scripts/smoke-gafcore-login.mjs",

@@ -15,7 +15,7 @@ User idea  →  Input Parser  →  Blueprint  →  Code Generator  →  Runner  
 | 1 | **Input Parser** | ✅ Implementado | Idea en lenguaje natural → JSON estructurado |
 | 2 | **Blueprint Generator** | ✅ Implementado | JSON → tablas SQL, rutas API, páginas, archivos |
 | 3 | **Code Generator** | ✅ Implementado | Blueprint → Express + SQLite + React conectados |
-| 4 | **Runner** | 🔲 Pendiente | Build + run local sin errores de runtime |
+| 4 | **Runner** | ✅ Implementado | install + db:push + smoke /api/health |
 
 ## Estructura
 
@@ -47,14 +47,19 @@ npm run gafcore:blueprint -- "todo app with login"
 
 # Módulos 1 + 2 + 3 — genera app en disco
 npm run gafcore:generate -- "todo app with login"
-cd generated-apps/todo-app-with-login && npm install && npm run db:push && npm run dev
+
+# Pipeline completo 1→4 — genera, instala, DB y verifica API
+npm run gafcore:run -- "todo app with login"
+
+# Dejar dev corriendo (API + cliente)
+npm run gafcore:run -- "todo app with login" --keep
 ```
 
 ```ts
-import { parseBlueprintAndCode } from "../gafcore-core/src";
+import { generateAndRun } from "../gafcore-core/src";
 
-const { parsed, blueprint, app } = parseBlueprintAndCode("todo app with login");
-// app.files → código listo para escribir o empaquetar
+const { run } = await generateAndRun("todo app with login");
+// run.ok === true → app arrancó sin errores de runtime
 ```
 
 ## Reglas del core
