@@ -273,7 +273,7 @@ function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreCh
     },
     {
       id: "guide-6",
-      label: "6. Responsive y publicar",
+      label: "6. Responsive y pulir",
       done:
         caps.hasResponsiveHints &&
         (ctx.validationLabel?.includes("100") ||
@@ -281,6 +281,27 @@ function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreCh
           (!formGap && gaps.length === 0 && caps.hasWorkingForm)),
       prompt:
         "QA final: responsive móvil/tablet/desktop, corrige errores del preview y deja el proyecto listo para publicar.",
+    },
+    {
+      id: "guide-7",
+      label: "7. Conectar Supabase",
+      done: /supabase|base de datos|database|auth\.signIn|supabase\.from/i.test(corpus(ctx)),
+      prompt:
+        "Conecta Supabase a este proyecto: ve a Configuración → Supabase, pega tu URL y clave pública. Luego dime qué datos quieres guardar (usuarios, productos, pedidos, etc.) y lo integro.",
+    },
+    {
+      id: "guide-8",
+      label: "8. Subir a GitHub",
+      done: /github|git push|repositorio/i.test(corpus(ctx)),
+      prompt:
+        "Quiero subir este proyecto a GitHub. Necesito conectar mi cuenta: ve a Configuración → GitHub Deploy, pega tu token de GitHub y el nombre del repo (usuario/nombre-repo).",
+    },
+    {
+      id: "guide-9",
+      label: "9. Publicar en Vercel",
+      done: /vercel|en vivo|deploy|publicado|sitio activo/i.test(corpus(ctx)),
+      prompt:
+        "Quiero publicar el proyecto en Vercel para que tenga una URL pública. Necesito el Deploy Hook: en Vercel → mi proyecto → Settings → Git → Deploy Hooks, crea uno y pégalo en Configuración → Vercel.",
     },
   ];
 

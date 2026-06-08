@@ -3650,29 +3650,19 @@ export function ChatPanel({
             <HealthStatus phase={healthPhase} />
           </div>
         ) : null}
-        {pipelineStatus || validationLabel || factoryMode ? (
-          <p
-            className="mt-1 truncate text-[10px] text-muted-foreground"
-            title={[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
-              .filter(Boolean)
-              .join(" · ")}
-          >
-            {[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
-              .filter(Boolean)
-              .join(" · ")}
+        {/* Estado técnico — solo visible cuando hay algo relevante para el usuario */}
+        {(loading || (pipelineStatus && /construy|generat|corrigi/i.test(pipelineStatus ?? ""))) ? (
+          <p className="mt-1 truncate text-[10px] text-primary/80 animate-pulse">
+            {loading ? "Generando tu proyecto…" : pipelineStatus}
           </p>
         ) : null}
-        {orchestration.workflowRunId ||
-        activeWorkflowRunId ||
-        backgroundWorkflowRunId ||
-        workflowTasks.length > 0 ? (
+        {/* Tareas del workflow — solo mostrar si hay error o el usuario cancela */}
+        {(workflowTasks.some(t => t.state === "failed") || workflowCancelPending) ? (
           <WorkflowTaskStrip
             className="mt-2"
-            tasks={workflowTasks}
-            planSummary={workflowPlanSummary}
+            tasks={workflowTasks.filter(t => t.state === "failed")}
+            planSummary={null}
             workflowState={workflowState}
-            metrics={workflowMetrics}
-            integrationStatus={orchestration.integrationStatusLine}
             onCancel={
               activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
             }
