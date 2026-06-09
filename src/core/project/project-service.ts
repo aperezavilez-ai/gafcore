@@ -66,6 +66,15 @@ export async function bootstrapWorkspace(): Promise<WorkspaceBootstrap> {
 
   const projects = await listProjects();
   if (projects.length === 0) {
+    const keepId = getCurrentProjectId();
+    if (keepId) {
+      cacheActiveProject(keepId, readCachedProjectName());
+      return {
+        hasSupabase: true,
+        projects: [],
+        active: { id: keepId, name: readCachedProjectName(), row: null },
+      };
+    }
     clearCurrentProjectId();
     cacheActiveProject(null, "Sin proyecto");
     return {

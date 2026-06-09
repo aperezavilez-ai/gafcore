@@ -515,9 +515,21 @@ export function GafCoreIDE() {
   const showProjectSearch = userProjects.length > 4 || projectSearch.length > 0;
 
   const refreshProjects = async (preferActiveId?: string | null) => {
+    const keepId = preferActiveId ?? getCurrentProjectId();
     const list = await listProjects();
+
+    if (list.length === 0 && keepId) {
+      setUserProjects((prev) => {
+        if (prev.some((p) => p.id === keepId)) return prev;
+        return [{ id: keepId, name: readCachedProjectName() }, ...prev];
+      });
+      setCurrentProjectIdState(keepId);
+      setProjectName(readCachedProjectName());
+      return;
+    }
+
     setUserProjects(list);
-    const active = await syncActiveFromList(list, preferActiveId ?? getCurrentProjectId());
+    const active = await syncActiveFromList(list, keepId);
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
   };
@@ -618,7 +630,7 @@ export function GafCoreIDE() {
     setActiveIndex(0);
     setLoaded(true);
     setPreviewKey((k) => k + 1);
-    await refreshProjects(created.id);
+    void refreshProjects(created.id);
   };
 
   const onProjectCreatedFromTemplate = async (
@@ -638,8 +650,8 @@ export function GafCoreIDE() {
     setActiveIndex(0);
     setLoaded(true);
     setPreviewKey((k) => k + 1);
-    await refreshProjects(created.id);
     toast.success(`Proyecto «${created.name}» creado.`);
+    void refreshProjects(created.id);
   };
 
   const beginDeleteCurrentProject = async () => {
@@ -779,13 +791,29 @@ export function GafCoreIDE() {
   }, [isAdmin, secretsOpen]);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const ws = await bootstrapWorkspace();
+      if (cancelled) return;
+
       if (!ws.hasSupabase) {
         setLoaded(true);
         return;
       }
+
+      const cachedId = getCurrentProjectId();
+
       if (ws.projects.length === 0) {
+        if (cachedId) {
+          setCurrentProjectIdState(cachedId);
+          setProjectName(readCachedProjectName());
+          setUserProjects((prev) => {
+            if (prev.some((p) => p.id === cachedId)) return prev;
+            return [{ id: cachedId, name: readCachedProjectName() }, ...prev];
+          });
+          setLoaded(true);
+          return;
+        }
         setCurrentProjectIdState(null);
         setProjectName(ws.active.name);
         toast.message("No hay proyectos en tu cuenta", {
@@ -796,17 +824,23 @@ export function GafCoreIDE() {
         setLoaded(true);
         return;
       }
+
       setCurrentProjectIdState(ws.active.id);
       setProjectName(ws.active.name);
       setUserProjects(ws.projects);
       const activeId = ws.active.id!;
       const remote = await loadProjectFiles(activeId);
+      if (cancelled) return;
       await hydrateEditorFromRemote(remote, activeId);
       const deploy = await loadDeploySummaryForProject(activeId);
+      if (cancelled) return;
       setDeploySiteHost(deploy.siteHost);
       setDeployGithubRepo(deploy.githubRepo);
       setLoaded(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

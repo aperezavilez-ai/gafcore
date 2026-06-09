@@ -121,25 +121,55 @@ export async function ensureProjectId(): Promise<string | null> {
 
 export type ProjectRow = { id: string; name: string; created_at?: string; updated_at?: string; deploy_site_url?: string | null; github_repo?: string | null; };
 
+/** Espera a que la sesión Supabase esté lista (RLS requiere JWT). */
+async function waitForAuthSession(
+  sb: NonNullable<ReturnType<typeof getUserSupabase>>,
+  maxMs = 6_000,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    const { data } = await sb.auth.getSession();
+    if (data.session?.access_token) return true;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return false;
+}
+
 export async function listProjects(): Promise<ProjectRow[]> {
   const sb = getUserSupabase();
   if (!sb) return [];
-  const { data, error } = await sb
-    .from("projects")
-    .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
-    .order("updated_at", { ascending: false, nullsFirst: false });
-  if (!error) return (data ?? []) as ProjectRow[];
+  await waitForAuthSession(sb);
 
-  console.error("[Supabase] list projects error:", error);
-  const fallback = await sb
-    .from("projects")
-    .select("id, name, created_at, updated_at")
-    .order("created_at", { ascending: false });
-  if (fallback.error) {
-    console.error("[Supabase] list projects fallback error:", fallback.error);
-    return [];
+  const query = async (select: string, orderCol: string) =>
+    sb
+      .from("projects")
+      .select(select)
+      .order(orderCol, { ascending: false, nullsFirst: false });
+
+  let { data, error } = await query(
+    "id, name, created_at, updated_at, deploy_site_url, github_repo",
+    "updated_at",
+  );
+  if (error) {
+    console.error("[Supabase] list projects error:", error);
+    const fallback = await query("id, name, created_at, updated_at", "created_at");
+    if (fallback.error) {
+      console.error("[Supabase] list projects fallback error:", fallback.error);
+      return [];
+    }
+    data = fallback.data;
   }
-  return (fallback.data ?? []) as ProjectRow[];
+
+  const rows = (data ?? []) as ProjectRow[];
+  if (rows.length > 0) return rows;
+
+  // Reintento breve: proyecto recién creado puede no aparecer al instante
+  await new Promise((r) => setTimeout(r, 400));
+  const retry = await query("id, name, created_at, updated_at", "created_at");
+  if (!retry.error && retry.data?.length) {
+    return retry.data as ProjectRow[];
+  }
+  return rows;
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {
