@@ -173,13 +173,12 @@ function SelectionCard({
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "rounded-xl border text-left transition-all duration-200",
+      className={cn("rounded-xl border text-left transition-all duration-200", className)}
+      style={
         selected
-          ? "border-violet-400/60 bg-violet-500/15 shadow-[0_0_24px_-6px_rgba(139,92,246,0.55)] ring-1 ring-violet-400/40"
-          : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-violet-500/8",
-        className,
-      )}
+          ? { borderColor: "rgba(167,139,250,0.6)", background: "rgba(139,92,246,0.15)", color: "#f1f5f9" }
+          : { borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#cbd5e1" }
+      }
     >
       {children}
     </button>
@@ -239,7 +238,7 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
         className="max-w-lg gap-0 overflow-hidden border-violet-500/20 p-0 shadow-2xl sm:max-w-xl"
-        style={{ background: "#0a0c14", color: "#f1f5f9", borderColor: "rgba(139,92,246,0.2)" }}
+        style={{ background: "#0a0c14", color: "#f1f5f9", borderColor: "rgba(139,92,246,0.2)", colorScheme: "dark" }}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
