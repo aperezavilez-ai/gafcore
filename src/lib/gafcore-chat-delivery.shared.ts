@@ -164,6 +164,11 @@ export const GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX =
 export const GAFCORE_FORCE_FILES_BUILD_PREFIX =
   "[GAFCORE BUILD OBLIGATORIO] El usuario pidió CREAR o CONSTRUIR un proyecto. " +
   "Responde SOLO JSON { reply, files }. files NO puede estar vacío. " +
-  "Incluye App.tsx completo export default, main.tsx e index.html si faltan. " +
+  "Incluye App.tsx (export default function App), main.tsx e index.html si faltan. " +
   "PROHIBIDO arquitectura en prosa, fases, módulos sin código, o plan sin implementar. " +
-  "PROHIBIDO react-router. Iconos lucide: import obligatorio. ";
+  "PROHIBIDO react-router. Iconos lucide: import obligatorio. " +
+  "CHECKLIST DE SINTAXIS ANTES DE ENTREGAR: " +
+  "(a) Cada { tiene su }, cada ( tiene su ), cada <Tag> tiene </Tag> o />. " +
+  "(b) Todos los hooks/componentes usados están importados. " +
+  "(c) No hay objetos renderizados directamente en JSX ({obj} → usa {obj.prop}). " +
+  "(d) App.tsx tiene exactamente un export default function. ";

@@ -274,14 +274,65 @@ export function buildValidationFixInstruction(
   issues: ProjectValidationIssue[],
   originalUserRequest: string,
 ): string {
-  const list = issues
-    .slice(0, 10)
-    .map((i) => `- [${i.severity}/${i.category}] ${i.file}: ${i.message}`)
-    .join("\n");
-  return `[GAFCORE CORRECCIÓN] La entrega anterior falló validación. Corrige solo archivos necesarios (delta):
-${list}
-Pedido original: ${originalUserRequest.slice(0, 500)}
-Obligatorio: imports resueltos, sintaxis válida, export default en App, handlers reales, sin TODO en flujo principal.`;
+  const byCategory: Record<ValidationCategory, ProjectValidationIssue[]> = {
+    syntax: [],
+    import: [],
+    build: [],
+    functional: [],
+  };
+  for (const i of issues.slice(0, 12)) {
+    byCategory[i.category].push(i);
+  }
+
+  const sections: string[] = [];
+
+  if (byCategory.syntax.length > 0) {
+    const lines = byCategory.syntax.map((i) => `  · ${i.file}: ${i.message}`).join("\n");
+    sections.push(
+      `[SINTAXIS — CRÍTICO]\n${lines}\n` +
+      `  → Regla: cada { necesita }, cada ( necesita ), cada <Tag> necesita </Tag> o />. ` +
+      `Revisa balance antes de emitir. Divide archivos >200 líneas en components/.`,
+    );
+  }
+
+  if (byCategory.import.length > 0) {
+    const lines = byCategory.import.map((i) => `  · ${i.file}: ${i.message}`).join("\n");
+    sections.push(
+      `[IMPORTS — CRÍTICO]\n${lines}\n` +
+      `  → Regla: importa TODOS los símbolos usados (useState, useEffect, iconos lucide). ` +
+      `Sin import *. Rutas relativas con ./NombreExacto (case-sensitive).`,
+    );
+  }
+
+  if (byCategory.build.length > 0) {
+    const lines = byCategory.build.map((i) => `  · ${i.file}: ${i.message}`).join("\n");
+    sections.push(
+      `[BUILD]\n${lines}\n` +
+      `  → Regla: App.tsx necesita export default function App(). main.tsx llama createRoot. ` +
+      `index.html con <div id="root">. Sin react-router-dom.`,
+    );
+  }
+
+  if (byCategory.functional.length > 0) {
+    const lines = byCategory.functional.map((i) => `  · ${i.file}: ${i.message}`).join("\n");
+    sections.push(
+      `[FUNCIONAL]\n${lines}\n` +
+      `  → Regla: todos los <button> necesitan onClick, todos los <form> necesitan onSubmit. ` +
+      `Sin href="#" vacío. Flujo completo: estado + handler + feedback visible.`,
+    );
+  }
+
+  const issueBlock = sections.join("\n\n");
+  const hasBlocker = byCategory.syntax.length > 0 || byCategory.import.length > 0;
+
+  return (
+    `[GAFCORE CORRECCIÓN AUTOMÁTICA]\n` +
+    (hasBlocker ? `⚠ Hay errores bloqueantes — el preview no carga. Corrige PRIMERO sintaxis e imports.\n\n` : "") +
+    `${issueBlock}\n\n` +
+    `Pedido original: ${originalUserRequest.slice(0, 400)}\n` +
+    `Instrucción: devuelve SOLO los archivos corregidos (delta mínimo). ` +
+    `No añadas features nuevas. No respondas solo con texto.`
+  );
 }
 
 export { formatFunctionalAuditForUser, hasFunctionalBlockingIssues };

@@ -5,7 +5,8 @@
 
 export const FUNCTIONAL_FIRST_BUILD_PREFIX =
   "[FUNCTIONAL-FIRST] Interpreta la intención funcional (no solo visual). Entrega flujo completo: estado, handlers, persistencia (useState + localStorage o capa api/ si aplica), loading/error, feedback visible. Prohibido botones/forms decorativos. " +
-  "OBLIGATORIO: devuelve files con App.tsx funcional; PROHIBIDO responder solo con plan, fases o arquitectura sin código. ";
+  "OBLIGATORIO: devuelve files con App.tsx funcional; PROHIBIDO responder solo con plan, fases o arquitectura sin código. " +
+  "SINTAXIS OBLIGATORIA: (1) balance {} () </>; (2) todos los imports declarados; (3) sin objetos en JSX — usa obj.prop; (4) export default en cada componente de entrada. ";
 
 /** Cuando el proyecto ya tiene código: no borrar features al ampliar (p. ej. buscador de vuelos). */
 export function buildPreserveExistingPrefix(fileCount: number): string {
