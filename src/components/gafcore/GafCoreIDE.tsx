@@ -91,6 +91,8 @@ import {
   Search,
   Package,
   Trash2,
+  Monitor,
+  Smartphone,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -116,7 +118,7 @@ import { Input } from "@/components/ui/input";
 import { ChatPanel, type ChatWorkflowStripPayload } from "@/components/ide/ChatPanel";
 import { WorkflowTaskStrip } from "@/components/ide/WorkflowTaskStrip";
 import { CodeEditor, initialFiles, type FileItem } from "@/components/ide/CodeEditor";
-import { LivePreview } from "@/components/ide/LivePreview";
+import { LivePreview, type PreviewDevice } from "@/components/ide/LivePreview";
 import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
 import { SettingsDialog } from "@/components/ide/SettingsDialog";
 import { HistoryDialog } from "@/components/ide/HistoryDialog";
@@ -219,6 +221,7 @@ export function GafCoreIDE() {
   } | null>(null);
   const [view, setView] = useState<View>("preview");
   const [previewKey, setPreviewKey] = useState(0);
+  const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const previewRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [projectName, setProjectName] = useState(readCachedProjectName);
   const [sessionAccessToken, setSessionAccessToken] = useState<string | null>(null);
@@ -1773,14 +1776,43 @@ export function GafCoreIDE() {
               <div className="flex h-full flex-col bg-muted/30">
                 {view === "preview" ? (
                   <div className="flex h-full flex-col gap-2 p-3">
-                    <div className="flex shrink-0 items-center justify-end">
+                    <div className="flex shrink-0 items-center justify-between gap-2">
+                      {/* Toggle desktop / móvil */}
+                      <div className="flex items-center rounded-md border border-border bg-muted/40 p-0.5">
+                        <button
+                          type="button"
+                          aria-label="Vista escritorio"
+                          onClick={() => setPreviewDevice("desktop")}
+                          className={
+                            "flex h-6 w-6 items-center justify-center rounded transition-colors " +
+                            (previewDevice === "desktop"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground")
+                          }
+                        >
+                          <Monitor className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Vista móvil"
+                          onClick={() => setPreviewDevice("mobile")}
+                          className={
+                            "flex h-6 w-6 items-center justify-center rounded transition-colors " +
+                            (previewDevice === "mobile"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground")
+                          }
+                        >
+                          <Smartphone className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                       <DesignCritiqueDialog
                         files={files}
                         projectId={currentProjectId ?? null}
                       />
                     </div>
                     <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-                      <LivePreview key={previewKey} files={files} />
+                      <LivePreview key={previewKey} files={files} device={previewDevice} />
                     </div>
                   </div>
                 ) : (
@@ -1881,13 +1913,44 @@ export function GafCoreIDE() {
                           >
                             ← Chat
                           </button>
-                          <DesignCritiqueDialog
-                            files={files}
-                            projectId={currentProjectId ?? null}
-                          />
+                          <div className="flex items-center gap-2">
+                            {/* Toggle desktop / móvil */}
+                            <div className="flex items-center rounded-md border border-border bg-muted/40 p-0.5">
+                              <button
+                                type="button"
+                                aria-label="Vista escritorio"
+                                onClick={() => setPreviewDevice("desktop")}
+                                className={
+                                  "flex h-6 w-6 items-center justify-center rounded transition-colors " +
+                                  (previewDevice === "desktop"
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground")
+                                }
+                              >
+                                <Monitor className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Vista móvil"
+                                onClick={() => setPreviewDevice("mobile")}
+                                className={
+                                  "flex h-6 w-6 items-center justify-center rounded transition-colors " +
+                                  (previewDevice === "mobile"
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground")
+                                }
+                              >
+                                <Smartphone className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            <DesignCritiqueDialog
+                              files={files}
+                              projectId={currentProjectId ?? null}
+                            />
+                          </div>
                         </div>
                         <div className="flex-1 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-                          <LivePreview key={previewKey} files={files} />
+                          <LivePreview key={previewKey} files={files} device={previewDevice} />
                         </div>
                       </div>
                     ) : (

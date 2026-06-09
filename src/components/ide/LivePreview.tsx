@@ -138,7 +138,9 @@ function rewriteImports(
   });
 }
 
-export function LivePreview({ files }: { files: FileItem[] }) {
+export type PreviewDevice = "desktop" | "mobile";
+
+export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; device?: PreviewDevice }) {
   /** Durante streaming de la IA, prioriza fluidez del IDE antes que cada frame del preview. */
   const deferredFiles = useDeferredValue(files);
   const srcDoc = useMemo(() => {
@@ -601,14 +603,42 @@ ${PREVIEW_IMG_FALLBACK_SCRIPT}
 </html>`;
   }, [deferredFiles]);
 
+  const isMobile = device === "mobile";
+
   return (
-    <div className="flex h-full flex-col bg-background">
-      <div className="flex-1 bg-white">
+    <div className="flex h-full flex-col bg-background overflow-hidden">
+      <div
+        className="flex-1 overflow-hidden"
+        style={
+          isMobile
+            ? {
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "center",
+                background: "#e5e7eb",
+                padding: "12px 0",
+                overflowY: "auto",
+              }
+            : { background: "#ffffff" }
+        }
+      >
         <iframe
           title="preview"
           srcDoc={srcDoc}
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
-          className="h-full w-full border-0"
+          style={
+            isMobile
+              ? {
+                  width: "375px",
+                  height: "812px",
+                  border: "none",
+                  borderRadius: "12px",
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+                  background: "#fff",
+                  flexShrink: 0,
+                }
+              : { width: "100%", height: "100%", border: "none" }
+          }
         />
       </div>
     </div>
