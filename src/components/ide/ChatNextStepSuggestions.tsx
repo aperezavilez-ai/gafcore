@@ -14,7 +14,31 @@ type Props = {
   panelLabel?: string;
 };
 
-// Ícono por paso
+function isPendingLikeStatus(status: GafcoreChatNextStep["status"] | "pending"): boolean {
+  return status === "upcoming" || status === "pending";
+}
+
+/** Chips solo tras empezar a construir (≥1 paso completado o paso de corrección activo). */
+function shouldShowSuggestionChips(
+  steps: GafcoreChatNextStep[],
+  autopilotStatus?: string | null,
+): boolean {
+  if (steps.length === 0) return false;
+
+  const hasCurrent = steps.some((s) => s.status === "current");
+  const allPendingWithoutCurrent =
+    !hasCurrent && steps.every((s) => isPendingLikeStatus(s.status as GafcoreChatNextStep["status"] | "pending"));
+  if (allPendingWithoutCurrent) return false;
+
+  if (autopilotStatus?.trim()) return true;
+
+  if (steps.some((s) => s.status === "completed")) return true;
+
+  return steps.some(
+    (s) => s.id.startsWith("guide-fix") || /fix|error|⚠|corregir/i.test(s.label),
+  );
+}
+
 function stepIcon(id: string, label: string) {
   if (/fix|error|⚠|corregir/i.test(label)) return <AlertTriangle className="h-3 w-3 shrink-0" />;
   if (id === "guide-1") return <Lightbulb className="h-3 w-3 shrink-0" />;
@@ -29,7 +53,6 @@ function stepIcon(id: string, label: string) {
   return <Circle className="h-3 w-3 shrink-0" />;
 }
 
-// Etiqueta corta sin número
 function shortLabel(label: string): string {
   return label.replace(/^\d+\.\s*|^⚠\s*/, "").trim();
 }
@@ -41,45 +64,26 @@ export function ChatNextStepSuggestions({
   onSelect,
   autopilotStatus,
 }: Props) {
+  if (!shouldShowSuggestionChips(steps, autopilotStatus)) return null;
+
   const visibleSteps = steps.filter((s) => s.status !== "completed");
   if (visibleSteps.length === 0 && !autopilotStatus) return null;
 
   const recommended = getRecommendedNextStep(steps);
-  const completedCount = steps.filter((s) => s.status === "completed").length;
-  const totalCount = steps.length;
 
   return (
     <div className="mb-2 min-w-0 space-y-1.5">
-
-      {/* Barra de progreso + texto */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full rounded-full bg-primary/60 transition-all duration-500"
-            style={{ width: `${Math.round((completedCount / totalCount) * 100)}%` }}
-          />
-        </div>
-        <span className="shrink-0 text-[10px] text-muted-foreground">
-          {completedCount}/{totalCount}
-        </span>
-      </div>
-
-      {/* Mensaje de siguiente paso */}
       {autopilotStatus ? (
         <p className="text-[10px] font-medium text-primary leading-snug line-clamp-1">
           {autopilotStatus}
         </p>
       ) : recommended ? (
         <p className="text-[10px] text-muted-foreground leading-snug">
-          <span className="font-medium text-foreground">
-            Siguiente →
-          </span>
-          {" "}
+          <span className="font-medium text-foreground">Siguiente →</span>{" "}
           {shortLabel(recommended.label)}
         </p>
       ) : null}
 
-      {/* Chips de pasos */}
       <div
         className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="group"
