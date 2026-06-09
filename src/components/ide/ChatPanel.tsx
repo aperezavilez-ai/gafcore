@@ -1599,17 +1599,6 @@ export function ChatPanel({
     clearWorkflowUi: clearOrchestrationWorkflowUi,
   });
 
-  useEffect(() => {
-    if (
-      workflowState &&
-      workflowState !== "completed" &&
-      workflowState !== "cancelled" &&
-      workflowState !== "failed"
-    ) {
-      setProjectToolsOpen(true);
-    }
-  }, [workflowState]);
-
   const usePipelineOrchestrator = Boolean(
     projectId && mode === "build" && !visualEditOn,
   );
@@ -3702,8 +3691,8 @@ export function ChatPanel({
             >
               <span className="min-w-0 truncate text-left">
                 {workflowIsActive
-                  ? `Workflow: ${workflowState ?? "activo"}`
-                  : "Workflow y publicación"}
+                  ? `Workflow: ${workflowState ?? "activo"} · pulsa para ver detalle`
+                  : "Workflow y publicación · pulsa para ver"}
               </span>
               <ChevronDown
                 className={

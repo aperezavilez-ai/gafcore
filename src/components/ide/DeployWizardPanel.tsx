@@ -145,12 +145,8 @@ export function DeployWizardPanel({
   const isLive = deployLiveStatus === 'ready' && Boolean(deploySiteHost);
 
   useEffect(() => {
-    if (isLive) {
-      setExpanded(false);
-      return;
-    }
-    if (!hasGithub || pushError) setExpanded(true);
-  }, [hasGithub, isLive, pushError]);
+    if (isLive) setExpanded(false);
+  }, [isLive]);
 
   const currentStep = deriveCurrentStep({
     loading, deploying,
