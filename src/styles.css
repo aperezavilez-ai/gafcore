@@ -396,10 +396,15 @@
 }
 
 /* GafCore IDE light theme override */
-.gafcore-light {
+.gafcore-light,
+/* Radix portals (dialog, menús) se montan en body — forzar claro mientras el IDE está abierto */
+html:has(.gafcore-light) [role="dialog"],
+html:has(.gafcore-light) [role="alertdialog"],
+html:has(.gafcore-light) [role="menu"],
+html:has(.gafcore-light) [role="listbox"] {
   --background: oklch(1 0 0);
   --foreground: oklch(0.15 0.01 260);
-  --card: oklch(0.98 0.003 260);
+  --card: oklch(1 0 0);
   --card-foreground: oklch(0.15 0.01 260);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.15 0.01 260);
@@ -418,6 +423,24 @@
   --sidebar-border: oklch(0.9 0.005 260);
   --color-background: oklch(1 0 0);
   --color-foreground: oklch(0.15 0.01 260);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.15 0.01 260);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.15 0.01 260);
+  --color-muted: oklch(0.96 0.005 260);
+  --color-muted-foreground: oklch(0.45 0.015 260);
+  --color-accent: oklch(0.94 0.008 260);
+  --color-accent-foreground: oklch(0.2 0.01 260);
+  --color-border: oklch(0.9 0.005 260);
+  --color-input: oklch(0.94 0.005 260);
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+html:has(.gafcore-light) [role="dialog"],
+html:has(.gafcore-light) [role="alertdialog"],
+html:has(.gafcore-light) [role="menu"],
+html:has(.gafcore-light) [role="listbox"] {
   background-color: #ffffff;
   color: #0f172a;
 }
