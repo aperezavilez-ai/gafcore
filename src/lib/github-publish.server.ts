@@ -52,17 +52,31 @@ export async function loadProjectFilesForUser(
 }
 
 export async function getStoredGithubToken(userId: string): Promise<string | null> {
-  const platform = process.env.GAFCORE_DEPLOY_GITHUB_TOKEN?.trim();
-  if (platform) return platform;
+  // ── ORDEN DE PRIORIDAD ────────────────────────────────────────────────
+  // 1. Token del usuario (conectado via OAuth o PAT manual) — SIEMPRE primero
+  //    El código va al REPO DEL USUARIO, no al del admin.
+  // 2. Token de plataforma — solo fallback para testing/admin
+  // ─────────────────────────────────────────────────────────────────────
 
+  // 1. Token del usuario desde DB
   const { data, error } = await supabaseAdmin.rpc("decrypt_user_github_token", {
     p_user_id: userId,
   });
-  if (error) {
-    console.error("[publish] decrypt token:", error);
-    return null;
+  if (!error && typeof data === "string" && data.length > 0) {
+    return data;
   }
-  return typeof data === "string" && data.length > 0 ? data : null;
+  if (error) {
+    console.warn("[publish] decrypt user token error:", error.message);
+  }
+
+  // 2. Fallback: token de plataforma (solo para admin/testing)
+  const platform = process.env.GAFCORE_DEPLOY_GITHUB_TOKEN?.trim();
+  if (platform) {
+    console.warn("[publish] WARNING: usando token de plataforma, no del usuario. Configura GitHub OAuth.");
+    return platform;
+  }
+
+  return null;
 }
 
 export async function saveGithubTokenForUser(
