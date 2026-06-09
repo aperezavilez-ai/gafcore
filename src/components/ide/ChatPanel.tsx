@@ -66,6 +66,8 @@ import { resolveBuildDelivery } from "@/core/pipeline/build-delivery.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
+import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
+import { mergeWorkflowStepsForDisplay } from "@/core/orchestration/workflow-panel.shared";
 import {
   aiReplyNeedsUserInput,
   allGuideStepsCompleted,
@@ -158,6 +160,7 @@ import {
   type WorkflowMetricsUi,
   type WorkflowTaskUi,
 } from "@/components/ide/WorkflowTaskStrip";
+import { DeployWizardPanel } from "@/components/ide/DeployWizardPanel";
 import { agentTypeLabel } from "@/tasks/artifacts.shared";
 import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
 import {
@@ -426,6 +429,12 @@ export function ChatPanel({
   onProjectCreated,
   projectId,
   projectName,
+  onDeploy,
+  deploying,
+  deployLiveStatus,
+  deploySiteHost,
+  githubRepo: externalGithubRepo,
+  sessionAccessToken,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -433,13 +442,18 @@ export function ChatPanel({
   onOpenSettings?: () => void;
   onOpenHistory?: () => void;
   onOpenConnectors?: () => void;
-  /** Tras crear proyecto desde el chat (auto-provisión del cerebro). */
   onProjectCreated?: (
     created: { id: string; name: string; created_at: string },
     nextFiles: FileItem[],
   ) => void | Promise<void>;
   projectId?: string | null;
   projectName?: string | null;
+  onDeploy?: () => Promise<{ ok: boolean; message: string; repoUrl?: string; siteHost?: string }>;
+  deploying?: boolean;
+  deployLiveStatus?: "idle" | "building" | "ready" | "error";
+  deploySiteHost?: string | null;
+  githubRepo?: string | null;
+  sessionAccessToken?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -1988,7 +2002,6 @@ export function ChatPanel({
         history,
         instruction,
         files: contextFiles,
-        deepMode: deepModel,
         ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
         deepMode: opts?.forceFastModel ? false : deepModel,
       }),
@@ -3570,7 +3583,15 @@ export function ChatPanel({
 
   const empty = messages.length === 0;
 
-  const nextSteps = orchestration.nextSteps;
+  const guideSteps = useMemo(
+    () => getGafcoreChatNextSteps(buildGuideSuggestionContext()),
+    [buildGuideSuggestionContext],
+  );
+
+  const nextSteps = useMemo(
+    () => mergeWorkflowStepsForDisplay(orchestration.nextSteps, guideSteps),
+    [orchestration.nextSteps, guideSteps],
+  );
   const workflowPanelStatus = orchestration.panelStatus;
 
   const openPinConvention = (content: string) => {
@@ -3640,27 +3661,50 @@ export function ChatPanel({
             <HealthStatus phase={healthPhase} />
           </div>
         ) : null}
-        {/* Estado de construcción — solo mostrar cuando está activo */}
-        {loading && pipelineStatus ? (
-          <p className="mt-1 truncate text-[10px] text-primary/70 animate-pulse">
-            {pipelineStatus}
+        {pipelineStatus || validationLabel || factoryMode ? (
+          <p
+            className="mt-1 truncate text-[10px] text-muted-foreground"
+            title={[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
+              .filter(Boolean)
+              .join(" · ")}
+          >
+            {[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
         ) : null}
-        {/* WorkflowTaskStrip — solo visible si hay error o el usuario cancela */}
-        {(workflowTasks.some(t => t.state === "failed") ||
-          workflowCancelPending ||
-          workflowState === "failed") ? (
+        {orchestration.workflowRunId ||
+        activeWorkflowRunId ||
+        backgroundWorkflowRunId ||
+        workflowTasks.length > 0 ? (
           <WorkflowTaskStrip
             className="mt-2"
             tasks={workflowTasks}
-            planSummary={null}
+            planSummary={workflowPlanSummary}
             workflowState={workflowState}
+            metrics={workflowMetrics}
+            integrationStatus={orchestration.integrationStatusLine}
             onCancel={
               activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
             }
             cancelPending={workflowCancelPending}
           />
         ) : null}
+        {/* Deploy Wizard — guía al usuario paso a paso hacia publicación */}
+        <DeployWizardPanel
+          files={files}
+          projectName={projectName}
+          projectId={projectId}
+          loading={loading}
+          deploying={deploying}
+          deployLiveStatus={deployLiveStatus}
+          deploySiteHost={deploySiteHost}
+          githubRepo={externalGithubRepo}
+          accessToken={sessionAccessToken ?? null}
+          onOpenSettings={onOpenSettings}
+          onDeploy={onDeploy}
+          className="mt-2"
+        />
         {!isAdmin ? (
           <Button
             type="button"
