@@ -1,53 +1,22 @@
 import {
   evaluateCoreOrchestrationGate,
   isInternalOrchestrationInstruction,
-  markBuildConfirmedInstruction,
 } from "../src/core/behavior/gafcore-core-rules.shared.ts";
 import {
   buildLocalProjectAnalysis,
   formatProjectAnalysisForChat,
 } from "../src/core/behavior/gafcore-project-analysis.shared.ts";
 
-const substantiveGate = evaluateCoreOrchestrationGate({
-  instruction: "Crea una tienda online con carrito",
-  rawUserText: "Crea una tienda online con carrito",
-  mode: "build",
-  factoryMode: false,
-  multiAgentMode: false,
-  visualEditOn: false,
-  buildConfirmed: false,
+const okGate = evaluateCoreOrchestrationGate({
   blockingError: null,
   validationBlocked: false,
 });
 
-if (!substantiveGate.requiresBuildConfirmation) {
-  throw new Error("substantive build must require confirmation");
-}
-
-const confirmedGate = evaluateCoreOrchestrationGate({
-  instruction: markBuildConfirmedInstruction("Crea una tienda online"),
-  rawUserText: "Crea una tienda online",
-  mode: "build",
-  factoryMode: false,
-  multiAgentMode: false,
-  visualEditOn: false,
-  buildConfirmed: true,
-  blockingError: null,
-  validationBlocked: false,
-});
-
-if (confirmedGate.requiresBuildConfirmation) {
-  throw new Error("confirmed build must skip confirmation gate");
+if (okGate.blockAutonomousAdvance) {
+  throw new Error("clean state must not block autonomous advance");
 }
 
 const blockedGate = evaluateCoreOrchestrationGate({
-  instruction: "Siguiente paso",
-  rawUserText: "Siguiente paso",
-  mode: "build",
-  factoryMode: false,
-  multiAgentMode: false,
-  visualEditOn: false,
-  buildConfirmed: true,
   blockingError: "SyntaxError: Unexpected token",
   validationBlocked: false,
 });
