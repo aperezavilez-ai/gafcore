@@ -128,11 +128,18 @@ export async function listProjects(): Promise<ProjectRow[]> {
     .from("projects")
     .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
     .order("updated_at", { ascending: false, nullsFirst: false });
-  if (error) {
-    console.error("[Supabase] list projects error:", error);
+  if (!error) return (data ?? []) as ProjectRow[];
+
+  console.error("[Supabase] list projects error:", error);
+  const fallback = await sb
+    .from("projects")
+    .select("id, name, created_at, updated_at")
+    .order("created_at", { ascending: false });
+  if (fallback.error) {
+    console.error("[Supabase] list projects fallback error:", fallback.error);
     return [];
   }
-  return (data ?? []) as ProjectRow[];
+  return (fallback.data ?? []) as ProjectRow[];
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {

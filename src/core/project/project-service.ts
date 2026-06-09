@@ -97,6 +97,13 @@ export async function syncActiveFromList(
   preferId?: string | null,
 ): Promise<ActiveProjectState> {
   if (projects.length === 0) {
+    // Tras crear un proyecto, listProjects puede devolver [] (lag/columnas/RLS).
+    // No borrar el activo si ya tenemos un id válido en caché.
+    const keepId = preferId ?? getCurrentProjectId();
+    if (keepId) {
+      cacheActiveProject(keepId, readCachedProjectName());
+      return { id: keepId, name: readCachedProjectName(), row: null };
+    }
     clearCurrentProjectId();
     cacheActiveProject(null, "Sin proyecto");
     return activeFromRow(null);

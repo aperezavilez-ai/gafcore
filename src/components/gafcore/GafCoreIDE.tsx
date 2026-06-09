@@ -517,7 +517,7 @@ export function GafCoreIDE() {
   const refreshProjects = async (preferActiveId?: string | null) => {
     const list = await listProjects();
     setUserProjects(list);
-    const active = await syncActiveFromList(list, preferActiveId ?? currentProjectId);
+    const active = await syncActiveFromList(list, preferActiveId ?? getCurrentProjectId());
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
   };
@@ -608,6 +608,10 @@ export function GafCoreIDE() {
     const active = activateProjectRow(created);
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
+    setUserProjects((prev) => {
+      if (prev.some((p) => p.id === created.id)) return prev;
+      return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
+    });
     const filesOut = nextFiles.length ? nextFiles : initialFiles;
     setFiles(filesOut);
     setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
@@ -624,6 +628,10 @@ export function GafCoreIDE() {
     const active = activateProjectRow(created);
     setCurrentProjectIdState(active.id);
     setProjectName(active.name);
+    setUserProjects((prev) => {
+      if (prev.some((p) => p.id === created.id)) return prev;
+      return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
+    });
     const filesOut = nextFiles.length ? nextFiles : initialFiles;
     setFiles(filesOut);
     setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
