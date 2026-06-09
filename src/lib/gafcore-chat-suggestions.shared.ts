@@ -205,6 +205,84 @@ function promptForValidationError(err: string): string | null {
   return null;
 }
 
+/** Detecta integraciones especiales pedidas por el usuario */
+function detectSpecialIntegrations(ctx: GafcoreChatSuggestionContext): Array<{id: string; label: string; prompt: string; done: boolean}> {
+  const t = corpus(ctx);
+  const extras: Array<{id: string; label: string; prompt: string; done: boolean}> = [];
+
+  // Pagos / Stripe
+  if (/stripe|pago|cobro|suscripci[oó]n|checkout|tarjeta|payment/i.test(t)) {
+    extras.push({
+      id: "integration-stripe",
+      label: "Integrar Stripe",
+      done: /stripe\.com|loadStripe|StripeProvider|STRIPE_/i.test(t),
+      prompt: "Integra Stripe para pagos: instala @stripe/stripe-js, crea componente de checkout con CardElement, maneja el pago con confirmCardPayment y muestra confirmación al usuario.",
+    });
+  }
+
+  // Mapas / Google Maps
+  if (/mapa|map|ubicaci[oó]n|gps|coordenada|geoloc|google.*map|leaflet/i.test(t)) {
+    extras.push({
+      id: "integration-maps",
+      label: "Integrar Mapas",
+      done: /google.*map|leaflet|mapbox|L\.map/i.test(t),
+      prompt: "Integra mapas interactivos: usa Leaflet (sin API key) con react-leaflet. Muestra mapa con marcadores, permite hacer click para seleccionar ubicación y muestra coordenadas.",
+    });
+  }
+
+  // Email / Notificaciones
+  if (/email|correo|notificaci[oó]n|newsletter|resend|sendgrid|smtp/i.test(t)) {
+    extras.push({
+      id: "integration-email",
+      label: "Integrar Email",
+      done: /resend|sendgrid|nodemailer|smtp/i.test(t),
+      prompt: "Integra envío de emails con Resend: crea función serverless que envíe confirmaciones al usuario, configura RESEND_API_KEY en variables de entorno.",
+    });
+  }
+
+  // Auth / Login
+  if (/login|registro|auth|sesi[oó]n|usuario|password|contrase[nñ]a/i.test(t)) {
+    extras.push({
+      id: "integration-auth",
+      label: "Configurar Auth",
+      done: /supabase.*auth|signIn|signUp|useUser|session/i.test(t),
+      prompt: "Configura autenticación con Supabase Auth: crea páginas de login y registro, maneja sesión con useUser hook, protege rutas privadas con verificación de sesión.",
+    });
+  }
+
+  // Subida de archivos
+  if (/subir.*archivo|upload|imagen.*subir|foto.*subir|file.*upload/i.test(t)) {
+    extras.push({
+      id: "integration-storage",
+      label: "Subida de archivos",
+      done: /supabase.*storage|upload.*bucket|StorageClient/i.test(t),
+      prompt: "Integra subida de archivos con Supabase Storage: crea bucket público, componente de upload con drag & drop, muestra preview de imagen y guarda URL en la base de datos.",
+    });
+  }
+
+  // Notificaciones push
+  if (/notificaci[oó]n.*push|push.*notif|fcm|firebase/i.test(t)) {
+    extras.push({
+      id: "integration-push",
+      label: "Notificaciones Push",
+      done: /firebase|FCM|getMessaging|requestPermission/i.test(t),
+      prompt: "Integra notificaciones push con Firebase Cloud Messaging: configura FCM, solicita permiso al usuario, maneja notificaciones en foreground y background.",
+    });
+  }
+
+  // Analytics
+  if (/analytics|m[eé]trica|estadistica|google.*analytics|mixpanel/i.test(t)) {
+    extras.push({
+      id: "integration-analytics",
+      label: "Integrar Analytics",
+      done: /gtag|analytics|mixpanel|posthog/i.test(t),
+      prompt: "Integra analytics con PostHog (open source): instala posthog-js, inicializa con tu project key, trackea eventos importantes como clicks, conversiones y navegación.",
+    });
+  }
+
+  return extras;
+}
+
 /** Checklist completa visible siempre (6 pasos estándar de creación de proyecto). */
 function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
   const kind = detectProjectKind(ctx);
@@ -273,7 +351,7 @@ function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreCh
     },
     {
       id: "guide-6",
-      label: "6. Responsive y pulir",
+      label: "6. Responsive y publicar",
       done:
         caps.hasResponsiveHints &&
         (ctx.validationLabel?.includes("100") ||
@@ -282,28 +360,44 @@ function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreCh
       prompt:
         "QA final: responsive móvil/tablet/desktop, corrige errores del preview y deja el proyecto listo para publicar.",
     },
-    {
-      id: "guide-7",
-      label: "7. Conectar Supabase",
-      done: /supabase|base de datos|database|auth\.signIn|supabase\.from/i.test(corpus(ctx)),
-      prompt:
-        "Conecta Supabase a este proyecto: ve a Configuración → Supabase, pega tu URL y clave pública. Luego dime qué datos quieres guardar (usuarios, productos, pedidos, etc.) y lo integro.",
-    },
-    {
-      id: "guide-8",
-      label: "8. Subir a GitHub",
-      done: /github|git push|repositorio/i.test(corpus(ctx)),
-      prompt:
-        "Quiero subir este proyecto a GitHub. Necesito conectar mi cuenta: ve a Configuración → GitHub Deploy, pega tu token de GitHub y el nombre del repo (usuario/nombre-repo).",
-    },
-    {
-      id: "guide-9",
-      label: "9. Publicar en Vercel",
-      done: /vercel|en vivo|deploy|publicado|sitio activo/i.test(corpus(ctx)),
-      prompt:
-        "Quiero publicar el proyecto en Vercel para que tenga una URL pública. Necesito el Deploy Hook: en Vercel → mi proyecto → Settings → Git → Deploy Hooks, crea uno y pégalo en Configuración → Vercel.",
-    },
   ];
+
+  // ── Integraciones especiales detectadas dinámicamente ──────────────────
+  // Si el usuario pidió Stripe, mapas, email, auth, etc. se agregan pasos
+  // específicos automáticamente ANTES de los pasos de publicación.
+  const specialIntegrations = detectSpecialIntegrations(ctx);
+  const baseCount = items.length;
+  for (const [i, integration] of specialIntegrations.entries()) {
+    items.push({
+      id: integration.id,
+      label: `${baseCount + i + 1}. ${integration.label.replace(/^\d+\.\s*/, "")}`,
+      prompt: integration.prompt,
+      done: integration.done,
+    });
+  }
+
+  // ── Pasos de publicación (siempre al final) ─────────────────────────────
+  const pubBase = baseCount + specialIntegrations.length;
+  items.push(
+    {
+      id: "guide-supabase",
+      label: `${pubBase + 1}. Conectar Supabase`,
+      done: /supabase|base de datos|database|auth\.signIn|supabase\.from/i.test(corpus(ctx)),
+      prompt: "Conecta Supabase a este proyecto: ve a Configuración → Supabase, pega tu URL y clave pública. Luego dime qué datos quieres guardar (usuarios, productos, pedidos) y lo integro.",
+    },
+    {
+      id: "guide-github",
+      label: `${pubBase + 2}. Subir a GitHub`,
+      done: /github|git push|repositorio/i.test(corpus(ctx)),
+      prompt: "Quiero subir este proyecto a GitHub. Conecto mi cuenta haciendo click en el botón Publicar → Conectar GitHub.",
+    },
+    {
+      id: "guide-vercel",
+      label: `${pubBase + 3}. Publicar en Vercel`,
+      done: /vercel|en vivo|deploy|publicado|sitio activo/i.test(corpus(ctx)),
+      prompt: "Quiero publicar el proyecto en Vercel. Conecto mi cuenta haciendo click en Publicar → Conectar Vercel.",
+    },
+  );
 
   if (formGap && err) {
     const fix = promptForValidationError(err);
