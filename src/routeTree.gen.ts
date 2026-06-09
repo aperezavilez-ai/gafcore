@@ -37,6 +37,8 @@ import { Route as ApiV1HealthRouteImport } from './routes/api/v1/health'
 import { Route as ApiV1GenerationsRouteImport } from './routes/api/v1/generations'
 import { Route as ApiV1CreditsRouteImport } from './routes/api/v1/credits'
 import { Route as ApiGafcoreVercelWebhookRouteImport } from './routes/api/gafcore/vercel-webhook'
+import { Route as ApiGafcoreVercelOauthStatusRouteImport } from './routes/api/gafcore/vercel-oauth-status'
+import { Route as ApiGafcoreVercelOauthStartRouteImport } from './routes/api/gafcore/vercel-oauth-start'
 import { Route as ApiGafcorePublishRouteImport } from './routes/api/gafcore/publish'
 import { Route as ApiGafcoreProjectsDeleteRouteImport } from './routes/api/gafcore/projects-delete'
 import { Route as ApiGafcoreProjectsCreateRouteImport } from './routes/api/gafcore/projects-create'
@@ -63,6 +65,7 @@ import { Route as ApiExtensionsV1InstallRouteImport } from './routes/api/extensi
 import { Route as ApiExtensionsV1CheckoutSessionRouteImport } from './routes/api/extensions/v1/checkout-session'
 import { Route as ApiExtensionsV1CatalogRouteImport } from './routes/api/extensions/v1/catalog'
 import { Route as ApiExtensionsV1AgentEchoRouteImport } from './routes/api/extensions/v1/agent-echo'
+import { Route as ApiPublicOauthVercelCallbackRouteImport } from './routes/api/public/oauth.vercel.callback'
 import { Route as ApiPublicOauthGithubCallbackRouteImport } from './routes/api/public/oauth.github.callback'
 
 const TermsRoute = TermsRouteImport.update({
@@ -206,6 +209,18 @@ const ApiGafcoreVercelWebhookRoute = ApiGafcoreVercelWebhookRouteImport.update({
   path: '/api/gafcore/vercel-webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreVercelOauthStatusRoute =
+  ApiGafcoreVercelOauthStatusRouteImport.update({
+    id: '/api/gafcore/vercel-oauth-status',
+    path: '/api/gafcore/vercel-oauth-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreVercelOauthStartRoute =
+  ApiGafcoreVercelOauthStartRouteImport.update({
+    id: '/api/gafcore/vercel-oauth-start',
+    path: '/api/gafcore/vercel-oauth-start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGafcorePublishRoute = ApiGafcorePublishRouteImport.update({
   id: '/api/gafcore/publish',
   path: '/api/gafcore/publish',
@@ -350,6 +365,12 @@ const ApiExtensionsV1AgentEchoRoute =
     path: '/api/extensions/v1/agent-echo',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicOauthVercelCallbackRoute =
+  ApiPublicOauthVercelCallbackRouteImport.update({
+    id: '/api/public/oauth/vercel/callback',
+    path: '/api/public/oauth/vercel/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicOauthGithubCallbackRoute =
   ApiPublicOauthGithubCallbackRouteImport.update({
     id: '/api/public/oauth/github/callback',
@@ -384,6 +405,8 @@ export interface FileRoutesByFullPath {
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
+  '/api/gafcore/vercel-oauth-start': typeof ApiGafcoreVercelOauthStartRoute
+  '/api/gafcore/vercel-oauth-status': typeof ApiGafcoreVercelOauthStatusRoute
   '/api/gafcore/vercel-webhook': typeof ApiGafcoreVercelWebhookRoute
   '/api/v1/credits': typeof ApiV1CreditsRoute
   '/api/v1/generations': typeof ApiV1GenerationsRoute
@@ -413,6 +436,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
+  '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -441,6 +465,8 @@ export interface FileRoutesByTo {
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
+  '/api/gafcore/vercel-oauth-start': typeof ApiGafcoreVercelOauthStartRoute
+  '/api/gafcore/vercel-oauth-status': typeof ApiGafcoreVercelOauthStatusRoute
   '/api/gafcore/vercel-webhook': typeof ApiGafcoreVercelWebhookRoute
   '/api/v1/credits': typeof ApiV1CreditsRoute
   '/api/v1/generations': typeof ApiV1GenerationsRoute
@@ -470,6 +496,7 @@ export interface FileRoutesByTo {
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
+  '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -499,6 +526,8 @@ export interface FileRoutesById {
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
+  '/api/gafcore/vercel-oauth-start': typeof ApiGafcoreVercelOauthStartRoute
+  '/api/gafcore/vercel-oauth-status': typeof ApiGafcoreVercelOauthStatusRoute
   '/api/gafcore/vercel-webhook': typeof ApiGafcoreVercelWebhookRoute
   '/api/v1/credits': typeof ApiV1CreditsRoute
   '/api/v1/generations': typeof ApiV1GenerationsRoute
@@ -528,6 +557,7 @@ export interface FileRoutesById {
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
+  '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -558,6 +588,8 @@ export interface FileRouteTypes {
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
     | '/api/gafcore/publish'
+    | '/api/gafcore/vercel-oauth-start'
+    | '/api/gafcore/vercel-oauth-status'
     | '/api/gafcore/vercel-webhook'
     | '/api/v1/credits'
     | '/api/v1/generations'
@@ -587,6 +619,7 @@ export interface FileRouteTypes {
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
     | '/api/public/oauth/github/callback'
+    | '/api/public/oauth/vercel/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -615,6 +648,8 @@ export interface FileRouteTypes {
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
     | '/api/gafcore/publish'
+    | '/api/gafcore/vercel-oauth-start'
+    | '/api/gafcore/vercel-oauth-status'
     | '/api/gafcore/vercel-webhook'
     | '/api/v1/credits'
     | '/api/v1/generations'
@@ -644,6 +679,7 @@ export interface FileRouteTypes {
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
     | '/api/public/oauth/github/callback'
+    | '/api/public/oauth/vercel/callback'
   id:
     | '__root__'
     | '/'
@@ -672,6 +708,8 @@ export interface FileRouteTypes {
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
     | '/api/gafcore/publish'
+    | '/api/gafcore/vercel-oauth-start'
+    | '/api/gafcore/vercel-oauth-status'
     | '/api/gafcore/vercel-webhook'
     | '/api/v1/credits'
     | '/api/v1/generations'
@@ -701,6 +739,7 @@ export interface FileRouteTypes {
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
     | '/api/public/oauth/github/callback'
+    | '/api/public/oauth/vercel/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -730,6 +769,8 @@ export interface RootRouteChildren {
   ApiGafcoreProjectsCreateRoute: typeof ApiGafcoreProjectsCreateRoute
   ApiGafcoreProjectsDeleteRoute: typeof ApiGafcoreProjectsDeleteRoute
   ApiGafcorePublishRoute: typeof ApiGafcorePublishRoute
+  ApiGafcoreVercelOauthStartRoute: typeof ApiGafcoreVercelOauthStartRoute
+  ApiGafcoreVercelOauthStatusRoute: typeof ApiGafcoreVercelOauthStatusRoute
   ApiGafcoreVercelWebhookRoute: typeof ApiGafcoreVercelWebhookRoute
   ApiV1CreditsRoute: typeof ApiV1CreditsRoute
   ApiV1GenerationsRoute: typeof ApiV1GenerationsRoute
@@ -758,6 +799,7 @@ export interface RootRouteChildren {
   ApiV1AiGenerateRoute: typeof ApiV1AiGenerateRoute
   ApiV1OpenapiJsonRoute: typeof ApiV1OpenapiJsonRoute
   ApiPublicOauthGithubCallbackRoute: typeof ApiPublicOauthGithubCallbackRoute
+  ApiPublicOauthVercelCallbackRoute: typeof ApiPublicOauthVercelCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -958,6 +1000,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreVercelWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/vercel-oauth-status': {
+      id: '/api/gafcore/vercel-oauth-status'
+      path: '/api/gafcore/vercel-oauth-status'
+      fullPath: '/api/gafcore/vercel-oauth-status'
+      preLoaderRoute: typeof ApiGafcoreVercelOauthStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/vercel-oauth-start': {
+      id: '/api/gafcore/vercel-oauth-start'
+      path: '/api/gafcore/vercel-oauth-start'
+      fullPath: '/api/gafcore/vercel-oauth-start'
+      preLoaderRoute: typeof ApiGafcoreVercelOauthStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/publish': {
       id: '/api/gafcore/publish'
       path: '/api/gafcore/publish'
@@ -1140,6 +1196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExtensionsV1AgentEchoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/oauth/vercel/callback': {
+      id: '/api/public/oauth/vercel/callback'
+      path: '/api/public/oauth/vercel/callback'
+      fullPath: '/api/public/oauth/vercel/callback'
+      preLoaderRoute: typeof ApiPublicOauthVercelCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/oauth/github/callback': {
       id: '/api/public/oauth/github/callback'
       path: '/api/public/oauth/github/callback'
@@ -1189,6 +1252,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGafcoreProjectsCreateRoute: ApiGafcoreProjectsCreateRoute,
   ApiGafcoreProjectsDeleteRoute: ApiGafcoreProjectsDeleteRoute,
   ApiGafcorePublishRoute: ApiGafcorePublishRoute,
+  ApiGafcoreVercelOauthStartRoute: ApiGafcoreVercelOauthStartRoute,
+  ApiGafcoreVercelOauthStatusRoute: ApiGafcoreVercelOauthStatusRoute,
   ApiGafcoreVercelWebhookRoute: ApiGafcoreVercelWebhookRoute,
   ApiV1CreditsRoute: ApiV1CreditsRoute,
   ApiV1GenerationsRoute: ApiV1GenerationsRoute,
@@ -1217,6 +1282,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1AiGenerateRoute: ApiV1AiGenerateRoute,
   ApiV1OpenapiJsonRoute: ApiV1OpenapiJsonRoute,
   ApiPublicOauthGithubCallbackRoute: ApiPublicOauthGithubCallbackRoute,
+  ApiPublicOauthVercelCallbackRoute: ApiPublicOauthVercelCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
