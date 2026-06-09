@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { GafcoreChatNextStep } from "@/lib/gafcore-chat-suggestions.shared";
-import { getRecommendedNextStep } from "@/lib/gafcore-chat-suggestions.shared";
 import { cn } from "@/lib/utils";
 import {
   Lightbulb,
@@ -26,8 +25,6 @@ type Props = {
   messageCount: number;
   disabled?: boolean;
   onSelect: (step: GafcoreChatNextStep) => void;
-  autopilotStatus?: string | null;
-  panelLabel?: string;
 };
 
 function stepIcon(id: string, label: string) {
@@ -74,8 +71,8 @@ function chipButtonClass(opts: {
   return cn(
     "shrink-0 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-tight shadow-sm transition-all duration-300 ease-out",
     "disabled:cursor-not-allowed disabled:opacity-45",
-    isExiting && "pointer-events-none opacity-0 translate-x-full",
-    isEntering && !enterReady && "opacity-100 translate-x-full",
+    isExiting && "pointer-events-none opacity-0 -translate-x-full",
+    isEntering && !enterReady && "opacity-100 -translate-x-full",
     isEntering && enterReady && "opacity-100 translate-x-0",
     !isExiting && !isEntering && "opacity-100 translate-x-0",
     isError && "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15",
@@ -90,7 +87,6 @@ export function ChatNextStepSuggestions({
   messageCount,
   disabled,
   onSelect,
-  autopilotStatus,
 }: Props) {
   const [exitingChips, setExitingChips] = useState<GafcoreChatNextStep[]>([]);
   const [exitAnimatingIds, setExitAnimatingIds] = useState<Set<string>>(new Set());
@@ -146,27 +142,15 @@ export function ChatNextStepSuggestions({
   if (messageCount === 0) return null;
 
   const pendingSteps = steps.filter((s) => s.status !== "completed");
-  if (pendingSteps.length === 0 && exitingChips.length === 0 && !autopilotStatus) return null;
+  if (pendingSteps.length === 0 && exitingChips.length === 0) return null;
 
   const current = pendingSteps.find((s) => s.status === "current");
   const upcoming = pendingSteps.filter((s) => s.status === "upcoming");
-  const recommended = getRecommendedNextStep(steps);
 
   return (
-    <div className="mb-2 min-w-0 space-y-1.5">
-      {autopilotStatus ? (
-        <p className="text-[10px] font-medium text-primary leading-snug line-clamp-1">
-          {autopilotStatus}
-        </p>
-      ) : recommended ? (
-        <p className="text-[10px] text-muted-foreground leading-snug">
-          <span className="font-medium text-foreground">Siguiente →</span>{" "}
-          {shortLabel(recommended.label)}
-        </p>
-      ) : null}
-
+    <div className="mb-2 min-w-0">
       <div
-        className="flex flex-row-reverse items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex flex-row items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="group"
         aria-label="Pasos para completar tu proyecto"
       >
@@ -189,7 +173,7 @@ export function ChatNextStepSuggestions({
                       isEntering: false,
                       enterReady: false,
                     }),
-                    "absolute right-0 top-0 z-10",
+                    "absolute left-0 top-0 z-10",
                   )}
                 >
                   {stepIcon(step.id, step.label)}

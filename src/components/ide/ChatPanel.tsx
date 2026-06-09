@@ -76,7 +76,6 @@ import {
   extractGuidePauseHint,
   GUIDE_AUTOPILOT_DELAY_MS,
   MAX_GUIDE_AUTOPILOT_CHAIN,
-  guideAutopilotStatusMessage,
   isBlockingPreviewError,
   pickAutopilotStep,
   shouldEnableGuideAutopilot,
@@ -3606,40 +3605,18 @@ export function ChatPanel({
     [buildGuideSuggestionContext],
   );
 
-  const workflowPanelStatus = orchestration.panelStatus;
-
   useEffect(() => {
     if (!onWorkflowStripChange) return;
-    const visible = Boolean(
-      orchestration.workflowRunId ||
-        activeWorkflowRunId ||
-        backgroundWorkflowRunId ||
-        workflowTasks.length > 0,
-    );
     onWorkflowStripChange({
-      visible,
-      tasks: workflowTasks,
-      planSummary: workflowPlanSummary,
-      workflowState,
-      metrics: workflowMetrics,
-      integrationStatus: orchestration.integrationStatusLine,
-      cancelPending: workflowCancelPending,
-      onCancel:
-        activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined,
+      visible: false,
+      tasks: [],
+      planSummary: null,
+      workflowState: null,
+      metrics: null,
+      integrationStatus: null,
+      cancelPending: false,
     });
-  }, [
-    onWorkflowStripChange,
-    orchestration.workflowRunId,
-    orchestration.integrationStatusLine,
-    activeWorkflowRunId,
-    backgroundWorkflowRunId,
-    workflowTasks,
-    workflowPlanSummary,
-    workflowState,
-    workflowMetrics,
-    workflowCancelPending,
-    handleCancelWorkflow,
-  ]);
+  }, [onWorkflowStripChange]);
 
   useEffect(() => {
     return () => {
@@ -3970,13 +3947,7 @@ export function ChatPanel({
         <ChatNextStepSuggestions
           steps={guideSteps}
           messageCount={messages.length}
-          panelLabel="Workflow del proyecto"
           disabled={loading}
-          autopilotStatus={
-            orchestration.isActive
-              ? workflowPanelStatus
-              : guideAutopilotStatusMessage(guideAutopilotUi)
-          }
           onSelect={(step) => {
             if (loading) return;
             setInput(step.prompt);
