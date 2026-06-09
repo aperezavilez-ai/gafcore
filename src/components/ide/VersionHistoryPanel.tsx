@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
-import { History, Loader2, RotateCcw, Save, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { History, Loader2, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FileItem } from "@/components/ide/CodeEditor";
+import { formatVersionTime } from "@/lib/gafcore-version-history";
 import {
-  formatVersionTime,
-  loadVersions,
-  saveManualVersion,
-  type GafcoreVersionEntry,
-} from "@/lib/gafcore-version-history";
+  listProjectVersionsFn,
+  saveProjectVersionFn,
+  deleteProjectVersionFn,
+} from "@/lib/gafcore-version-history.functions";
+import type { VersionEntryDB } from "@/lib/gafcore-version-history.server";
 import { cn } from "@/lib/utils";
 
 export function VersionHistoryPanel({
@@ -27,24 +29,46 @@ export function VersionHistoryPanel({
   files: FileItem[];
   onRestore: (files: FileItem[]) => void | Promise<void>;
 }) {
-  const [versions, setVersions] = useState<GafcoreVersionEntry[]>([]);
+  const [versions, setVersions] = useState<VersionEntryDB[]>([]);
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const loadedForProject = useRef<string | null>(null);
 
-  const refresh = useCallback(() => {
+  const listVersions = useServerFn(listProjectVersionsFn);
+  const saveVersion = useServerFn(saveProjectVersionFn);
+  const deleteVersion = useServerFn(deleteProjectVersionFn);
+
+  const refresh = useCallback(async () => {
     if (!projectId) {
       setVersions([]);
       return;
     }
-    setVersions(loadVersions(projectId));
-  }, [projectId]);
+    setLoading(true);
+    try {
+      const res = await listVersions({ data: { projectId } });
+      if (res.ok) {
+        setVersions(res.versions);
+        loadedForProject.current = projectId;
+      }
+    } catch {
+      toast.error("No se pudo cargar el historial");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, listVersions]);
 
   useEffect(() => {
-    if (open) refresh();
-  }, [open, refresh]);
+    if (open && projectId && loadedForProject.current !== projectId) {
+      void refresh();
+    } else if (open && projectId) {
+      void refresh();
+    }
+  }, [open, projectId, refresh]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!projectId) {
       toast.error("No hay proyecto activo");
       return;
@@ -55,31 +79,35 @@ export function VersionHistoryPanel({
     }
     setSaving(true);
     try {
-      const entry = saveManualVersion(projectId, files, label);
-      if (!entry) {
+      const res = await saveVersion({
+        data: { projectId, files, label, isAuto: false },
+      });
+      if (!res.ok) {
         toast.error("No se pudo guardar la versión");
         return;
       }
       setLabel("");
-      refresh();
+      await refresh();
       toast.success("Versión guardada", {
-        description: `${entry.fileCount} archivos · ${entry.label}`,
+        description: `${res.entry.file_count} archivos · ${res.entry.label}`,
       });
+    } catch {
+      toast.error("Error al guardar la versión");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRestore = async (version: GafcoreVersionEntry) => {
+  const handleRestore = async (version: VersionEntryDB) => {
     if (!version.files?.length) {
       toast.error("Esta versión no tiene archivos");
       return;
     }
     setRestoringId(version.id);
     try {
-      await onRestore(version.files);
+      await onRestore(version.files as FileItem[]);
       toast.success("Versión restaurada", {
-        description: `${version.fileCount} archivos · ${version.label}`,
+        description: `${version.file_count} archivos · ${version.label}`,
       });
       onOpenChange(false);
     } catch (e) {
@@ -87,6 +115,23 @@ export function VersionHistoryPanel({
       toast.error("No se pudo restaurar la versión", { description: msg });
     } finally {
       setRestoringId(null);
+    }
+  };
+
+  const handleDelete = async (versionId: string) => {
+    setDeletingId(versionId);
+    try {
+      const res = await deleteVersion({ data: { versionId } });
+      if (res.ok) {
+        setVersions((prev) => prev.filter((v) => v.id !== versionId));
+        toast.success("Versión eliminada");
+      } else {
+        toast.error("No se pudo eliminar la versión");
+      }
+    } catch {
+      toast.error("Error al eliminar la versión");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -112,7 +157,7 @@ export function VersionHistoryPanel({
               <h2 id="version-history-title" className="truncate text-sm font-semibold">
                 Historial de versiones
               </h2>
-              <p className="text-[11px] text-muted-foreground">Local · hasta 20 por proyecto</p>
+              <p className="text-[11px] text-muted-foreground">En la nube · hasta 30 por proyecto</p>
             </div>
           </div>
           <Button
@@ -134,13 +179,13 @@ export function VersionHistoryPanel({
             placeholder="Etiqueta (opcional)"
             maxLength={200}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
+              if (e.key === "Enter") void handleSave();
             }}
           />
           <Button
             type="button"
             className="w-full"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={saving || !projectId || files.length === 0}
           >
             {saving ? (
@@ -157,6 +202,10 @@ export function VersionHistoryPanel({
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               Abre o crea un proyecto para ver versiones.
             </p>
+          ) : loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
           ) : versions.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               Sin versiones guardadas. Se crean automáticamente tras cada build exitoso.
@@ -169,35 +218,51 @@ export function VersionHistoryPanel({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-foreground">{v.label}</p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {formatVersionTime(v.timestamp)} · {v.fileCount} archivos
+                        {formatVersionTime(new Date(v.created_at).getTime())} · {v.file_count} archivos
                       </p>
                       <Badge
                         variant="secondary"
                         className={cn(
                           "mt-1.5 text-[10px] font-normal",
-                          v.isAuto && "bg-muted text-muted-foreground",
+                          v.is_auto && "bg-muted text-muted-foreground",
                         )}
                       >
-                        {v.isAuto ? "Automática" : "Manual"}
+                        {v.is_auto ? "Automática" : "Manual"}
                       </Badge>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      disabled={restoringId === v.id}
-                      onClick={() => void handleRestore(v)}
-                    >
-                      {restoringId === v.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <>
-                          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                          Restaurar
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={restoringId === v.id}
+                        onClick={() => void handleRestore(v)}
+                      >
+                        {restoringId === v.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                            Restaurar
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        disabled={deletingId === v.id}
+                        onClick={() => void handleDelete(v.id)}
+                        aria-label="Eliminar versión"
+                      >
+                        {deletingId === v.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </li>
               ))}

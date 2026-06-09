@@ -121,7 +121,7 @@ import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
 import { SettingsDialog } from "@/components/ide/SettingsDialog";
 import { HistoryDialog } from "@/components/ide/HistoryDialog";
 import { VersionHistoryPanel } from "@/components/ide/VersionHistoryPanel";
-import { saveAutoVersion } from "@/lib/gafcore-version-history";
+import { saveProjectVersionFn } from "@/lib/gafcore-version-history.functions";
 import { SecretsDialog } from "@/components/ide/SecretsDialog";
 import { ConnectorsDialog } from "@/components/ide/ConnectorsDialog";
 import { GafCoreAnalyticsDialog } from "@/components/ide/GafCoreAnalyticsDialog";
@@ -269,10 +269,14 @@ export function GafCoreIDE() {
   const handleBuildSucceeded = useCallback(
     ({ label }: { label: string }) => {
       const pid = currentProjectIdRef.current ?? getCurrentProjectId();
-      if (!pid) return;
-      saveAutoVersion(pid, filesRef.current, label);
+      if (!pid || !user?.id) return;
+      void saveProjectVersionFn({
+        data: { projectId: pid, files: filesRef.current, label, isAuto: true },
+      }).catch(() => {
+        // silencioso: versión auto no es bloqueante
+      });
     },
-    [],
+    [user?.id],
   );
 
   const restoreVersionFiles = useCallback(async (restored: FileItem[]) => {

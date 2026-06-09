@@ -7,9 +7,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
+import { useProfile } from "@/hooks/useProfile";
 import {
   GafCoreOnboarding,
-  isGafcoreOnboardingDone,
+  markGafcoreOnboardingDone,
 } from "@/components/gafcore/GafCoreOnboarding";
 
 interface BuilderShellProps {
@@ -55,12 +56,17 @@ export function GafCoreBuilderShell({ onStart, onExitToCreator, userName }: Buil
   const taRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
   const { balance } = useCredits(user?.id);
+  const { profile, loading: profileLoading, updateProfile } = useProfile(user?.id);
 
   const greeting = useMemo(() => userName?.split(" ")[0] || "creador", [userName]);
 
+  // Mostrar onboarding si el perfil ya cargó y onboarding_completed es false/null.
+  // Si el perfil no existe aún (usuario recién registrado), también mostrar.
   useEffect(() => {
-    if (!isGafcoreOnboardingDone()) setOnboardingOpen(true);
-  }, []);
+    if (profileLoading) return;
+    const done = profile?.onboarding_completed === true;
+    if (!done) setOnboardingOpen(true);
+  }, [profile, profileLoading]);
 
   useEffect(() => {
     if (!onboardingOpen) taRef.current?.focus();
@@ -87,10 +93,16 @@ export function GafCoreBuilderShell({ onStart, onExitToCreator, userName }: Buil
         open={onboardingOpen}
         onComplete={(generated) => {
           setOnboardingOpen(false);
+          markGafcoreOnboardingDone();
+          void updateProfile({ onboarding_completed: true }).catch(() => {});
           setPrompt(generated);
           submit(generated);
         }}
-        onSkip={() => setOnboardingOpen(false)}
+        onSkip={() => {
+          setOnboardingOpen(false);
+          markGafcoreOnboardingDone();
+          void updateProfile({ onboarding_completed: true }).catch(() => {});
+        }}
       />
       {/* Mobile drawer overlay */}
       {navOpen && (

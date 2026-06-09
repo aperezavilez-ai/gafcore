@@ -76,7 +76,9 @@ interface Props {
   /** Abre el modal de configuración de deploy (SettingsDialog con scroll a GitHub) */
   onOpenSettings?: () => void;
   /** Dispara el push a GitHub + deploy */
-  onDeploy?: () => Promise<{ ok: boolean; message: string; repoUrl?: string; siteHost?: string }>;
+  onDeploy?: () => Promise<{ ok: boolean; message: string; repoUrl?: string; siteHost?: string; gateInfo?: { blocked: true; overallScore: number; status: string } }>;
+  /** Abre el panel de chat para corregir errores de validación */
+  onOpenChat?: () => void;
   className?: string;
 }
 
@@ -133,6 +135,7 @@ export function DeployWizardPanel({
   const [vercelOAuthUsername, setVercelOAuthUsername] = useState<string | null>(null);
   const [hasPushed, setHasPushed] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
+  const [gateInfo, setGateInfo] = useState<{ blocked: true; overallScore: number; status: string } | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(true);
@@ -220,6 +223,7 @@ export function DeployWizardPanel({
     }
     setIsBusy(true);
     setPushError(null);
+    setGateInfo(null);
     try {
       const result = await onDeploy();
       if (result.ok) {
@@ -232,7 +236,14 @@ export function DeployWizardPanel({
         }
       } else {
         setPushError(result.message);
-        toast.error('Error al publicar', { description: result.message });
+        if (result.gateInfo) {
+          setGateInfo(result.gateInfo);
+          toast.error('Publicación bloqueada por validación', {
+            description: `Calidad ${result.gateInfo.overallScore}/100 — corrige los errores en el chat.`,
+          });
+        } else {
+          toast.error('Error al publicar', { description: result.message });
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -418,7 +429,7 @@ export function DeployWizardPanel({
                   <span>Código en GitHub · {githubRepo}</span>
                 </div>
               )}
-              {pushError && (
+              {pushError && !gateInfo && (
                 <div className="mt-2 rounded-md bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive space-y-1">
                   <div className="flex items-center gap-1 font-medium">
                     <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -428,6 +439,55 @@ export function DeployWizardPanel({
                   <Button size="sm" variant="outline" className="h-6 text-[10px] mt-1" onClick={handleDeploy}>
                     <RefreshCw className="h-2.5 w-2.5 mr-1" /> Reintentar
                   </Button>
+                </div>
+              )}
+
+              {gateInfo && (
+                <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 space-y-2">
+                  {/* Header */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-[11px] text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Publicación bloqueada
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-destructive">
+                      {gateInfo.overallScore}/100
+                    </span>
+                  </div>
+
+                  {/* Score bar */}
+                  <div className="h-1.5 w-full rounded-full bg-destructive/20 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-destructive transition-all"
+                      style={{ width: `${gateInfo.overallScore}%` }}
+                    />
+                  </div>
+
+                  {/* Message */}
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    El proyecto no supera el umbral de calidad mínimo. Corrígelo en el chat <strong>Construir</strong> y vuelve a publicar.
+                  </p>
+
+                  {/* CTAs */}
+                  <div className="flex gap-1.5 pt-0.5">
+                    {onOpenChat && (
+                      <Button
+                        size="sm"
+                        className="h-6 text-[10px] flex-1"
+                        onClick={onOpenChat}
+                      >
+                        Ir al chat a corregir
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px]"
+                      onClick={handleDeploy}
+                    >
+                      <RefreshCw className="h-2.5 w-2.5 mr-1" /> Reintentar
+                    </Button>
+                  </div>
                 </div>
               )}
             </StepCard>

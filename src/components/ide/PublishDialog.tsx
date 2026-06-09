@@ -79,6 +79,7 @@ export function PublishDialog({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [gateBlock, setGateBlock] = useState<{ overallScore: number; status: string } | null>(null);
   const [pendingApproval, setPendingApproval] = useState<{
     approvalId: string;
     summary: string;
@@ -240,9 +241,17 @@ export function PublishDialog({
       setConfirmOpen(false);
 
       if (!result.ok) {
-        toast.error(result.message);
+        if (result.gateInfo) {
+          setGateBlock({ overallScore: result.gateInfo.overallScore, status: result.gateInfo.status });
+          toast.error('Publicación bloqueada', {
+            description: `Calidad ${result.gateInfo.overallScore}/100 — corrige los errores antes de publicar.`,
+          });
+        } else {
+          toast.error(result.message);
+        }
         return;
       }
+      setGateBlock(null);
 
       if (result.siteHost && !isBlockedDeployHost(result.siteHost)) {
         setLiveHost(result.siteHost);
@@ -438,7 +447,7 @@ export function PublishDialog({
         </div>
 
         {/* CTA — botón ancho “Al día” estilo Lovable */}
-        <div className="px-5 pb-5 pt-1">
+        <div className="px-5 pb-5 pt-1 space-y-3">
           <Button
             type="button"
             disabled={isBuilding || (upToDate && githubConfigured)}
@@ -453,6 +462,40 @@ export function PublishDialog({
             {isBuilding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {mainButtonLabel()}
           </Button>
+
+          {/* Gate de validación — panel bloqueado */}
+          {gateBlock && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                  <Shield className="h-4 w-4 shrink-0" />
+                  Publicación bloqueada
+                </div>
+                <span className="text-xs font-mono font-bold text-destructive">
+                  {gateBlock.overallScore}/100
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-destructive/20 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-destructive transition-all duration-500"
+                  style={{ width: `${gateBlock.overallScore}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                El proyecto no supera el umbral mínimo de calidad.
+                Abre el chat <strong>Construir</strong> y GafCore lo corregirá automáticamente.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full h-8 text-xs"
+                onClick={() => { setGateBlock(null); setOpen(false); }}
+              >
+                Cerrar y corregir en el chat
+              </Button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

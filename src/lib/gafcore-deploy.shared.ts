@@ -49,6 +49,12 @@ export function isGafcoreProductionHost(): boolean {
 /** Resultado del flujo Publicar (GitHub + hook opcional). */
 export type ProjectDeployStatus = "idle" | "building" | "ready" | "error";
 
+export type GafcoreDeployGateInfo = {
+  blocked: true;
+  overallScore: number;
+  status: string;
+};
+
 export type GafcoreDeployResult = {
   ok: boolean;
   message: string;
@@ -59,6 +65,8 @@ export type GafcoreDeployResult = {
   commitHint?: string;
   deployStatus?: ProjectDeployStatus;
   vercelDeploymentId?: string;
+  /** Presente cuando el gate de validación bloqueó la publicación. */
+  gateInfo?: GafcoreDeployGateInfo;
 };
 
 /** Hosts que no son el sitio del usuario (plataforma GafCore, local, etc.). */
