@@ -27,16 +27,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   CheckCircle2, Circle, Loader2, Github, Globe, ExternalLink,
-  ChevronRight, AlertTriangle, RefreshCw, Eye, Rocket, Link2,
+  ChevronRight, AlertTriangle, RefreshCw, Eye, Rocket,
   Copy, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { getIdeConfig, setIdeConfig } from '@/lib/ideConfig';
+import { getIdeConfig } from '@/lib/ideConfig';
 import { isValidGithubRepo } from '@/lib/gafcore-deploy.shared';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { GitHubConnectButton } from '@/components/ide/GitHubConnectButton';
+import { VercelConnectButton } from '@/components/ide/VercelConnectButton';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -130,6 +130,7 @@ export function DeployWizardPanel({
   const [githubRepo, setGithubRepo] = useState('');
   const [githubOAuthLogin, setGithubOAuthLogin] = useState<string | null>(null);
   const [vercelHookUrl, setVercelHookUrl] = useState('');
+  const [vercelOAuthUsername, setVercelOAuthUsername] = useState<string | null>(null);
   const [hasPushed, setHasPushed] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -170,11 +171,35 @@ export function DeployWizardPanel({
     };
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/gafcore/vercel-oauth-status', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: 'no-store',
+        });
+        const data = (await res.json()) as {
+          connected?: boolean;
+          vercel_username?: string;
+        };
+        if (cancelled || !data.connected || !data.vercel_username) return;
+        setVercelOAuthUsername(data.vercel_username);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
   const hasGithub = Boolean(
     githubOAuthLogin ||
       (githubToken.trim() && githubRepo.trim() && isValidGithubRepo(githubRepo)),
   );
-  const hasVercel = Boolean(vercelHookUrl.trim());
+  const hasVercel = Boolean(vercelOAuthUsername || vercelHookUrl.trim());
   const isLive = deployLiveStatus === 'ready' && Boolean(deploySiteHost);
 
   const currentStep = deriveCurrentStep({
@@ -217,32 +242,6 @@ export function DeployWizardPanel({
       setIsBusy(false);
     }
   }, [onDeploy, onOpenSettings]);
-
-  // ── Save Vercel ────────────────────────────────────────────────────────
-
-  const saveVercel = useCallback(async () => {
-    const hook = vercelHookUrl.trim();
-    if (!hook || !hook.startsWith('https://')) {
-      toast.error('URL inválida', { description: 'Debe comenzar con https://' });
-      return;
-    }
-    setIsBusy(true);
-    try {
-      // Trigger the hook to verify it works
-      const res = await fetch(hook, { method: 'POST' });
-      if (!res.ok) throw new Error(`Vercel respondió ${res.status}`);
-      const cfg = getIdeConfig();
-      setIdeConfig({ ...cfg, vercelDeployHookUrl: hook });
-      toast.success('¡Vercel conectado!', { description: 'Deploy iniciado automáticamente' });
-    } catch (err) {
-      // Save anyway — some hooks don't respond with 200
-      const cfg = getIdeConfig();
-      setIdeConfig({ ...cfg, vercelDeployHookUrl: hook });
-      toast.success('Vercel guardado', { description: 'El deploy se iniciará al publicar' });
-    } finally {
-      setIsBusy(false);
-    }
-  }, [vercelHookUrl]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -440,42 +439,40 @@ export function DeployWizardPanel({
               number={4}
               icon={<Globe className="h-3.5 w-3.5" />}
               title="Conectar Vercel"
-              description="Agrega el Deploy Hook de Vercel para publicar en tu dominio."
+              description="Conecta tu cuenta de Vercel para publicar en tu dominio."
               status={hasVercel ? 'done' : 'active'}
             >
               {!hasVercel && (
                 <div className="mt-2 space-y-2">
-                  <div className="rounded-md bg-muted/40 p-2 text-[10px] text-muted-foreground space-y-1">
-                    <p className="font-medium text-foreground">Cómo obtener el Deploy Hook:</p>
-                    <p>1. Ve a <a href="https://vercel.com/new" target="_blank" rel="noreferrer" className="text-primary hover:underline">vercel.com/new</a> e importa tu repo de GitHub</p>
-                    <p>2. En tu proyecto → Settings → Git → Deploy Hooks</p>
-                    <p>3. Crea un hook y pega la URL aquí</p>
-                  </div>
-                  <Input
-                    placeholder="https://api.vercel.com/v1/integrations/deploy/..."
-                    value={vercelHookUrl}
-                    onChange={e => setVercelHookUrl(e.target.value)}
-                    className="h-7 text-[11px]"
+                  <VercelConnectButton
+                    accessToken={accessToken}
+                    onConnected={(username) => {
+                      setVercelOAuthUsername(username);
+                      toast.success(`Vercel conectado como ${username}`);
+                    }}
+                    onDisconnected={() => {
+                      setVercelOAuthUsername(null);
+                    }}
                   />
-                  <Button
-                    size="sm"
-                    className="h-7 text-[11px] w-full"
-                    onClick={saveVercel}
-                    disabled={isBusy || !vercelHookUrl.trim()}
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="w-full text-center text-[10px] text-muted-foreground hover:text-foreground"
                   >
-                    {isBusy
-                      ? <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Conectando…</>
-                      : <><Link2 className="h-3 w-3 mr-1.5" /> Conectar Vercel</>
-                    }
-                  </Button>
+                    Configuración avanzada →
+                  </button>
                 </div>
               )}
               {hasVercel && !isLive && (
                 <div className="mt-1.5 space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[11px] text-primary">
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    <span>Vercel conectado · Deploy en progreso…</span>
-                    <Loader2 className="h-3 w-3 animate-spin ml-auto" />
+                    <span className="truncate">
+                      {vercelOAuthUsername
+                        ? `${vercelOAuthUsername} · Deploy en progreso…`
+                        : 'Vercel conectado · Deploy en progreso…'}
+                    </span>
+                    <Loader2 className="h-3 w-3 animate-spin ml-auto shrink-0" />
                   </div>
                 </div>
               )}
