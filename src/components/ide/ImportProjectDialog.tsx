@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FolderOpen, Loader2, Upload } from "lucide-react";
+import { FolderOpen, Github, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import {
@@ -122,7 +122,7 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
     const trimmed = name.trim();
     if (!trimmed) return;
     if (!pendingFiles?.length) {
-      toast.error("Elige una carpeta o archivos antes de importar");
+      toast.error("Clona un repo de GitHub o elige una carpeta/archivos antes de importar");
       return;
     }
     setSubmitting(true);
@@ -179,7 +179,7 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
         <DialogHeader>
           <DialogTitle>Importar proyecto</DialogTitle>
           <DialogDescription>
-            Elige una carpeta o archivos de código, pon nombre al proyecto e importa. Se omiten
+            Clona un repositorio de GitHub o importa una carpeta/archivos locales. Se omiten
             node_modules, dist y binarios.
           </DialogDescription>
         </DialogHeader>
@@ -193,18 +193,20 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
         />
         <input ref={filesRef} type="file" className="hidden" multiple onChange={onFilesChange} />
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="import-name">Nombre del proyecto</Label>
-            <Input
-              id="import-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Mi app"
-              disabled={submitting}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="import-github">Clonar desde GitHub (opcional)</Label>
+          <div className="space-y-3 rounded-xl border border-primary/35 bg-primary/5 p-4 shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Github className="h-5 w-5" />
+              </div>
+              <div>
+                <Label htmlFor="import-github" className="text-sm font-semibold text-foreground">
+                  Clonar desde GitHub
+                </Label>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Pega la URL del repo y carga el código al instante
+                </p>
+              </div>
+            </div>
             <div className="flex gap-2">
               <Input
                 id="import-github"
@@ -212,17 +214,30 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
                 onChange={(e) => setGithubUrl(e.target.value)}
                 placeholder="https://github.com/owner/repo"
                 disabled={reading || submitting}
+                className="bg-background"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void importFromGithub();
+                }}
               />
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => void importFromGithub()}
-                disabled={reading || submitting}
+                disabled={reading || submitting || !githubUrl.trim()}
+                className="shrink-0"
               >
-                {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cargar"}
+                {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Clonar"}
               </Button>
             </div>
           </div>
+
+          <div className="relative flex items-center gap-3 py-0.5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              O desde tu equipo
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               type="button"
@@ -244,6 +259,17 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
               {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Elegir archivos
             </Button>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="import-name">Nombre del proyecto</Label>
+            <Input
+              id="import-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Mi app"
+              disabled={submitting}
+            />
           </div>
           {pendingFiles ? (
             <p className="text-sm text-muted-foreground">
