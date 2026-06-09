@@ -260,7 +260,24 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
     const id = el.id ? '#' + el.id : '';
     const cls = (el.className && typeof el.className === 'string') ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     const txt = (el.innerText || '').trim().slice(0,60).replace(/\\s+/g,' ');
-    return { selector: tag + id + cls, text: txt, tag };
+    var styles = {};
+    try {
+      var cs = window.getComputedStyle(el);
+      var color = cs.color;
+      var bg = cs.backgroundColor;
+      // Solo incluir si no son transparentes/heredados por defecto
+      if (color && color !== 'rgba(0, 0, 0, 0)') styles.color = color;
+      if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') styles.background = bg;
+      if (cs.fontSize) styles.fontSize = cs.fontSize;
+      if (cs.fontWeight && cs.fontWeight !== '400') styles.fontWeight = cs.fontWeight;
+      var pad = cs.padding;
+      if (pad && pad !== '0px') styles.padding = pad;
+      var br = cs.borderRadius;
+      if (br && br !== '0px') styles.borderRadius = br;
+      var w = cs.width;
+      if (w && w !== 'auto' && w !== '0px') styles.width = w;
+    } catch(_) {}
+    return { selector: tag + id + cls, text: txt, tag: tag, styles: styles };
   }
   function onMove(e){
     if (!veOn) return;

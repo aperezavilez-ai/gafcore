@@ -147,6 +147,7 @@ import {
   FACTORY_PROFILE_AUTO_ID,
 } from "@/lib/gafcore-factory-templates.shared";
 import type { WorkflowMetricsUi, WorkflowTaskUi } from "@/components/ide/WorkflowTaskStrip";
+import { VisualEditPickPanel, type VePickInfo } from "@/components/ide/VisualEditPickPanel";
 
 export type ChatWorkflowStripPayload = {
   visible: boolean;
@@ -461,6 +462,7 @@ export function ChatPanel({
     }
   });
   const [visualEditOn, setVisualEditOn] = useState(false);
+  const [vePick, setVePick] = useState<VePickInfo | null>(null);
   const [recording, setRecording] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [creditsOut, setCreditsOut] = useState(false);
@@ -1421,10 +1423,12 @@ export function ChatPanel({
       if (!data) return;
       if (data.type === "ve-pick") {
         const info = data.info || {};
-        const ref = `Elemento seleccionado: <${info.tag}> "${info.text || ""}" (${info.selector}). `;
-        setInput((v) => (v ? v + " " : "") + ref);
-        taRef.current?.focus();
-        toast.success(`Seleccionado: ${info.tag}`);
+        setVePick({
+          tag: info.tag || "div",
+          selector: info.selector || "",
+          text: info.text || "",
+          styles: info.styles || {},
+        });
         return;
       }
       if (data.type !== "preview-error") return;
@@ -3697,6 +3701,24 @@ export function ChatPanel({
         </div>
       </div>
 
+      {/* Visual Edit Pick Panel */}
+      {visualEditOn && (
+        <div className="relative z-20 w-full shrink-0">
+          <VisualEditPickPanel
+            pick={vePick}
+            onApply={(instruction) => {
+              setInput((v) => (v ? v + " " : "") + instruction);
+              setTimeout(() => {
+                taRef.current?.focus();
+                const len = taRef.current?.value.length ?? 0;
+                taRef.current?.setSelectionRange(len, len);
+              }, 30);
+            }}
+            onDismiss={() => setVePick(null)}
+          />
+        </div>
+      )}
+
       {/* Composer */}
       <div
         ref={composerSectionRef}
@@ -4188,9 +4210,10 @@ export function ChatPanel({
                 onClick={() => {
                   setVisualEditOn((v) => {
                     const next = !v;
+                    if (!next) setVePick(null);
                     toast[next ? "success" : "message"](
                       next
-                        ? "Ediciones visuales activadas: la IA solo cambiará UI/estilos."
+                        ? "Ediciones visuales activadas: haz click en cualquier elemento del preview."
                         : "Ediciones visuales desactivadas.",
                     );
                     return next;
