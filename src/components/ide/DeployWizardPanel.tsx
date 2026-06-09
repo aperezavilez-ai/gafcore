@@ -130,8 +130,9 @@ export function DeployWizardPanel({
   const [pushError, setPushError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
+  // Load saved config
   useEffect(() => {
     const cfg = getIdeConfig();
     if (cfg.githubToken) setGithubToken(cfg.githubToken);
@@ -143,10 +144,6 @@ export function DeployWizardPanel({
   const hasGithub = Boolean(githubToken.trim() && githubRepo.trim() && isValidGithubRepo(githubRepo));
   const hasVercel = Boolean(vercelHookUrl.trim());
   const isLive = deployLiveStatus === 'ready' && Boolean(deploySiteHost);
-
-  useEffect(() => {
-    if (isLive) setExpanded(false);
-  }, [isLive]);
 
   const currentStep = deriveCurrentStep({
     loading, deploying,

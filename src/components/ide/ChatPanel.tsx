@@ -40,9 +40,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuCheckboxItem,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -546,7 +544,6 @@ export function ChatPanel({
   });
   const [factoryProfileId] = useState(FACTORY_PROFILE_AUTO_ID);
   const [validationLabel, setValidationLabel] = useState<string | null>(null);
-  const [projectToolsOpen, setProjectToolsOpen] = useState(false);
   const [guideAutopilotUi, setGuideAutopilotUi] = useState<GuideAutopilotState>(
     createGuideAutopilotState,
   );
@@ -3585,22 +3582,6 @@ export function ChatPanel({
 
   const nextSteps = orchestration.nextSteps;
   const workflowPanelStatus = orchestration.panelStatus;
-  const hasWorkflowPanel =
-    Boolean(orchestration.workflowRunId) ||
-    Boolean(activeWorkflowRunId) ||
-    Boolean(backgroundWorkflowRunId) ||
-    workflowTasks.length > 0;
-  const workflowIsActive =
-    Boolean(workflowState) &&
-    workflowState !== "completed" &&
-    workflowState !== "cancelled" &&
-    workflowState !== "failed";
-  const activeComposerOptions =
-    Number(deepModel) +
-    Number(visualEditOn) +
-    Number(factoryMode) +
-    Number(multiAgentMode) +
-    Number(multiAgentBg);
 
   const openPinConvention = (content: string) => {
     setPinConventionBody(content);
@@ -3681,59 +3662,37 @@ export function ChatPanel({
               .join(" · ")}
           </p>
         ) : null}
-        {hasWorkflowPanel || projectId ? (
-          <div className="mt-2">
-            <button
-              type="button"
-              onClick={() => setProjectToolsOpen((open) => !open)}
-              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground transition hover:bg-muted/40"
-              aria-expanded={projectToolsOpen}
-            >
-              <span className="min-w-0 truncate text-left">
-                {workflowIsActive
-                  ? `Workflow: ${workflowState ?? "activo"} · pulsa para ver detalle`
-                  : "Workflow y publicación · pulsa para ver"}
-              </span>
-              <ChevronDown
-                className={
-                  "h-3.5 w-3.5 shrink-0 transition-transform " +
-                  (projectToolsOpen ? "rotate-180" : "")
-                }
-              />
-            </button>
-            {projectToolsOpen ? (
-              <div className="mt-1.5 space-y-2">
-                {hasWorkflowPanel ? (
-                  <WorkflowTaskStrip
-                    tasks={workflowTasks}
-                    planSummary={workflowPlanSummary}
-                    workflowState={workflowState}
-                    metrics={workflowMetrics}
-                    integrationStatus={orchestration.integrationStatusLine}
-                    onCancel={
-                      activeWorkflowRunId || backgroundWorkflowRunId
-                        ? handleCancelWorkflow
-                        : undefined
-                    }
-                    cancelPending={workflowCancelPending}
-                  />
-                ) : null}
-                <DeployWizardPanel
-                  files={files}
-                  projectName={projectName}
-                  projectId={projectId}
-                  loading={loading}
-                  deploying={deploying}
-                  deployLiveStatus={deployLiveStatus}
-                  deploySiteHost={deploySiteHost}
-                  githubRepo={externalGithubRepo}
-                  onOpenSettings={onOpenSettings}
-                  onDeploy={onDeploy}
-                />
-              </div>
-            ) : null}
-          </div>
+        {orchestration.workflowRunId ||
+        activeWorkflowRunId ||
+        backgroundWorkflowRunId ||
+        workflowTasks.length > 0 ? (
+          <WorkflowTaskStrip
+            className="mt-2"
+            tasks={workflowTasks}
+            planSummary={workflowPlanSummary}
+            workflowState={workflowState}
+            metrics={workflowMetrics}
+            integrationStatus={orchestration.integrationStatusLine}
+            onCancel={
+              activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
+            }
+            cancelPending={workflowCancelPending}
+          />
         ) : null}
+        {/* Deploy Wizard — guía al usuario paso a paso hacia publicación */}
+        <DeployWizardPanel
+          files={files}
+          projectName={projectName}
+          projectId={projectId}
+          loading={loading}
+          deploying={deploying}
+          deployLiveStatus={deployLiveStatus}
+          deploySiteHost={deploySiteHost}
+          githubRepo={externalGithubRepo}
+          onOpenSettings={onOpenSettings}
+          onDeploy={onDeploy}
+          className="mt-2"
+        />
         {!isAdmin ? (
           <Button
             type="button"
@@ -4051,80 +4010,34 @@ export function ChatPanel({
                 className="hidden"
                 onChange={handleAttachImage}
               />
+              <button
+                type="button"
+                title="Adjuntar archivo al proyecto"
+                aria-label="Adjuntar archivo al proyecto"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                title="Adjuntar imagen (foto)"
+                aria-label="Adjuntar imagen"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    type="button"
-                    title="Opciones del chat"
-                    aria-label="Opciones del chat"
-                    className="relative flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-background px-2 text-foreground/70 hover:bg-muted hover:text-foreground"
+                    title="Más opciones"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground/70 hover:bg-muted hover:text-foreground"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    <span className="hidden text-[11px] font-medium sm:inline">Opciones</span>
-                    {activeComposerOptions > 0 ? (
-                      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
-                        {activeComposerOptions}
-                      </span>
-                    ) : null}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top" className="max-h-[min(70vh,420px)] w-64 overflow-y-auto">
-                  <DropdownMenuLabel className="text-[11px]">Modo de construcción</DropdownMenuLabel>
-                  <DropdownMenuCheckboxItem
-                    checked={deepModel}
-                    disabled={mode === "chat"}
-                    onCheckedChange={(checked) => {
-                      setDeepModel(Boolean(checked));
-                      toast[checked ? "success" : "message"](
-                        checked
-                          ? "Modelo profundo: más calidad y detalle (puede tardar un poco más)."
-                          : "Modelo profundo desactivado.",
-                      );
-                    }}
-                  >
-                    <Brain className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Profundo</span>
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={visualEditOn}
-                    onCheckedChange={(checked) => {
-                      setVisualEditOn(Boolean(checked));
-                      toast[checked ? "success" : "message"](
-                        checked
-                          ? "Ediciones visuales activadas: la IA solo cambiará UI/estilos."
-                          : "Ediciones visuales desactivadas.",
-                      );
-                    }}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Ediciones visuales</span>
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[11px]">Adjuntos</DropdownMenuLabel>
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <Paperclip className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Adjuntar archivo</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      imageInputRef.current?.click();
-                    }}
-                  >
-                    <ImageIcon className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Agregar imagen</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void handleScreenshot()}>
-                    <ImageIcon className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Captura de pantalla</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[11px]">Herramientas</DropdownMenuLabel>
+                <DropdownMenuContent align="start" side="top" className="w-60">
                   <DropdownMenuItem onSelect={() => onOpenSettings?.()}>
                     <SettingsIcon className="mr-2 h-4 w-4" />
                     <span className="flex-1">Ajustes</span>
@@ -4153,20 +4066,6 @@ export function ChatPanel({
                     <span className="flex-1">Conectores</span>
                     <ChevronRight className="h-4 w-4 text-foreground/70" />
                   </DropdownMenuItem>
-                  {aiPluginNames.length > 0 ? (
-                    <DropdownMenuItem asChild>
-                      <Link
-                        to="/gafcore/settings/project"
-                        search={{ section: "marketplace" }}
-                        className="flex w-full cursor-default items-center"
-                      >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        <span className="flex-1 truncate">
-                          Plugins IA ({aiPluginNames.length})
-                        </span>
-                      </Link>
-                    </DropdownMenuItem>
-                  ) : null}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={(e) => {
@@ -4338,8 +4237,105 @@ export function ChatPanel({
                       <span className="text-[10px] text-muted-foreground">OFF</span>
                     )}
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => void handleScreenshot()}>
+                    <ImageIcon className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Toma una captura de pantalla</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      imageInputRef.current?.click();
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Agregar referencia</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    <Folder className="mr-2 h-4 w-4" />
+                    <span className="flex-1">Adjuntar</span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {aiPluginNames.length > 0 ? (
+                <Link
+                  to="/gafcore/settings/project"
+                  search={{ section: "marketplace" }}
+                  className="hidden h-7 max-w-[11rem] items-center gap-1 truncate rounded-full border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-foreground hover:bg-primary/10 sm:inline-flex"
+                  title={`Plugins IA activos: ${aiPluginNames.join(", ")}`}
+                >
+                  <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+                  <span className="truncate">{aiPluginNames[0]}</span>
+                  {aiPluginNames.length > 1 ? (
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      +{aiPluginNames.length - 1}
+                    </span>
+                  ) : null}
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setDeepModel((v) => {
+                    const next = !v;
+                    toast[next ? "success" : "message"](
+                      next
+                        ? "Modelo profundo: más calidad y detalle (puede tardar un poco más)."
+                        : "Modelo profundo desactivado.",
+                    );
+                    return next;
+                  });
+                }}
+                disabled={mode === "chat"}
+                className={
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:px-2.5 " +
+                  (deepModel
+                    ? "border-primary bg-primary/10 text-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.2)] ring-1 ring-primary"
+                    : "border-border bg-background text-foreground hover:bg-muted")
+                }
+                title={
+                  mode === "chat"
+                    ? "Modelo profundo solo en modo Construir"
+                    : "Activa el modelo más capaz (más lento/caro). También puedes escribir [modo profundo] al inicio del mensaje."
+                }
+                aria-label={deepModel ? "Modelo profundo activado" : "Activar modelo profundo"}
+              >
+                <Brain className="h-3 w-3 shrink-0" />
+                <span className="hidden sm:inline">Profundo</span>
+                {deepModel && <span className="text-[10px] font-semibold sm:ml-0.5">ON</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setVisualEditOn((v) => {
+                    const next = !v;
+                    toast[next ? "success" : "message"](
+                      next
+                        ? "Ediciones visuales activadas: la IA solo cambiará UI/estilos."
+                        : "Ediciones visuales desactivadas.",
+                    );
+                    return next;
+                  });
+                }}
+                className={
+                  "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2 text-[12px] font-medium transition sm:px-2.5 " +
+                  (visualEditOn
+                    ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_3px_hsl(var(--primary)/0.25)] ring-1 ring-primary"
+                    : "border-border bg-background text-foreground hover:bg-muted")
+                }
+                title="Activar/Desactivar ediciones visuales"
+                aria-label={visualEditOn ? "Ediciones visuales activadas" : "Activar ediciones visuales"}
+              >
+                <Pencil className="h-3 w-3 shrink-0" />
+                <span className="hidden sm:inline">Ediciones visuales</span>
+                {visualEditOn && <span className="text-[10px] font-semibold sm:ml-1">ON</span>}
+              </button>
             </div>
 
             <div className="flex w-full shrink-0 items-center justify-end gap-1 md:w-auto">
