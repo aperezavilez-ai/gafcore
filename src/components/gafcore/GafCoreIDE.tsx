@@ -68,7 +68,6 @@ import {
   History,
   Cloud,
   BarChart3,
-  Shield,
   ShieldAlert,
   MoreHorizontal,
   Globe,
@@ -1431,9 +1430,9 @@ export function GafCoreIDE() {
             <button
               onClick={() => setSettingsOpen(true)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Seguridad · ajustes"
+              title="Configuración del IDE"
             >
-              <Shield className="h-4 w-4" />
+              <SettingsIcon className="h-4 w-4" />
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1491,8 +1490,8 @@ export function GafCoreIDE() {
                   <span className="flex-1">Comprar créditos (paquetes)</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-                  <Shield className="mr-2 h-4 w-4" />
-                  <span className="flex-1">Seguridad</span>
+                  <SettingsIcon className="mr-2 h-4 w-4" />
+                  <span className="flex-1">Configuración</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1637,10 +1636,10 @@ export function GafCoreIDE() {
             type="button"
             onClick={() => setSettingsOpen(true)}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Seguridad"
-            aria-label="Seguridad"
+            title="Configuración"
+            aria-label="Configuración"
           >
-            <Shield className="h-4 w-4" />
+            <SettingsIcon className="h-4 w-4" />
           </button>
           <button
             type="button"
