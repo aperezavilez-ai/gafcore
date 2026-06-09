@@ -347,6 +347,10 @@ export function GafCoreIDE() {
   const [deployGithubRepo, setDeployGithubRepo] = useState<string | null>(null);
   const [deployGithubReady, setDeployGithubReady] = useState(() => isGithubDeployConfigured());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderDraft, setFolderDraft] = useState("");
   const [settingsFocusDeploy, setSettingsFocusDeploy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
@@ -692,24 +696,24 @@ export function GafCoreIDE() {
 
   const deleteCurrentProject = beginDeleteCurrentProject;
 
-  const renameCurrent = async () => {
+  const renameCurrent = () => {
     const cur = getCurrentProjectId();
-    if (!cur) {
-      toast.error("Sin proyecto activo");
-      return;
-    }
-    const n = window.prompt("Nuevo nombre del proyecto", projectName);
-    if (n === null) return;
-    const trimmed = n.trim();
-    if (!trimmed) {
-      toast.error("El nombre no puede estar vacío");
-      return;
-    }
+    if (!cur) { toast.error("Sin proyecto activo"); return; }
+    setRenameDraft(projectName);
+    setRenameDialogOpen(true);
+  };
+
+  const confirmRename = async () => {
+    const cur = getCurrentProjectId();
+    if (!cur) return;
+    const trimmed = renameDraft.trim();
+    if (!trimmed) { toast.error("El nombre no puede estar vacío"); return; }
     const ok = await renameProject(cur, trimmed);
     if (ok) {
       setProjectName(trimmed);
       cacheActiveProject(cur, trimmed);
       await refreshProjects();
+      setRenameDialogOpen(false);
       toast.success(`Renombrado a «${trimmed}»`);
     } else {
       toast.error("No se pudo renombrar");
@@ -1357,13 +1361,8 @@ export function GafCoreIDE() {
               <DropdownMenuItem
                 onSelect={() => {
                   window.setTimeout(() => {
-                    const folder = window.prompt("Nombre de la carpeta destino", projectFolder);
-                    if (folder && folder.trim()) {
-                      const clean = folder.trim();
-                      setProjectFolder(clean);
-                      localStorage.setItem("gafcore_project_folder", clean);
-                      toast.success(`Proyecto movido a «${clean}»`);
-                    }
+                    setFolderDraft(projectFolder);
+                    setFolderDialogOpen(true);
                   }, 0);
                 }}
               >
@@ -2073,6 +2072,70 @@ export function GafCoreIDE() {
       />
       {isAdmin ? <SecretsDialog open={secretsOpen} onOpenChange={setSecretsOpen} /> : null}
       <ConnectorsDialog open={connectorsOpen} onOpenChange={setConnectorsOpen} />
+
+      {/* Renombrar proyecto */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Renombrar proyecto</DialogTitle>
+            <DialogDescription>Ingresa el nuevo nombre para este proyecto.</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameDraft}
+            onChange={(e) => setRenameDraft(e.target.value)}
+            placeholder="Nombre del proyecto"
+            maxLength={80}
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter") void confirmRename(); }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void confirmRename()} disabled={!renameDraft.trim()}>Renombrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mover a carpeta */}
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mover a carpeta</DialogTitle>
+            <DialogDescription>Escribe el nombre de la carpeta donde mover este proyecto.</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={folderDraft}
+            onChange={(e) => setFolderDraft(e.target.value)}
+            placeholder="Nombre de carpeta"
+            maxLength={60}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && folderDraft.trim()) {
+                const clean = folderDraft.trim();
+                setProjectFolder(clean);
+                localStorage.setItem("gafcore_project_folder", clean);
+                setFolderDialogOpen(false);
+                toast.success(`Proyecto movido a «${clean}»`);
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFolderDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                const clean = folderDraft.trim();
+                if (!clean) return;
+                setProjectFolder(clean);
+                localStorage.setItem("gafcore_project_folder", clean);
+                setFolderDialogOpen(false);
+                toast.success(`Proyecto movido a «${clean}»`);
+              }}
+              disabled={!folderDraft.trim()}
+            >
+              Mover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <GafCoreAnalyticsDialog
         open={analyticsOpen}
         onOpenChange={setAnalyticsOpen}

@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
   FolderOpen,
+  Globe,
   LayoutGrid,
   Loader2,
   Lock,
@@ -357,14 +358,14 @@ function GafcoreProjectsPage() {
                 key={p.id}
                 className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:border-primary/30 hover:shadow-md"
               >
-                <div className="relative h-40 w-full bg-gradient-to-br from-primary/15 via-muted/60 to-background">
+                <div className="relative h-36 w-full bg-gradient-to-br from-primary/10 via-muted/40 to-background">
                   <button
                     type="button"
                     onClick={() => openInEditor(p)}
                     className="absolute inset-0 z-0 flex flex-col items-center justify-center gap-2 p-4 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label={`Abrir ${p.name} en el editor`}
                   >
-                    <FolderOpen className="h-10 w-10 text-primary/80" />
+                    <FolderOpen className="h-9 w-9 text-primary/70 transition-transform group-hover:scale-110 group-hover:text-primary" />
                     <span className="line-clamp-2 px-2 text-center text-sm font-semibold text-foreground">
                       {p.name}
                     </span>
@@ -408,14 +409,39 @@ function GafcoreProjectsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="border-t border-border px-3 py-2.5">
+                <div className="border-t border-border px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                    <p className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
                       {p.name}
                     </p>
                     {p.id === getCurrentProjectId() ? (
                       <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
                         Activo
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-muted-foreground">
+                      {p.updated_at
+                        ? new Date(p.updated_at).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })
+                        : p.created_at
+                        ? new Date(p.created_at).toLocaleDateString("es", { day: "2-digit", month: "short" })
+                        : "—"}
+                    </span>
+                    {p.deploy_site_url ? (
+                      <a
+                        href={`https://${p.deploy_site_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        <Globe className="h-2.5 w-2.5" />
+                        En vivo
+                      </a>
+                    ) : p.github_repo ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        {p.github_repo.split("/")[1] ?? p.github_repo}
                       </span>
                     ) : null}
                   </div>

@@ -119,15 +119,15 @@ export async function ensureProjectId(): Promise<string | null> {
   return null;
 }
 
-export type ProjectRow = { id: string; name: string; created_at?: string };
+export type ProjectRow = { id: string; name: string; created_at?: string; updated_at?: string; deploy_site_url?: string | null; github_repo?: string | null; };
 
 export async function listProjects(): Promise<ProjectRow[]> {
   const sb = getUserSupabase();
   if (!sb) return [];
   const { data, error } = await sb
     .from("projects")
-    .select("id, name, created_at")
-    .order("created_at", { ascending: false });
+    .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
+    .order("updated_at", { ascending: false, nullsFirst: false });
   if (error) {
     console.error("[Supabase] list projects error:", error);
     return [];
