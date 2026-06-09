@@ -11,9 +11,9 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://gafcore.com/login</loc>
+    <loc>https://gafcore.com/gafcore/register</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://gafcore.com/register</loc>
@@ -21,9 +21,19 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://gafcore.com/gafcore/register</loc>
+    <loc>https://gafcore.com/login</loc>
     <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://gafcore.com/gafcore/marketplace</loc>
+    <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://gafcore.com/credits</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
   <url>
     <loc>https://gafcore.com/terms</loc>
@@ -39,10 +49,5 @@
     <loc>https://gafcore.com/refund</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://gafcore.com/credits</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
   </url>
 </urlset>
