@@ -121,6 +121,8 @@ import { LivePreview } from "@/components/ide/LivePreview";
 import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
 import { SettingsDialog } from "@/components/ide/SettingsDialog";
 import { HistoryDialog } from "@/components/ide/HistoryDialog";
+import { VersionHistoryPanel } from "@/components/ide/VersionHistoryPanel";
+import { saveAutoVersion } from "@/lib/gafcore-version-history";
 import { SecretsDialog } from "@/components/ide/SecretsDialog";
 import { ConnectorsDialog } from "@/components/ide/ConnectorsDialog";
 import { GafCoreAnalyticsDialog } from "@/components/ide/GafCoreAnalyticsDialog";
@@ -264,6 +266,37 @@ export function GafCoreIDE() {
     openWorkspacePanel();
   }, [refreshPreviewNow, openWorkspacePanel]);
 
+  const handleBuildSucceeded = useCallback(
+    ({ label }: { label: string }) => {
+      const pid = currentProjectIdRef.current ?? getCurrentProjectId();
+      if (!pid) return;
+      saveAutoVersion(pid, filesRef.current, label);
+    },
+    [],
+  );
+
+  const restoreVersionFiles = useCallback(async (restored: FileItem[]) => {
+    dispatchVersionRestored();
+    const sanitized = prepareFilesForEditorRestore(restored);
+    setFiles(sanitized);
+    setOpenTabs([sanitized[0]?.name].filter(Boolean) as string[]);
+    setActiveIndex(0);
+    setView("preview");
+    setPreviewKey((k) => k + 1);
+    const pid = currentProjectIdRef.current ?? getCurrentProjectId();
+    if (pid) {
+      const result = await saveProjectFilesDetailed(sanitized, pid);
+      if (!result.ok) {
+        toast.warning("Versión restaurada en el editor; no se guardó en la nube", {
+          description: String(result.reason ?? "revisa la sesión"),
+        });
+      }
+    }
+    queueMicrotask(() => {
+      window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
+    });
+  }, []);
+
   const closeWorkspacePanel = useCallback(() => {
     if (isMobile) {
       setMobilePane("chat");
@@ -309,6 +342,7 @@ export function GafCoreIDE() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsFocusDeploy, setSettingsFocusDeploy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [secretsOpen, setSecretsOpen] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
@@ -1098,7 +1132,7 @@ export function GafCoreIDE() {
           <div className="ml-0.5 hidden min-w-0 items-center gap-1.5 md:flex">
             <button
               type="button"
-              onClick={() => setHistoryOpen(true)}
+              onClick={() => setVersionHistoryOpen(true)}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
               title="Historial de versiones"
             >
@@ -1553,7 +1587,7 @@ export function GafCoreIDE() {
         >
           <button
             type="button"
-            onClick={() => setHistoryOpen(true)}
+            onClick={() => setVersionHistoryOpen(true)}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             title="Historial"
             aria-label="Historial"
@@ -1714,8 +1748,9 @@ export function GafCoreIDE() {
                 projectId={currentProjectId}
                 projectName={projectName}
                 onCodeGenerated={onPreviewCodeGenerated}
+                onBuildSucceeded={handleBuildSucceeded}
                 onOpenSettings={() => setSettingsOpen(true)}
-                onOpenHistory={() => setHistoryOpen(true)}
+                onOpenHistory={() => setVersionHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onProjectCreated={onProjectCreatedFromChat}
                 onWorkflowStripChange={handleWorkflowStripChange}
@@ -1822,8 +1857,9 @@ export function GafCoreIDE() {
                     projectId={currentProjectId}
                     projectName={projectName}
                     onCodeGenerated={onPreviewCodeGenerated}
+                    onBuildSucceeded={handleBuildSucceeded}
                     onOpenSettings={() => setSettingsOpen(true)}
-                    onOpenHistory={() => setHistoryOpen(true)}
+                    onOpenHistory={() => setVersionHistoryOpen(true)}
                     onOpenConnectors={() => setConnectorsOpen(true)}
                     onProjectCreated={onProjectCreatedFromChat}
                     onWorkflowStripChange={handleWorkflowStripChange}
@@ -1958,31 +1994,19 @@ export function GafCoreIDE() {
         onOpenChange={setSettingsOpen}
         highlightDeploy={settingsFocusDeploy}
       />
+      <VersionHistoryPanel
+        open={versionHistoryOpen}
+        onOpenChange={setVersionHistoryOpen}
+        projectId={currentProjectId}
+        files={files}
+        onRestore={restoreVersionFiles}
+      />
       <HistoryDialog
         open={historyOpen}
         onOpenChange={setHistoryOpen}
         files={files}
         projectId={currentProjectId}
-        onRestore={async (restored) => {
-          dispatchVersionRestored();
-          const sanitized = prepareFilesForEditorRestore(restored);
-          setFiles(sanitized);
-          setOpenTabs([sanitized[0]?.name].filter(Boolean) as string[]);
-          setActiveIndex(0);
-          setView("preview");
-          setPreviewKey((k) => k + 1);
-          if (currentProjectId) {
-            const result = await saveProjectFilesDetailed(sanitized, currentProjectId);
-            if (!result.ok) {
-              toast.warning("Código restaurado en el editor; no se guardó en la nube", {
-                description: String(result.reason ?? "revisa la sesión"),
-              });
-            }
-          }
-          queueMicrotask(() => {
-            window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
-          });
-        }}
+        onRestore={restoreVersionFiles}
       />
       {isAdmin ? <SecretsDialog open={secretsOpen} onOpenChange={setSecretsOpen} /> : null}
       <ConnectorsDialog open={connectorsOpen} onOpenChange={setConnectorsOpen} />

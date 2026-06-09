@@ -435,6 +435,7 @@ export function ChatPanel({
   files,
   setFiles,
   onCodeGenerated,
+  onBuildSucceeded,
   onOpenSettings,
   onOpenHistory,
   onOpenConnectors,
@@ -446,6 +447,8 @@ export function ChatPanel({
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
   onCodeGenerated?: () => void;
+  /** Tras un build exitoso (archivos aplicados y validación OK). */
+  onBuildSucceeded?: (opts: { label: string }) => void;
   onOpenSettings?: () => void;
   onOpenHistory?: () => void;
   onOpenConnectors?: () => void;
@@ -3368,6 +3371,11 @@ export function ChatPanel({
           !hasBlockingValidationIssues(issues) &&
           !generationValidationBlocked &&
           !stillWelcomeTemplate;
+
+        if (buildSucceeded) {
+          const buildLabel = (userFacingRaw || raw || coreText || instruction).trim().slice(0, 200);
+          if (buildLabel) onBuildSucceeded?.({ label: buildLabel });
+        }
 
         if (
           buildSucceeded &&
