@@ -434,6 +434,7 @@ export function ChatPanel({
   deployLiveStatus,
   deploySiteHost,
   githubRepo: externalGithubRepo,
+  sessionAccessToken,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -452,6 +453,7 @@ export function ChatPanel({
   deployLiveStatus?: "idle" | "building" | "ready" | "error";
   deploySiteHost?: string | null;
   githubRepo?: string | null;
+  sessionAccessToken?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -2000,7 +2002,6 @@ export function ChatPanel({
         history,
         instruction,
         files: contextFiles,
-        deepMode: deepModel,
         ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
         deepMode: opts?.forceFastModel ? false : deepModel,
       }),
@@ -3699,6 +3700,7 @@ export function ChatPanel({
           deployLiveStatus={deployLiveStatus}
           deploySiteHost={deploySiteHost}
           githubRepo={externalGithubRepo}
+          accessToken={sessionAccessToken ?? null}
           onOpenSettings={onOpenSettings}
           onDeploy={onDeploy}
           className="mt-2"

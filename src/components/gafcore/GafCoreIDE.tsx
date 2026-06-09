@@ -131,7 +131,7 @@ import { ImportProjectDialog } from "@/components/ide/ImportProjectDialog";
 import { getProjectDeployStatus } from "@/lib/gafcore-deploy.functions";
 import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, getAuthAccessToken } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -218,6 +218,7 @@ export function GafCoreIDE() {
   const [previewKey, setPreviewKey] = useState(0);
   const previewRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [projectName, setProjectName] = useState(readCachedProjectName);
+  const [sessionAccessToken, setSessionAccessToken] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
@@ -362,6 +363,16 @@ export function GafCoreIDE() {
     setNewProjectDialogOpen(false);
     window.setTimeout(() => setImportProjectDialogOpen(true), 0);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAuthAccessToken().then((token) => {
+      if (!cancelled) setSessionAccessToken(token);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1695,6 +1706,7 @@ export function GafCoreIDE() {
                 deployLiveStatus={deployLiveStatus}
                 deploySiteHost={deploySiteHost}
                 githubRepo={deployGithubRepo}
+                sessionAccessToken={sessionAccessToken}
               />
               </div>
             </ResizablePanel>
@@ -1810,6 +1822,7 @@ export function GafCoreIDE() {
                     deployLiveStatus={deployLiveStatus}
                     deploySiteHost={deploySiteHost}
                     githubRepo={deployGithubRepo}
+                    sessionAccessToken={sessionAccessToken}
                   />
                 </div>
                 {/* Pane 2: Workspace */}

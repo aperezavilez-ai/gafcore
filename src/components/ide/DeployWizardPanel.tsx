@@ -36,6 +36,7 @@ import { getIdeConfig, setIdeConfig } from '@/lib/ideConfig';
 import { isValidGithubRepo } from '@/lib/gafcore-deploy.shared';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { GitHubConnectButton } from '@/components/ide/GitHubConnectButton';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ interface Props {
   deployLiveStatus?: 'idle' | 'building' | 'ready' | 'error';
   deploySiteHost?: string | null;
   githubRepo?: string | null;
+  accessToken?: string | null;
   /** Abre el modal de configuración de deploy (SettingsDialog con scroll a GitHub) */
   onOpenSettings?: () => void;
   /** Dispara el push a GitHub + deploy */
@@ -119,12 +121,14 @@ export function DeployWizardPanel({
   deployLiveStatus = 'idle',
   deploySiteHost,
   githubRepo: externalGithubRepo,
+  accessToken = null,
   onOpenSettings,
   onDeploy,
   className,
 }: Props) {
   const [githubToken, setGithubToken] = useState('');
   const [githubRepo, setGithubRepo] = useState('');
+  const [githubOAuthLogin, setGithubOAuthLogin] = useState<string | null>(null);
   const [vercelHookUrl, setVercelHookUrl] = useState('');
   const [hasPushed, setHasPushed] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
@@ -141,7 +145,35 @@ export function DeployWizardPanel({
     if (cfg.githubRepo && cfg.githubToken) setHasPushed(true);
   }, []);
 
-  const hasGithub = Boolean(githubToken.trim() && githubRepo.trim() && isValidGithubRepo(githubRepo));
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/gafcore/github-oauth-status', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: 'no-store',
+        });
+        const data = (await res.json()) as {
+          connected?: boolean;
+          github_login?: string;
+        };
+        if (cancelled || !data.connected || !data.github_login) return;
+        setGithubRepo(data.github_login);
+        setGithubOAuthLogin(data.github_login);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  const hasGithub = Boolean(
+    githubOAuthLogin ||
+      (githubToken.trim() && githubRepo.trim() && isValidGithubRepo(githubRepo)),
+  );
   const hasVercel = Boolean(vercelHookUrl.trim());
   const isLive = deployLiveStatus === 'ready' && Boolean(deploySiteHost);
 
@@ -152,38 +184,6 @@ export function DeployWizardPanel({
     hasGithub, hasVercel, hasPushed,
   });
   const activeWizardIdx = stepToWizardIndex(currentStep);
-
-  // ── Save GitHub ────────────────────────────────────────────────────────
-
-  const saveGithub = useCallback(async () => {
-    const token = githubToken.trim();
-    const repo = githubRepo.trim();
-    if (!token) { toast.error('Ingresa tu GitHub Token'); return; }
-    if (!repo || !isValidGithubRepo(repo)) {
-      toast.error('Repo inválido', { description: 'Usa el formato: usuario/nombre-repo' });
-      return;
-    }
-    setIsBusy(true);
-    try {
-      // Verificar token contra GitHub API
-      const res = await fetch(`https://api.github.com/repos/${repo}`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github.v3+json' },
-      });
-      if (res.status === 401) throw new Error('Token inválido o sin permisos');
-      if (res.status === 404) throw new Error(`Repo "${repo}" no encontrado. ¿Es público o tienes acceso?`);
-      if (!res.ok && res.status !== 200) throw new Error(`Error GitHub: ${res.status}`);
-
-      const cfg = getIdeConfig();
-      setIdeConfig({ ...cfg, githubToken: token, githubRepo: repo, githubBranch: 'main' });
-      toast.success('¡GitHub conectado!', { description: `Repo: ${repo}` });
-    } catch (err) {
-      toast.error('Error al conectar GitHub', {
-        description: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setIsBusy(false);
-    }
-  }, [githubToken, githubRepo]);
 
   // ── Push + Deploy ──────────────────────────────────────────────────────
 
@@ -357,37 +357,18 @@ export function DeployWizardPanel({
             >
               {!hasGithub && (
                 <div className="mt-2 space-y-2">
-                  {/* Instrucciones rápidas */}
-                  <div className="rounded-md bg-muted/40 p-2 text-[10px] text-muted-foreground space-y-1">
-                    <p className="font-medium text-foreground">Cómo obtener tu token:</p>
-                    <p>1. Ve a <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer" className="text-primary hover:underline">github.com/settings/tokens</a></p>
-                    <p>2. Genera un token con permiso <code className="bg-muted px-1 rounded">repo</code></p>
-                    <p>3. Crea un repo vacío en GitHub y pega su nombre aquí</p>
-                  </div>
-                  <Input
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                    value={githubToken}
-                    onChange={e => setGithubToken(e.target.value)}
-                    type="password"
-                    className="h-7 text-[11px]"
+                  <GitHubConnectButton
+                    accessToken={accessToken}
+                    onConnected={(login) => {
+                      setGithubRepo(login);
+                      setGithubOAuthLogin(login);
+                      toast.success(`GitHub conectado como @${login}`);
+                    }}
+                    onDisconnected={() => {
+                      setGithubRepo('');
+                      setGithubOAuthLogin(null);
+                    }}
                   />
-                  <Input
-                    placeholder="tu-usuario/nombre-de-tu-repo"
-                    value={githubRepo}
-                    onChange={e => setGithubRepo(e.target.value)}
-                    className="h-7 text-[11px]"
-                  />
-                  <Button
-                    size="sm"
-                    className="h-7 text-[11px] w-full"
-                    onClick={saveGithub}
-                    disabled={isBusy || !githubToken.trim() || !githubRepo.trim()}
-                  >
-                    {isBusy
-                      ? <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Conectando…</>
-                      : <><Github className="h-3 w-3 mr-1.5" /> Conectar GitHub</>
-                    }
-                  </Button>
                   <button
                     type="button"
                     onClick={onOpenSettings}
@@ -400,7 +381,7 @@ export function DeployWizardPanel({
               {hasGithub && (
                 <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-primary">
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{githubRepo || externalGithubRepo}</span>
+                  <span className="truncate">@{githubOAuthLogin ?? (githubRepo || externalGithubRepo)}</span>
                 </div>
               )}
             </StepCard>
