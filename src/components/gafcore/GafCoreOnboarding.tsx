@@ -238,7 +238,8 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
-        className="max-w-lg gap-0 overflow-hidden border-violet-500/20 bg-[#0a0c14] p-0 text-slate-100 shadow-2xl shadow-violet-950/40 sm:max-w-xl dark"
+        className="max-w-lg gap-0 overflow-hidden border-violet-500/20 p-0 shadow-2xl sm:max-w-xl"
+        style={{ background: "#0a0c14", color: "#f1f5f9", borderColor: "rgba(139,92,246,0.2)" }}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -247,7 +248,7 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
           aria-hidden
         />
 
-        <DialogHeader className="relative space-y-1 border-b border-white/10 px-6 py-5">
+        <DialogHeader className="relative space-y-1 px-6 py-5" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
               <div
@@ -351,7 +352,7 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
           ) : null}
         </div>
 
-        <div className="relative flex items-center justify-between gap-2 border-t border-white/10 bg-black/20 px-6 py-4">
+        <div className="relative flex items-center justify-between gap-2 px-6 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.2)" }}>
           <Button
             type="button"
             variant="ghost"
