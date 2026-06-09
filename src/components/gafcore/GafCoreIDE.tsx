@@ -114,7 +114,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChatPanel } from "@/components/ide/ChatPanel";
+import { ChatPanel, type ChatWorkflowStripPayload } from "@/components/ide/ChatPanel";
+import { WorkflowTaskStrip } from "@/components/ide/WorkflowTaskStrip";
 import { CodeEditor, initialFiles, type FileItem } from "@/components/ide/CodeEditor";
 import { LivePreview } from "@/components/ide/LivePreview";
 import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
@@ -219,6 +220,7 @@ export function GafCoreIDE() {
   const previewRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [projectName, setProjectName] = useState(readCachedProjectName);
   const [sessionAccessToken, setSessionAccessToken] = useState<string | null>(null);
+  const [workflowStrip, setWorkflowStrip] = useState<ChatWorkflowStripPayload | null>(null);
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<"chat" | "workspace">("chat");
   const mobileScrollRef = useRef<HTMLDivElement | null>(null);
@@ -238,6 +240,10 @@ export function GafCoreIDE() {
       setPreviewKey((k) => k + 1);
       previewRefreshTimerRef.current = null;
     }, 500);
+  }, []);
+
+  const handleWorkflowStripChange = useCallback((payload: ChatWorkflowStripPayload) => {
+    setWorkflowStrip(payload);
   }, []);
 
   const openWorkspacePanel = useCallback(() => {
@@ -1331,6 +1337,20 @@ export function GafCoreIDE() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {workflowStrip?.visible ? (
+            <div className="ml-1 hidden min-w-0 max-w-[min(36vw,18rem)] flex-1 lg:flex xl:max-w-md">
+              <WorkflowTaskStrip
+                className="w-full py-1"
+                tasks={workflowStrip.tasks}
+                planSummary={workflowStrip.planSummary}
+                workflowState={workflowStrip.workflowState}
+                metrics={workflowStrip.metrics}
+                integrationStatus={workflowStrip.integrationStatus}
+                onCancel={workflowStrip.onCancel}
+                cancelPending={workflowStrip.cancelPending}
+              />
+            </div>
+          ) : null}
         </div>
 
         {/* Centro: vista y herramientas (plan y créditos solo en el panel de chat) */}
@@ -1698,15 +1718,7 @@ export function GafCoreIDE() {
                 onOpenHistory={() => setHistoryOpen(true)}
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onProjectCreated={onProjectCreatedFromChat}
-                onDeploy={async () => {
-                  const r = await onDeploy();
-                  return { ok: r.ok, message: r.message, repoUrl: r.repoUrl, siteHost: r.siteHost };
-                }}
-                deploying={deploying}
-                deployLiveStatus={deployLiveStatus}
-                deploySiteHost={deploySiteHost}
-                githubRepo={deployGithubRepo}
-                sessionAccessToken={sessionAccessToken}
+                onWorkflowStripChange={handleWorkflowStripChange}
               />
               </div>
             </ResizablePanel>
@@ -1814,15 +1826,7 @@ export function GafCoreIDE() {
                     onOpenHistory={() => setHistoryOpen(true)}
                     onOpenConnectors={() => setConnectorsOpen(true)}
                     onProjectCreated={onProjectCreatedFromChat}
-                    onDeploy={async () => {
-                      const r = await onDeploy();
-                      return { ok: r.ok, message: r.message, repoUrl: r.repoUrl, siteHost: r.siteHost };
-                    }}
-                    deploying={deploying}
-                    deployLiveStatus={deployLiveStatus}
-                    deploySiteHost={deploySiteHost}
-                    githubRepo={deployGithubRepo}
-                    sessionAccessToken={sessionAccessToken}
+                    onWorkflowStripChange={handleWorkflowStripChange}
                   />
                 </div>
                 {/* Pane 2: Workspace */}

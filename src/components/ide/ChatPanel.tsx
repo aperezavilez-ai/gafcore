@@ -67,7 +67,6 @@ import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestion
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
 import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
-import { mergeWorkflowStepsForDisplay } from "@/core/orchestration/workflow-panel.shared";
 import {
   aiReplyNeedsUserInput,
   allGuideStepsCompleted,
@@ -156,12 +155,18 @@ import type { FactoryRunResult } from "@/lib/gafcore-factory.shared";
 import {
   FACTORY_PROFILE_AUTO_ID,
 } from "@/lib/gafcore-factory-templates.shared";
-import {
-  WorkflowTaskStrip,
-  type WorkflowMetricsUi,
-  type WorkflowTaskUi,
-} from "@/components/ide/WorkflowTaskStrip";
-import { DeployWizardPanel } from "@/components/ide/DeployWizardPanel";
+import type { WorkflowMetricsUi, WorkflowTaskUi } from "@/components/ide/WorkflowTaskStrip";
+
+export type ChatWorkflowStripPayload = {
+  visible: boolean;
+  tasks: WorkflowTaskUi[];
+  planSummary: string | null;
+  workflowState: string | null;
+  metrics: WorkflowMetricsUi | null;
+  integrationStatus: string | null;
+  cancelPending: boolean;
+  onCancel?: () => void;
+};
 import { agentTypeLabel } from "@/tasks/artifacts.shared";
 import { buildLayoutInstructionPrefix } from "@/lib/gafcore-layout-instruction.shared";
 import {
@@ -436,12 +441,7 @@ export function ChatPanel({
   onProjectCreated,
   projectId,
   projectName,
-  onDeploy,
-  deploying,
-  deployLiveStatus,
-  deploySiteHost,
-  githubRepo: externalGithubRepo,
-  sessionAccessToken,
+  onWorkflowStripChange,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -455,12 +455,7 @@ export function ChatPanel({
   ) => void | Promise<void>;
   projectId?: string | null;
   projectName?: string | null;
-  onDeploy?: () => Promise<{ ok: boolean; message: string; repoUrl?: string; siteHost?: string }>;
-  deploying?: boolean;
-  deployLiveStatus?: "idle" | "building" | "ready" | "error";
-  deploySiteHost?: string | null;
-  githubRepo?: string | null;
-  sessionAccessToken?: string | null;
+  onWorkflowStripChange?: (payload: ChatWorkflowStripPayload) => void;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -3603,11 +3598,54 @@ export function ChatPanel({
     [buildGuideSuggestionContext],
   );
 
-  const nextSteps = useMemo(
-    () => mergeWorkflowStepsForDisplay(orchestration.nextSteps, guideSteps),
-    [orchestration.nextSteps, guideSteps],
-  );
   const workflowPanelStatus = orchestration.panelStatus;
+
+  useEffect(() => {
+    if (!onWorkflowStripChange) return;
+    const visible = Boolean(
+      orchestration.workflowRunId ||
+        activeWorkflowRunId ||
+        backgroundWorkflowRunId ||
+        workflowTasks.length > 0,
+    );
+    onWorkflowStripChange({
+      visible,
+      tasks: workflowTasks,
+      planSummary: workflowPlanSummary,
+      workflowState,
+      metrics: workflowMetrics,
+      integrationStatus: orchestration.integrationStatusLine,
+      cancelPending: workflowCancelPending,
+      onCancel:
+        activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined,
+    });
+  }, [
+    onWorkflowStripChange,
+    orchestration.workflowRunId,
+    orchestration.integrationStatusLine,
+    activeWorkflowRunId,
+    backgroundWorkflowRunId,
+    workflowTasks,
+    workflowPlanSummary,
+    workflowState,
+    workflowMetrics,
+    workflowCancelPending,
+    handleCancelWorkflow,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      onWorkflowStripChange?.({
+        visible: false,
+        tasks: [],
+        planSummary: null,
+        workflowState: null,
+        metrics: null,
+        integrationStatus: null,
+        cancelPending: false,
+      });
+    };
+  }, [onWorkflowStripChange]);
 
   const openPinConvention = (content: string) => {
     setPinConventionBody(content);
@@ -3676,50 +3714,11 @@ export function ChatPanel({
             <HealthStatus phase={healthPhase} />
           </div>
         ) : null}
-        {pipelineStatus || validationLabel || factoryMode ? (
-          <p
-            className="mt-1 truncate text-[10px] text-muted-foreground"
-            title={[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
-              .filter(Boolean)
-              .join(" · ")}
-          >
-            {[factoryMode ? "Fábrica" : null, pipelineStatus, validationLabel]
-              .filter(Boolean)
-              .join(" · ")}
+        {loading && pipelineStatus ? (
+          <p className="mt-1 truncate text-[10px] text-primary/70 animate-pulse">
+            {pipelineStatus}
           </p>
         ) : null}
-        {orchestration.workflowRunId ||
-        activeWorkflowRunId ||
-        backgroundWorkflowRunId ||
-        workflowTasks.length > 0 ? (
-          <WorkflowTaskStrip
-            className="mt-2"
-            tasks={workflowTasks}
-            planSummary={workflowPlanSummary}
-            workflowState={workflowState}
-            metrics={workflowMetrics}
-            integrationStatus={orchestration.integrationStatusLine}
-            onCancel={
-              activeWorkflowRunId || backgroundWorkflowRunId ? handleCancelWorkflow : undefined
-            }
-            cancelPending={workflowCancelPending}
-          />
-        ) : null}
-        {/* Deploy Wizard — guía al usuario paso a paso hacia publicación */}
-        <DeployWizardPanel
-          files={files}
-          projectName={projectName}
-          projectId={projectId}
-          loading={loading}
-          deploying={deploying}
-          deployLiveStatus={deployLiveStatus}
-          deploySiteHost={deploySiteHost}
-          githubRepo={externalGithubRepo}
-          accessToken={sessionAccessToken ?? null}
-          onOpenSettings={onOpenSettings}
-          onDeploy={onDeploy}
-          className="mt-2"
-        />
         {!isAdmin ? (
           <Button
             type="button"
@@ -3961,7 +3960,7 @@ export function ChatPanel({
           </div>
         ) : null}
         <ChatNextStepSuggestions
-          steps={nextSteps}
+          steps={guideSteps}
           panelLabel="Workflow del proyecto"
           disabled={loading}
           autopilotStatus={
