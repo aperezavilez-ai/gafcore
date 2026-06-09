@@ -238,7 +238,7 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
-        className="max-w-lg gap-0 overflow-hidden border-violet-500/20 bg-[#0a0c14] p-0 text-slate-100 shadow-2xl shadow-violet-950/40 sm:max-w-xl"
+        className="max-w-lg gap-0 overflow-hidden border-violet-500/20 bg-[#0a0c14] p-0 text-slate-100 shadow-2xl shadow-violet-950/40 sm:max-w-xl dark"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
