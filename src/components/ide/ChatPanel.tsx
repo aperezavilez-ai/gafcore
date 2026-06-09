@@ -430,6 +430,7 @@ export function ChatPanel({
   projectId,
   projectName,
   onWorkflowStripChange,
+  pendingPrompt,
 }: {
   files: FileItem[];
   setFiles: Dispatch<SetStateAction<FileItem[]>>;
@@ -446,10 +447,16 @@ export function ChatPanel({
   projectId?: string | null;
   projectName?: string | null;
   onWorkflowStripChange?: (payload: ChatWorkflowStripPayload) => void;
+  pendingPrompt?: string | null;
 }) {
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  // Aplicar prompt pendiente del onboarding cuando llega con un proyecto activo
+  useEffect(() => {
+    if (!pendingPrompt || !projectId) return;
+    setInput(pendingPrompt);
+  }, [pendingPrompt, projectId]);
   const [pendingComposerImages, setPendingComposerImages] = useState<PendingComposerImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"build" | "chat">("build");

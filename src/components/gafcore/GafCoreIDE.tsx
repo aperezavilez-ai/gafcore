@@ -342,6 +342,9 @@ export function GafCoreIDE() {
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [switchingProject, setSwitchingProject] = useState(false);
+  const [pendingOnboardingPrompt, setPendingOnboardingPrompt] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("gafcore_initial_prompt"); } catch { return null; }
+  });
   const projectSearchRef = useRef<HTMLInputElement>(null);
   const [deploySiteHost, setDeploySiteHost] = useState<string | null>(null);
   const [deployGithubRepo, setDeployGithubRepo] = useState<string | null>(null);
@@ -652,6 +655,14 @@ export function GafCoreIDE() {
     setPreviewKey((k) => k + 1);
     toast.success(`Proyecto «${created.name}» creado.`);
     void refreshProjects(created.id);
+    // Si hay prompt del onboarding, aplicarlo al chat
+    try {
+      const prompt = sessionStorage.getItem("gafcore_initial_prompt");
+      if (prompt) {
+        setPendingOnboardingPrompt(prompt);
+        sessionStorage.removeItem("gafcore_initial_prompt");
+      }
+    } catch { /* ignore */ }
   };
 
   const beginDeleteCurrentProject = async () => {
@@ -1798,6 +1809,7 @@ export function GafCoreIDE() {
                 onOpenConnectors={() => setConnectorsOpen(true)}
                 onProjectCreated={onProjectCreatedFromChat}
                 onWorkflowStripChange={handleWorkflowStripChange}
+                pendingPrompt={pendingOnboardingPrompt}
               />
               </div>
             </ResizablePanel>
