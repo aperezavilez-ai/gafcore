@@ -126,6 +126,7 @@ import { saveAutoVersion } from "@/lib/gafcore-version-history";
 import { SecretsDialog } from "@/components/ide/SecretsDialog";
 import { ConnectorsDialog } from "@/components/ide/ConnectorsDialog";
 import { GafCoreAnalyticsDialog } from "@/components/ide/GafCoreAnalyticsDialog";
+import { ProjectCloudDialog } from "@/components/ide/ProjectCloudDialog";
 import { FileSidebar } from "@/components/ide/FileSidebar";
 import { getIdeConfig } from "@/lib/ideConfig";
 import { PublishDialog } from "@/components/ide/PublishDialog";
@@ -346,6 +347,7 @@ export function GafCoreIDE() {
   const [secretsOpen, setSecretsOpen] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [cloudOpen, setCloudOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [importProjectDialogOpen, setImportProjectDialogOpen] = useState(false);
@@ -1460,14 +1462,9 @@ export function GafCoreIDE() {
                   <BarChart3 className="mr-2 h-4 w-4" />
                   <span className="flex-1">Analítica GafCore</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    openExternal("https://supabase.com/dashboard/project/hbfbqqwetaynblmkezeu")
-                  }
-                >
+                <DropdownMenuItem onClick={() => setCloudOpen(true)}>
                   <Cloud className="mr-2 h-4 w-4" />
                   <span className="flex-1">Nube</span>
-                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={showCode}>
                   <Code2 className="mr-2 h-4 w-4" />
@@ -2014,6 +2011,21 @@ export function GafCoreIDE() {
         open={analyticsOpen}
         onOpenChange={setAnalyticsOpen}
         userId={user?.id}
+      />
+      <ProjectCloudDialog
+        open={cloudOpen}
+        onOpenChange={setCloudOpen}
+        projectId={currentProjectId}
+        projectName={projectName}
+        onConnect={() => {
+          setCloudOpen(false);
+          if (!user) {
+            setAuthMode("login");
+            setAuthOpen(true);
+            return;
+          }
+          setSettingsOpen(true);
+        }}
       />
       <NewProjectDialog
         open={newProjectDialogOpen}
