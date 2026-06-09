@@ -66,6 +66,8 @@ import { resolveBuildDelivery } from "@/core/pipeline/build-delivery.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
+import { getGafcoreChatNextSteps } from "@/lib/gafcore-chat-suggestions.shared";
+import { mergeWorkflowStepsForDisplay } from "@/core/orchestration/workflow-panel.shared";
 import {
   aiReplyNeedsUserInput,
   allGuideStepsCompleted,
@@ -3580,7 +3582,15 @@ export function ChatPanel({
 
   const empty = messages.length === 0;
 
-  const nextSteps = orchestration.nextSteps;
+  const guideSteps = useMemo(
+    () => getGafcoreChatNextSteps(buildGuideSuggestionContext()),
+    [buildGuideSuggestionContext],
+  );
+
+  const nextSteps = useMemo(
+    () => mergeWorkflowStepsForDisplay(orchestration.nextSteps, guideSteps),
+    [orchestration.nextSteps, guideSteps],
+  );
   const workflowPanelStatus = orchestration.panelStatus;
 
   const openPinConvention = (content: string) => {
