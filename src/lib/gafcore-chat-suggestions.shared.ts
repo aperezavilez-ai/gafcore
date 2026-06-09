@@ -1,9 +1,8 @@
 /**
- * Guía de pasos del chat IDE: checklist completa según avance del proyecto.
+ * Guía de pasos del chat IDE: chips según el primer mensaje del usuario.
  * Al elegir un chip, el prompt va al compositor (el usuario pulsa Construir).
  */
 import { isGafcoreDefaultTemplateApp } from "@/lib/gafcore-project-stale.shared";
-import { auditFunctionalFirst } from "@/lib/gafcore-functional-first.shared";
 
 export type GafcoreChatStepStatus = "completed" | "current" | "upcoming";
 
@@ -32,14 +31,17 @@ export type GafcoreChatSuggestionContext = {
 const USER_INTENT_RE =
   /\b(quiero|necesito|crea|crear|genera|generar|construye|construir|app|aplicaci[oó]n|sitio|web|landing|taxi|tienda|dashboard|plataforma|formulario|reservas|ecommerce|saas|valuaci[oó]n|seguros|login|registro)\b/i;
 
-function lastMessage(
-  messages: GafcoreChatSuggestionContext["messages"],
-  role: "user" | "ai",
-): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === role) return messages[i]?.content ?? "";
-  }
-  return "";
+type ProjectType = "ecommerce" | "restaurant" | "app" | "landing" | "blog" | "generic";
+
+type StepTemplate = {
+  id: string;
+  label: string;
+  prompt: string;
+  isDone: (ctx: GafcoreChatSuggestionContext) => boolean;
+};
+
+function firstUserMessage(messages: GafcoreChatSuggestionContext["messages"]): string {
+  return messages.find((m) => m.role === "user")?.content?.trim() ?? "";
 }
 
 function allUserMessagesText(messages: GafcoreChatSuggestionContext["messages"]): string {
@@ -85,67 +87,233 @@ export function hasSubstantiveUserIntent(
   return USER_INTENT_RE.test(text) || text.length >= 48;
 }
 
-type ProjectKind =
-  | "taxi"
-  | "restaurant"
-  | "ecommerce"
-  | "saas"
-  | "portfolio"
-  | "landing"
-  | "generic";
-
-function detectProjectKind(ctx: GafcoreChatSuggestionContext): ProjectKind {
-  const t = corpus(ctx);
-  if (/taxi|conductor|pasajero|viaje activo|pedir un taxi|911|pánico|panico/i.test(t)) {
-    return "taxi";
+/** Detecta el tipo de proyecto analizando el primer mensaje del usuario. */
+export function detectProjectTypeFromUserText(text: string): ProjectType {
+  const t = text.toLowerCase();
+  if (/\b(tienda|vender|productos|ecommerce|e-commerce|comercio|shop)\b/i.test(t)) {
+    return "ecommerce";
   }
-  if (
-    /landing|tu landing|hero, cta|mi marca|formulario funcional|solicita información/i.test(t) &&
-    !/restaurant|carta de|reserva mesa|platos del día/i.test(t)
-  ) {
+  if (/\b(restaurante|menú|menu|pedidos)\b/i.test(t)) return "restaurant";
+  if (/\b(blog|artículos|articulos|noticias)\b/i.test(t)) return "blog";
+  if (/\b(app|login|usuarios|dashboard)\b/i.test(t)) return "app";
+  if (/\b(landing|sitio|página web|pagina web|website|página|pagina)\b/i.test(t)) {
     return "landing";
   }
-  if (/restaurant|carta de|reserva mesa|platos del|menú digital|mesa disponible/i.test(t)) {
-    return "restaurant";
-  }
-  if (/checkout|carrito|producto|tienda|ecommerce|shop|catálogo/i.test(t)) return "ecommerce";
-  if (/dashboard|saas|suscripción|subscription|kpi|autoesimate|valuaci[oó]n|seguros|daños vehiculares/i.test(t)) {
-    return "saas";
-  }
-  if (/portfolio|portafolio|proyectos destacados/i.test(t)) return "portfolio";
   return "generic";
 }
 
-type ProjectCapabilities = {
-  hasRealUi: boolean;
-  hasInternalNav: boolean;
-  hasWorkingForm: boolean;
-  hasLoginFlow: boolean;
-  hasCartFlow: boolean;
-  hasPersistence: boolean;
-  hasResponsiveHints: boolean;
-  hasLoadingStates: boolean;
-};
+const DEPLOY_STEPS: StepTemplate[] = [
+  {
+    id: "deploy-supabase",
+    label: "Conectar Supabase",
+    prompt:
+      "Conecta Supabase a este proyecto: ve a Configuración → Supabase, pega tu URL y clave pública. Luego dime qué datos quieres guardar (usuarios, productos, pedidos, etc.) y lo integro.",
+    isDone: (ctx) => /supabase|base de datos|database|auth\.signIn|supabase\.from/i.test(corpus(ctx)),
+  },
+  {
+    id: "deploy-github",
+    label: "Subir a GitHub",
+    prompt:
+      "Quiero subir este proyecto a GitHub. Necesito conectar mi cuenta: ve a Configuración → GitHub Deploy, pega tu token de GitHub y el nombre del repo (usuario/nombre-repo).",
+    isDone: (ctx) => /github|git push|repositorio/i.test(corpus(ctx)),
+  },
+  {
+    id: "deploy-vercel",
+    label: "Deploy en Vercel",
+    prompt:
+      "Quiero publicar el proyecto en Vercel para que tenga una URL pública. Necesito el Deploy Hook: en Vercel → mi proyecto → Settings → Git → Deploy Hooks, crea uno y pégalo en Configuración → Vercel.",
+    isDone: (ctx) => /vercel|en vivo|deploy|publicado|sitio activo/i.test(corpus(ctx)),
+  },
+];
 
-function inferProjectCapabilities(ctx: GafcoreChatSuggestionContext): ProjectCapabilities {
-  const code = allContent(ctx.files);
-  return {
-    hasRealUi: ctx.files.length >= 2 && !isWelcomeWorkspace(ctx) && code.length > 800,
-    hasInternalNav:
-      /#inicio|#contacto|id=["']contacto|id=["']inicio|setSection|setPage|activeSection|setView/i.test(
-        code,
-      ) || /href=["']#[^"']+["']/.test(code),
-    hasWorkingForm:
-      /<form[\s\S]*?onSubmit/i.test(code) ||
-      (/onSubmit\s*=\s*\{/.test(code) && /preventDefault/.test(code)),
-    hasLoginFlow:
-      /iniciar sesi[oó]n|login|registrarse|signup|ingresar/i.test(code) &&
-      (/type=["']password/i.test(code) || /correo|email/i.test(code)),
-    hasCartFlow: /carrito|cart|addToCart|añadir al carrito|total.*precio/i.test(code),
-    hasPersistence: /localStorage|sessionStorage/.test(code),
-    hasResponsiveHints: /sm:|md:|lg:|max-w-|grid-cols-/i.test(code),
-    hasLoadingStates: /loading|spinner|skeleton|isLoading|isSubmitting/i.test(code),
-  };
+function featureStepsForType(type: ProjectType): StepTemplate[] {
+  switch (type) {
+    case "ecommerce":
+      return [
+        {
+          id: "feat-catalog",
+          label: "Catálogo de productos",
+          prompt:
+            "Construye un catálogo de productos con grid, imágenes, precios y filtros básicos. Mantén el diseño premium y deja todo funcional en el preview.",
+          isDone: (ctx) =>
+            /catálogo|catalogo|productos|products|grid.*product|precio/i.test(corpus(ctx)) &&
+            projectHasStarted(ctx),
+        },
+        {
+          id: "feat-cart",
+          label: "Carrito de compras",
+          prompt:
+            "Añade carrito de compras con estado (useState), añadir/quitar productos, contador y total. Persiste el carrito en localStorage.",
+          isDone: (ctx) => /carrito|cart|addToCart|añadir al carrito/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-checkout",
+          label: "Checkout",
+          prompt:
+            "Implementa flujo de checkout: resumen del pedido, formulario de envío con onSubmit y confirmación visible.",
+          isDone: (ctx) => /checkout|finalizar compra|resumen del pedido/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-stripe",
+          label: "Pagos Stripe",
+          prompt:
+            "Integra pagos con Stripe (modo demo): botón de pago, resumen y feedback de éxito/error. Explica qué clave necesito en Configuración.",
+          isDone: (ctx) => /stripe|payment|pagos|tarjeta/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-account",
+          label: "Cuenta de usuario",
+          prompt:
+            "Añade registro e inicio de sesión con formularios onSubmit, validación y pantalla de perfil básica.",
+          isDone: (ctx) =>
+            /login|registro|cuenta|perfil|signup|iniciar sesi/i.test(corpus(ctx)) &&
+            (/type=["']password/i.test(allContent(ctx.files)) || /correo|email/i.test(corpus(ctx))),
+        },
+      ];
+    case "restaurant":
+      return [
+        {
+          id: "feat-menu",
+          label: "Menú digital",
+          prompt:
+            "Crea un menú digital con categorías, platos, precios y descripciones. Diseño claro para móvil y desktop.",
+          isDone: (ctx) =>
+            /menú|menu|carta|platos|entrantes|postres/i.test(corpus(ctx)) && projectHasStarted(ctx),
+        },
+        {
+          id: "feat-orders",
+          label: "Sistema de pedidos",
+          prompt:
+            "Implementa pedidos: añadir platos al pedido, cantidades, total y confirmación con onSubmit.",
+          isDone: (ctx) => /pedido|orden|order|añadir plato/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-reservations",
+          label: "Reservaciones",
+          prompt:
+            "Añade reservaciones de mesa: formulario con fecha, hora, comensales y confirmación visible.",
+          isDone: (ctx) => /reserv|mesa|booking/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-payments",
+          label: "Pagos",
+          prompt:
+            "Conecta pagos para pedidos o reservas: resumen, método de pago simulado y recibo de confirmación.",
+          isDone: (ctx) => /pago|payment|stripe|tarjeta|total/i.test(corpus(ctx)),
+        },
+      ];
+    case "app":
+      return [
+        {
+          id: "feat-auth",
+          label: "Auth/Login",
+          prompt:
+            "Implementa autenticación: pantallas de login y registro con formularios onSubmit, validación y navegación entre vistas.",
+          isDone: (ctx) =>
+            /login|registro|auth|signup|iniciar sesi/i.test(corpus(ctx)) &&
+            projectHasStarted(ctx),
+        },
+        {
+          id: "feat-dashboard",
+          label: "Dashboard",
+          prompt:
+            "Construye un dashboard con métricas, tarjetas KPI y navegación lateral o superior. Datos de ejemplo con useState.",
+          isDone: (ctx) => /dashboard|panel|métricas|metricas|kpi/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-profile",
+          label: "Perfil de usuario",
+          prompt:
+            "Añade pantalla de perfil editable: nombre, avatar, preferencias y botón guardar con feedback.",
+          isDone: (ctx) => /perfil|profile|mi cuenta|editar usuario/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-database",
+          label: "Base de datos",
+          prompt:
+            "Prepara la capa de datos: modelos (usuarios, registros) y persistencia en localStorage o Supabase listo para conectar.",
+          isDone: (ctx) =>
+            /localStorage|supabase|database|base de datos|fetch\(/i.test(corpus(ctx)),
+        },
+      ];
+    case "landing":
+      return [
+        {
+          id: "feat-hero",
+          label: "Hero section",
+          prompt:
+            "Diseña una hero section impactante: titular, subtítulo, CTA principal y fondo premium acorde a la marca.",
+          isDone: (ctx) =>
+            /hero|titular|cta|llamada a la acción/i.test(corpus(ctx)) && projectHasStarted(ctx),
+        },
+        {
+          id: "feat-features",
+          label: "Features",
+          prompt:
+            "Añade sección de features/beneficios con iconos, grid responsive y copy persuasivo.",
+          isDone: (ctx) => /features|beneficios|ventajas|por qué/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-pricing",
+          label: "Precios",
+          prompt:
+            "Crea sección de precios con planes, comparación y botones CTA en cada tarjeta.",
+          isDone: (ctx) => /precio|pricing|planes|suscripción/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-contact",
+          label: "Contacto",
+          prompt:
+            "Añade formulario de contacto con onSubmit, validación de email y mensaje de éxito visible.",
+          isDone: (ctx) =>
+            /<form[\s\S]*?onSubmit/i.test(allContent(ctx.files)) ||
+            (/contacto|contact/i.test(corpus(ctx)) && /onSubmit/i.test(allContent(ctx.files))),
+        },
+        {
+          id: "feat-seo",
+          label: "SEO",
+          prompt:
+            "Optimiza SEO básico: title y meta description en index.html, headings semánticos y textos alt en imágenes.",
+          isDone: (ctx) =>
+            /<title>/i.test(allContent(ctx.files)) &&
+            /meta.*description|description/i.test(allContent(ctx.files)),
+        },
+      ];
+    case "blog":
+      return [
+        {
+          id: "feat-post-list",
+          label: "Lista de artículos",
+          prompt:
+            "Crea lista de artículos con título, extracto, fecha y enlace a cada post. Grid o lista responsive.",
+          isDone: (ctx) =>
+            /artículos|articulos|posts|blog/i.test(corpus(ctx)) && projectHasStarted(ctx),
+        },
+        {
+          id: "feat-post-view",
+          label: "Vista de post",
+          prompt:
+            "Implementa vista de artículo individual: título, autor, fecha, cuerpo y navegación volver al listado.",
+          isDone: (ctx) => /post detail|vista de post|leer más|article view/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-categories",
+          label: "Categorías",
+          prompt:
+            "Añade categorías o etiquetas para filtrar artículos con chips o menú lateral.",
+          isDone: (ctx) => /categoría|categoria|etiqueta|tag/i.test(corpus(ctx)),
+        },
+        {
+          id: "feat-search",
+          label: "Buscador",
+          prompt:
+            "Implementa buscador de artículos con input, filtrado en tiempo real y estado vacío.",
+          isDone: (ctx) => /buscar|search|filtrar artículos/i.test(corpus(ctx)),
+        },
+      ];
+    default:
+      return featureStepsForType("landing");
+  }
 }
 
 function assignStepStatuses(
@@ -172,18 +340,11 @@ function assignStepStatuses(
   });
 }
 
-function liveFunctionalGaps(ctx: GafcoreChatSuggestionContext): string[] {
-  const tsx = ctx.files.filter((f) => /\.(tsx|jsx)$/i.test(f.name));
-  if (tsx.length === 0) return [];
-  const audit = auditFunctionalFirst(tsx);
-  return audit.issues.filter((i) => i.severity === "error").map((i) => i.message);
-}
-
 function promptForValidationError(err: string): string | null {
   const e = err.toLowerCase();
   if (/formulario sin onsubmit|onsubmit conectado/i.test(e)) {
     return (
-      "Corrige el error de validación en App.tsx. Conecta onSubmit en cada formulario (login, registro, contacto) con una función que haga e.preventDefault(), validación mínima y feedback visible. No elimines el diseño existente."
+      "Corrige el error de validación en App.tsx. Conecta onSubmit en cada formulario con e.preventDefault(), validación mínima y feedback visible. No elimines el diseño existente."
     );
   }
   if (/onclick vacío|sin onsubmit|enlace con href/i.test(e)) {
@@ -205,124 +366,38 @@ function promptForValidationError(err: string): string | null {
   return null;
 }
 
-/** Checklist completa visible siempre (6 pasos estándar de creación de proyecto). */
-function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  const kind = detectProjectKind(ctx);
-  const caps = inferProjectCapabilities(ctx);
-  const gaps = liveFunctionalGaps(ctx);
-  const err = (ctx.lastError ?? "").trim();
-  const hasIntent = hasSubstantiveUserIntent(ctx.messages);
-  const started = projectHasStarted(ctx);
-  const hasAiBuild = ctx.messages.some((m) => m.role === "ai" && m.content.length > 80);
-
-  const needsForms = /formulario|login|registr|contacto|ingresar|email|password/i.test(
-    corpus(ctx),
+function isActiveBlockingError(err: string | null): boolean {
+  if (!err?.trim()) return false;
+  return /syntaxerror|unexpected token|react error #31|objects are not valid|script error|validation/i.test(
+    err,
   );
-  const formGap =
-    gaps.some((g) => /onsubmit|formulario/i.test(g)) ||
-    /formulario sin onsubmit/i.test(err.toLowerCase());
+}
 
-  const defaultFormPrompt =
-    "En todos los formularios (login, registro, contacto): añade onSubmit con e.preventDefault(), validación mínima y mensaje de éxito o error visible. No elimines el diseño actual.";
+function buildProjectTypeSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
+  const firstUser = firstUserMessage(ctx.messages);
+  if (!firstUser) return [];
 
-  const flowPrompt =
-    kind === "ecommerce"
-      ? "Implementa catálogo + carrito con estado, totales, addToCart y persistencia en localStorage."
-      : kind === "saas" || caps.hasLoginFlow
-        ? "Conecta login/registro/dashboard con useState: navegación interna, pantallas y handlers en botones."
-        : "Conecta navegación y flujo principal: secciones con useState o anchors con acción, botones con handlers reales.";
+  const projectType = detectProjectTypeFromUserText(firstUser);
+  const templates = [...featureStepsForType(projectType), ...DEPLOY_STEPS];
 
-  const items: Array<{ id: string; label: string; prompt: string; done: boolean }> = [
-    {
-      id: "guide-1",
-      label: "1. Describe tu proyecto",
-      done: hasIntent && (hasAiBuild || started),
-      prompt:
-        lastMessage(ctx.messages, "user").trim().length >= 20
-          ? lastMessage(ctx.messages, "user").trim()
-          : "Quiero crear una aplicación web para [negocio, usuarios y pantallas principales]. Incluye login, dashboard y diseño premium en dark mode.",
-    },
-    {
-      id: "guide-2",
-      label: "2. Generar base (App + preview)",
-      done: started && caps.hasRealUi && hasAiBuild,
-      prompt:
-        "Construye la base completa del proyecto: App.tsx export default, main.tsx, index.html, diseño premium y flujo visible en el preview. Respeta lo que ya pedí en el chat.",
-    },
-    {
-      id: "guide-3",
-      label: "3. Formularios con onSubmit",
-      done: needsForms ? caps.hasWorkingForm && !formGap : started && caps.hasRealUi,
-      prompt: promptForValidationError(err) ?? defaultFormPrompt,
-    },
-    {
-      id: "guide-4",
-      label: "4. Flujo y navegación",
-      done:
-        caps.hasInternalNav ||
-        (caps.hasLoginFlow && caps.hasPersistence) ||
-        (started && !needsForms),
-      prompt: flowPrompt,
-    },
-    {
-      id: "guide-5",
-      label: "5. Estados, loading y persistencia",
-      done: caps.hasPersistence && caps.hasLoadingStates,
-      prompt:
-        "Añade useState + handlers en acciones clave; loading/isSubmitting en envíos; persiste datos en localStorage donde aplique.",
-    },
-    {
-      id: "guide-6",
-      label: "6. Responsive y pulir",
-      done:
-        caps.hasResponsiveHints &&
-        (ctx.validationLabel?.includes("100") ||
-          ctx.validationLabel?.includes("aprobado") ||
-          (!formGap && gaps.length === 0 && caps.hasWorkingForm)),
-      prompt:
-        "QA final: responsive móvil/tablet/desktop, corrige errores del preview y deja el proyecto listo para publicar.",
-    },
-    {
-      id: "guide-7",
-      label: "7. Conectar Supabase",
-      done: /supabase|base de datos|database|auth\.signIn|supabase\.from/i.test(corpus(ctx)),
-      prompt:
-        "Conecta Supabase a este proyecto: ve a Configuración → Supabase, pega tu URL y clave pública. Luego dime qué datos quieres guardar (usuarios, productos, pedidos, etc.) y lo integro.",
-    },
-    {
-      id: "guide-8",
-      label: "8. Subir a GitHub",
-      done: /github|git push|repositorio/i.test(corpus(ctx)),
-      prompt:
-        "Quiero subir este proyecto a GitHub. Necesito conectar mi cuenta: ve a Configuración → GitHub Deploy, pega tu token de GitHub y el nombre del repo (usuario/nombre-repo).",
-    },
-    {
-      id: "guide-9",
-      label: "9. Publicar en Vercel",
-      done: /vercel|en vivo|deploy|publicado|sitio activo/i.test(corpus(ctx)),
-      prompt:
-        "Quiero publicar el proyecto en Vercel para que tenga una URL pública. Necesito el Deploy Hook: en Vercel → mi proyecto → Settings → Git → Deploy Hooks, crea uno y pégalo en Configuración → Vercel.",
-    },
-  ];
+  const items = templates.map((t) => ({
+    id: t.id,
+    label: t.label,
+    prompt: t.prompt,
+    done: t.isDone(ctx),
+  }));
 
-  if (formGap && err) {
+  const err = (ctx.lastError ?? "").trim();
+  if (isActiveBlockingError(err)) {
     const fix = promptForValidationError(err);
     if (fix) {
-      const formStep = items.find((i) => i.id === "guide-3");
-      if (formStep) formStep.prompt = fix;
-    }
-  }
-
-  if (/syntax|import|script error|react error/i.test(err)) {
-    const fix = promptForValidationError(err);
-    if (fix) {
-      const syntaxInsert = {
-        id: "guide-fix-now",
+      const fixItem = {
+        id: "fix-runtime",
         label: "⚠ Corregir error ahora",
         prompt: fix,
         done: false,
       };
-      return assignStepStatuses([syntaxInsert, ...items]);
+      return assignStepStatuses([fixItem, ...items]);
     }
   }
 
@@ -330,10 +405,11 @@ function buildFullProjectChecklist(ctx: GafcoreChatSuggestionContext): GafcoreCh
 }
 
 /**
- * Guía completa visible en el IDE: checklist de creación + siguiente paso marcado.
+ * Pasos guiados según el primer mensaje del usuario (vacío si no hay mensajes).
  */
 export function getGafcoreChatNextSteps(ctx: GafcoreChatSuggestionContext): GafcoreChatNextStep[] {
-  return buildFullProjectChecklist(ctx);
+  if (ctx.messages.length === 0) return [];
+  return buildProjectTypeSteps(ctx);
 }
 
 /** Paso recomendado (chip resaltado). */

@@ -1,4 +1,5 @@
 import {
+  detectProjectTypeFromUserText,
   getGafcoreChatNextSteps,
   hasSubstantiveUserIntent,
   projectHasStarted,
@@ -30,7 +31,7 @@ if (projectHasStarted(welcomeCtx)) {
 }
 
 if (getGafcoreChatNextSteps(welcomeCtx).length !== 0) {
-  throw new Error("welcome template must show zero suggestions");
+  throw new Error("empty chat must show zero suggestions");
 }
 
 const landingCtx = {
@@ -52,15 +53,28 @@ const landingCtx = {
   validationLabel: null,
 };
 
+if (detectProjectTypeFromUserText(landingCtx.messages[0].content) !== "landing") {
+  throw new Error("landing message must detect landing project type");
+}
+
 const landingSteps = getGafcoreChatNextSteps(landingCtx);
-if (landingSteps.length !== 3) {
-  throw new Error(`landing roadmap must have 3 steps, got ${landingSteps.length}`);
+if (landingSteps.length !== 8) {
+  throw new Error(`landing roadmap must have 8 steps, got ${landingSteps.length}`);
 }
-if (!landingSteps.every((s) => /^[ABC]\)/.test(s.label))) {
-  throw new Error("roadmap labels must be A/B/C prefixed");
+if (!landingSteps.some((s) => s.label === "Hero section")) {
+  throw new Error("landing must include Hero section chip");
 }
-if (landingSteps.some((s) => /carta|reservar mesa|911/i.test(s.label))) {
-  throw new Error("landing must not get restaurant/taxi chips");
+if (!landingSteps.slice(-3).every((s) => s.id.startsWith("deploy-"))) {
+  throw new Error("roadmap must end with deploy chips");
+}
+
+const ecommerceCtx = {
+  ...landingCtx,
+  messages: [{ role: "user", content: "quiero una tienda para vender productos online" }],
+};
+const ecommerceSteps = getGafcoreChatNextSteps(ecommerceCtx);
+if (!ecommerceSteps.some((s) => s.label === "Catálogo de productos")) {
+  throw new Error("ecommerce must include catalog chip");
 }
 
 const errorCtx = {
@@ -80,7 +94,7 @@ const staleErrorCtx = {
   ],
   lastError: null,
 };
-if (getGafcoreChatNextSteps(staleErrorCtx).length !== 3) {
+if (getGafcoreChatNextSteps(staleErrorCtx).length !== 8) {
   throw new Error("stale error text in history must not force error-recovery chips");
 }
 
@@ -90,5 +104,6 @@ if (hasSubstantiveUserIntent([{ role: "user", content: "hola" }])) {
 
 console.log("smoke-gafcore-chat-suggestions: ok", {
   landing: landingSteps.map((s) => s.label),
+  ecommerce: ecommerceSteps.map((s) => s.label),
   error: errorSteps.map((s) => s.label),
 });

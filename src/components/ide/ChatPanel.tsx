@@ -2733,7 +2733,7 @@ export function ChatPanel({
     }
 
     const step = pickAutopilotStep(ctx, ga.lastStepId);
-    if (!step || step.id === "guide-1") return;
+    if (!step) return;
 
     const nextGa = {
       ...guideAutopilotRef.current,
@@ -3969,6 +3969,7 @@ export function ChatPanel({
         ) : null}
         <ChatNextStepSuggestions
           steps={guideSteps}
+          messageCount={messages.length}
           panelLabel="Workflow del proyecto"
           disabled={loading}
           autopilotStatus={

@@ -93,9 +93,6 @@ export function pickAutopilotStep(
   const recommended = getRecommendedNextStep(steps);
   if (!recommended) return null;
   if (recommended.status === "completed") return null;
-  if (recommended.id === "guide-1") {
-    return steps.find((s) => s.id === "guide-2" && s.status !== "completed") ?? null;
-  }
   if (recommended.id === lastStepId && recommended.status === "current") {
     const nextUp = steps.find((s) => s.status === "upcoming");
     return nextUp ?? null;
