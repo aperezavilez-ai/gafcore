@@ -19,6 +19,7 @@ import {
   type ResolvedRoute,
 } from "@/lib/gafcore-model-routing.server";
 import { logDev } from "@/lib/gafcore-logger.server";
+import { withTransientUpstreamRetry } from "@/lib/gafcore-ai-upstream-retry.server";
 
 export type AiChatConfig = {
   url: string;
@@ -232,7 +233,7 @@ function isProviderFatalForFallback(status: number): boolean {
   );
 }
 
-async function callRoute(
+async function executeRouteFetch(
   route: ResolvedRoute,
   body: ChatCompletionsBody,
 ): Promise<Response> {
@@ -267,6 +268,13 @@ async function callRoute(
     },
     body: JSON.stringify(outBody),
   });
+}
+
+async function callRoute(route: ResolvedRoute, body: ChatCompletionsBody): Promise<Response> {
+  return withTransientUpstreamRetry(
+    () => executeRouteFetch(route, body),
+    { provider: route.provider, model: route.modelSlug },
+  );
 }
 
 /**

@@ -80,6 +80,7 @@ export function resolveGatewayModel(
   return models.fast;
 }
 
+/** Reintentos transitorios (529, 5xx) en {@link postChatCompletions} → `callRoute`. */
 export async function upstreamChatCompletions(body: Record<string, unknown>): Promise<Response> {
   const model = typeof body.model === "string" ? body.model : "unknown";
   const t0 = Date.now();
@@ -105,6 +106,14 @@ export async function parseUpstreamFailure(res: Response): Promise<UpstreamFailu
       status: 402,
       code: "provider_credits",
       message: "Sin créditos de IA en el proveedor.",
+      detail,
+    };
+  }
+  if (res.status === 529) {
+    return {
+      status: 529,
+      code: "upstream",
+      message: "El proveedor de IA está sobrecargado. Intenta de nuevo en un momento.",
       detail,
     };
   }
