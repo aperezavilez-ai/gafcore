@@ -96,7 +96,8 @@ import {
 } from "@/lib/gafcore-media.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { CreditsOutModal } from "@/components/CreditsOutModal";
-import { supabase } from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { ensureGafcoreSupabaseClient } from "@/lib/gafcore-supabase-client-proxy";
 import { getAuthAccessToken } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -208,6 +209,12 @@ type PendingBuildConfirmation = {
   pendingImages: PendingComposerImage[];
 };
 
+function createAbortError(): Error {
+  const err = new Error("Aborted");
+  err.name = "AbortError";
+  return err;
+}
+
 async function readSseJsonPayload(
   res: Response,
   signal: AbortSignal | undefined,
@@ -222,7 +229,7 @@ async function readSseJsonPayload(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      if (signal?.aborted) throw createAbortError();
       buf += dec.decode(value, { stream: true });
       const lines = buf.split("\n");
       buf = lines.pop() ?? "";
@@ -581,9 +588,11 @@ export function ChatPanel({
   }, [deepModel]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUser({ id: data.user.id, email: data.user.email ?? undefined });
-    });
+    void ensureGafcoreSupabaseClient().then((supabase) =>
+      supabase.auth.getUser().then(({ data }) => {
+        if (data.user) setUser({ id: data.user.id, email: data.user.email ?? undefined });
+      }),
+    );
   }, []);
 
   useEffect(() => {
@@ -642,6 +651,7 @@ export function ChatPanel({
     setMessages([]);
     let cancelled = false;
     (async () => {
+      const supabase = await ensureGafcoreSupabaseClient();
       const { data, error } = await supabase
         .from("chat_messages")
         .select("role, content, created_at")
@@ -670,31 +680,38 @@ export function ChatPanel({
   // Realtime: sync new chat messages across tabs/devices for this project
   useEffect(() => {
     if (!projectId || !user?.id) return;
-    const channel = supabase
-      .channel(`chat_messages:${projectId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "chat_messages",
-          filter: `project_id=eq.${projectId}`,
-        },
-        (payload: any) => {
-          const r = payload.new;
-          if (!r || r.user_id !== user.id) return;
-          const dbRole = r.role === "assistant" ? "assistant" : "user";
-          const echoKey = messageEchoKey(dbRole, String(r.content ?? ""));
-          if (localMessageEchoRef.current.has(echoKey)) return;
-          const ts = new Date(r.created_at).getTime();
-          const role = r.role === "assistant" ? "ai" : "user";
-          const content = String(r.content ?? "");
-          appendMessageDeduped(role, content);
-        },
-      )
-      .subscribe();
+    let channel: RealtimeChannel | null = null;
+    let cancelled = false;
+    void ensureGafcoreSupabaseClient().then((supabase) => {
+      if (cancelled) return;
+      channel = supabase
+        .channel(`chat_messages:${projectId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "chat_messages",
+            filter: `project_id=eq.${projectId}`,
+          },
+          (payload: any) => {
+            const r = payload.new;
+            if (!r || r.user_id !== user.id) return;
+            const dbRole = r.role === "assistant" ? "assistant" : "user";
+            const echoKey = messageEchoKey(dbRole, String(r.content ?? ""));
+            if (localMessageEchoRef.current.has(echoKey)) return;
+            const role = r.role === "assistant" ? "ai" : "user";
+            const content = String(r.content ?? "");
+            appendMessageDeduped(role, content);
+          },
+        )
+        .subscribe();
+    });
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      void ensureGafcoreSupabaseClient().then((supabase) => {
+        if (channel) supabase.removeChannel(channel);
+      });
     };
   }, [projectId, user?.id]);
 
@@ -731,6 +748,7 @@ export function ChatPanel({
     if (!pid || !user?.id) return;
     markLocalEcho(role, content);
     try {
+      const supabase = await ensureGafcoreSupabaseClient();
       await supabase.from("chat_messages").insert({
         project_id: pid,
         user_id: user.id,
@@ -3509,10 +3527,7 @@ export function ChatPanel({
         scheduleGuideAfterBuild = false;
       }
     } catch (error: any) {
-      if (
-        error?.name === "AbortError" ||
-        (error instanceof DOMException && error.name === "AbortError")
-      ) {
+      if (error?.name === "AbortError") {
         setStreamChars(null);
         setHealthPhase(null);
         setPipelineStatus(null);
