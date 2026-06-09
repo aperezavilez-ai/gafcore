@@ -2,6 +2,7 @@
  * GafCore Brain V2 — única referencia de arquitectura para generación de código (IDE).
  * Elimina React Error #31 y sesgo de código defensivo en LLMs.
  */
+import { GAFCORE_SYNTAX_ABSOLUTE_RULE } from "@/lib/gafcore-assistant-prompt.shared";
 
 export const GAFCORE_SYSTEM_PROMPT_V2 = `
 [STRICT ARCHITECTURE PROTOCOL - MANDATORY]
@@ -122,5 +123,5 @@ export function buildGafcoreBrainV2SystemContent(opts: GafcoreBrainV2SystemOptio
   const v2 = GAFCORE_SYSTEM_PROMPT_V2.trim();
   const shots = GAFCORE_BRAIN_V2_FEW_SHOTS.trim();
 
-  return [v2, shots, gemini, middle, v2].filter(Boolean).join("\n\n");
+  return [GAFCORE_SYNTAX_ABSOLUTE_RULE, v2, shots, gemini, middle, v2].filter(Boolean).join("\n\n");
 }
