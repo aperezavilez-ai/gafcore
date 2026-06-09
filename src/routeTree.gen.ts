@@ -41,6 +41,8 @@ import { Route as ApiGafcorePublishRouteImport } from './routes/api/gafcore/publ
 import { Route as ApiGafcoreProjectsDeleteRouteImport } from './routes/api/gafcore/projects-delete'
 import { Route as ApiGafcoreProjectsCreateRouteImport } from './routes/api/gafcore/projects-create'
 import { Route as ApiGafcoreProjectTemplatesRouteImport } from './routes/api/gafcore/project-templates'
+import { Route as ApiGafcoreGithubOauthStatusRouteImport } from './routes/api/gafcore/github-oauth-status'
+import { Route as ApiGafcoreGithubOauthStartRouteImport } from './routes/api/gafcore/github-oauth-start'
 import { Route as ApiGafcoreGithubConnectRouteImport } from './routes/api/gafcore/github-connect'
 import { Route as ApiGafcoreCheckoutSessionRouteImport } from './routes/api/gafcore/checkout-session'
 import { Route as ApiGafcoreCheckoutConfirmRouteImport } from './routes/api/gafcore/checkout-confirm'
@@ -61,6 +63,7 @@ import { Route as ApiExtensionsV1InstallRouteImport } from './routes/api/extensi
 import { Route as ApiExtensionsV1CheckoutSessionRouteImport } from './routes/api/extensions/v1/checkout-session'
 import { Route as ApiExtensionsV1CatalogRouteImport } from './routes/api/extensions/v1/catalog'
 import { Route as ApiExtensionsV1AgentEchoRouteImport } from './routes/api/extensions/v1/agent-echo'
+import { Route as ApiPublicOauthGithubCallbackRouteImport } from './routes/api/public/oauth.github.callback'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -226,6 +229,18 @@ const ApiGafcoreProjectTemplatesRoute =
     path: '/api/gafcore/project-templates',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiGafcoreGithubOauthStatusRoute =
+  ApiGafcoreGithubOauthStatusRouteImport.update({
+    id: '/api/gafcore/github-oauth-status',
+    path: '/api/gafcore/github-oauth-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreGithubOauthStartRoute =
+  ApiGafcoreGithubOauthStartRouteImport.update({
+    id: '/api/gafcore/github-oauth-start',
+    path: '/api/gafcore/github-oauth-start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGafcoreGithubConnectRoute = ApiGafcoreGithubConnectRouteImport.update({
   id: '/api/gafcore/github-connect',
   path: '/api/gafcore/github-connect',
@@ -335,6 +350,12 @@ const ApiExtensionsV1AgentEchoRoute =
     path: '/api/extensions/v1/agent-echo',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicOauthGithubCallbackRoute =
+  ApiPublicOauthGithubCallbackRouteImport.update({
+    id: '/api/public/oauth/github/callback',
+    path: '/api/public/oauth/github/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -357,6 +378,8 @@ export interface FileRoutesByFullPath {
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/github-connect': typeof ApiGafcoreGithubConnectRoute
+  '/api/gafcore/github-oauth-start': typeof ApiGafcoreGithubOauthStartRoute
+  '/api/gafcore/github-oauth-status': typeof ApiGafcoreGithubOauthStatusRoute
   '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
@@ -389,6 +412,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
+  '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -411,6 +435,8 @@ export interface FileRoutesByTo {
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/github-connect': typeof ApiGafcoreGithubConnectRoute
+  '/api/gafcore/github-oauth-start': typeof ApiGafcoreGithubOauthStartRoute
+  '/api/gafcore/github-oauth-status': typeof ApiGafcoreGithubOauthStatusRoute
   '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
@@ -443,6 +469,7 @@ export interface FileRoutesByTo {
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
+  '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -466,6 +493,8 @@ export interface FileRoutesById {
   '/api/gafcore/checkout-confirm': typeof ApiGafcoreCheckoutConfirmRoute
   '/api/gafcore/checkout-session': typeof ApiGafcoreCheckoutSessionRoute
   '/api/gafcore/github-connect': typeof ApiGafcoreGithubConnectRoute
+  '/api/gafcore/github-oauth-start': typeof ApiGafcoreGithubOauthStartRoute
+  '/api/gafcore/github-oauth-status': typeof ApiGafcoreGithubOauthStatusRoute
   '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
@@ -498,6 +527,7 @@ export interface FileRoutesById {
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
+  '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -522,6 +552,8 @@ export interface FileRouteTypes {
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/github-connect'
+    | '/api/gafcore/github-oauth-start'
+    | '/api/gafcore/github-oauth-status'
     | '/api/gafcore/project-templates'
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
@@ -554,6 +586,7 @@ export interface FileRouteTypes {
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
+    | '/api/public/oauth/github/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -576,6 +609,8 @@ export interface FileRouteTypes {
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/github-connect'
+    | '/api/gafcore/github-oauth-start'
+    | '/api/gafcore/github-oauth-status'
     | '/api/gafcore/project-templates'
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
@@ -608,6 +643,7 @@ export interface FileRouteTypes {
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
+    | '/api/public/oauth/github/callback'
   id:
     | '__root__'
     | '/'
@@ -630,6 +666,8 @@ export interface FileRouteTypes {
     | '/api/gafcore/checkout-confirm'
     | '/api/gafcore/checkout-session'
     | '/api/gafcore/github-connect'
+    | '/api/gafcore/github-oauth-start'
+    | '/api/gafcore/github-oauth-status'
     | '/api/gafcore/project-templates'
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
@@ -662,6 +700,7 @@ export interface FileRouteTypes {
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
+    | '/api/public/oauth/github/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -685,6 +724,8 @@ export interface RootRouteChildren {
   ApiGafcoreCheckoutConfirmRoute: typeof ApiGafcoreCheckoutConfirmRoute
   ApiGafcoreCheckoutSessionRoute: typeof ApiGafcoreCheckoutSessionRoute
   ApiGafcoreGithubConnectRoute: typeof ApiGafcoreGithubConnectRoute
+  ApiGafcoreGithubOauthStartRoute: typeof ApiGafcoreGithubOauthStartRoute
+  ApiGafcoreGithubOauthStatusRoute: typeof ApiGafcoreGithubOauthStatusRoute
   ApiGafcoreProjectTemplatesRoute: typeof ApiGafcoreProjectTemplatesRoute
   ApiGafcoreProjectsCreateRoute: typeof ApiGafcoreProjectsCreateRoute
   ApiGafcoreProjectsDeleteRoute: typeof ApiGafcoreProjectsDeleteRoute
@@ -716,6 +757,7 @@ export interface RootRouteChildren {
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiV1AiGenerateRoute: typeof ApiV1AiGenerateRoute
   ApiV1OpenapiJsonRoute: typeof ApiV1OpenapiJsonRoute
+  ApiPublicOauthGithubCallbackRoute: typeof ApiPublicOauthGithubCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -944,6 +986,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreProjectTemplatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/github-oauth-status': {
+      id: '/api/gafcore/github-oauth-status'
+      path: '/api/gafcore/github-oauth-status'
+      fullPath: '/api/gafcore/github-oauth-status'
+      preLoaderRoute: typeof ApiGafcoreGithubOauthStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/github-oauth-start': {
+      id: '/api/gafcore/github-oauth-start'
+      path: '/api/gafcore/github-oauth-start'
+      fullPath: '/api/gafcore/github-oauth-start'
+      preLoaderRoute: typeof ApiGafcoreGithubOauthStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/github-connect': {
       id: '/api/gafcore/github-connect'
       path: '/api/gafcore/github-connect'
@@ -1084,6 +1140,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiExtensionsV1AgentEchoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/oauth/github/callback': {
+      id: '/api/public/oauth/github/callback'
+      path: '/api/public/oauth/github/callback'
+      fullPath: '/api/public/oauth/github/callback'
+      preLoaderRoute: typeof ApiPublicOauthGithubCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1120,6 +1183,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGafcoreCheckoutConfirmRoute: ApiGafcoreCheckoutConfirmRoute,
   ApiGafcoreCheckoutSessionRoute: ApiGafcoreCheckoutSessionRoute,
   ApiGafcoreGithubConnectRoute: ApiGafcoreGithubConnectRoute,
+  ApiGafcoreGithubOauthStartRoute: ApiGafcoreGithubOauthStartRoute,
+  ApiGafcoreGithubOauthStatusRoute: ApiGafcoreGithubOauthStatusRoute,
   ApiGafcoreProjectTemplatesRoute: ApiGafcoreProjectTemplatesRoute,
   ApiGafcoreProjectsCreateRoute: ApiGafcoreProjectsCreateRoute,
   ApiGafcoreProjectsDeleteRoute: ApiGafcoreProjectsDeleteRoute,
@@ -1151,6 +1216,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiV1AiGenerateRoute: ApiV1AiGenerateRoute,
   ApiV1OpenapiJsonRoute: ApiV1OpenapiJsonRoute,
+  ApiPublicOauthGithubCallbackRoute: ApiPublicOauthGithubCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
