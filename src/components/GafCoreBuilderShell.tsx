@@ -7,6 +7,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCredits } from "@/hooks/useCredits";
+import {
+  GafCoreOnboarding,
+  isGafcoreOnboardingDone,
+} from "@/components/gafcore/GafCoreOnboarding";
 
 interface BuilderShellProps {
   onStart: (prompt: string) => void;
@@ -47,13 +51,20 @@ export function GafCoreBuilderShell({ onStart, onExitToCreator, userName }: Buil
   const [prompt, setPrompt] = useState("");
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [navOpen, setNavOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
   const { balance } = useCredits(user?.id);
 
   const greeting = useMemo(() => userName?.split(" ")[0] || "creador", [userName]);
 
-  useEffect(() => { taRef.current?.focus(); }, []);
+  useEffect(() => {
+    if (!isGafcoreOnboardingDone()) setOnboardingOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!onboardingOpen) taRef.current?.focus();
+  }, [onboardingOpen]);
 
   const submit = (text: string) => {
     const v = text.trim();
@@ -72,6 +83,15 @@ export function GafCoreBuilderShell({ onStart, onExitToCreator, userName }: Buil
 
   return (
     <div className="flex h-dvh w-full bg-[#0a0c14] text-slate-100">
+      <GafCoreOnboarding
+        open={onboardingOpen}
+        onComplete={(generated) => {
+          setOnboardingOpen(false);
+          setPrompt(generated);
+          submit(generated);
+        }}
+        onSkip={() => setOnboardingOpen(false)}
+      />
       {/* Mobile drawer overlay */}
       {navOpen && (
         <div
