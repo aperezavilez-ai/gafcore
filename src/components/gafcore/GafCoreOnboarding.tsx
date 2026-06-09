@@ -54,12 +54,12 @@ const PROJECT_TYPES: Array<{
   desc: string;
   icon: React.ElementType;
 }> = [
-  { id: "saas", label: "SaaS", desc: "App con planes, dashboard y usuarios", icon: LayoutDashboard },
-  { id: "store", label: "Tienda", desc: "E-commerce con catálogo y checkout", icon: ShoppingBag },
-  { id: "landing", label: "Landing", desc: "Sitio de marketing y conversión", icon: Globe },
-  { id: "mobile", label: "Móvil", desc: "App táctil, mobile-first o PWA", icon: Smartphone },
-  { id: "api", label: "API", desc: "Backend REST con auth y datos", icon: Code2 },
-  { id: "marketplace", label: "Marketplace", desc: "Plataforma multi-vendedor", icon: Store },
+  { id: "saas", label: "SaaS / Dashboard", desc: "Planes, métricas y panel de usuario", icon: LayoutDashboard },
+  { id: "store", label: "Tienda online", desc: "Catálogo, carrito y checkout", icon: ShoppingBag },
+  { id: "landing", label: "Sitio web / Landing", desc: "Marketing, hero y conversión", icon: Globe },
+  { id: "mobile", label: "App móvil", desc: "Mobile-first o PWA táctil", icon: Smartphone },
+  { id: "api", label: "API / Backend", desc: "REST, auth y persistencia", icon: Code2 },
+  { id: "marketplace", label: "Marketplace", desc: "Multi-vendedor y comisiones", icon: Store },
 ];
 
 const INDUSTRIES: Array<{ id: Industry; label: string; icon: React.ElementType }> = [
@@ -72,53 +72,53 @@ const INDUSTRIES: Array<{ id: Industry; label: string; icon: React.ElementType }
 ];
 
 const FEATURES: Array<{ id: FeatureId; label: string; icon: React.ElementType }> = [
-  { id: "login", label: "Login / registro", icon: LogIn },
+  { id: "login", label: "Login / Auth", icon: LogIn },
   { id: "stripe", label: "Pagos Stripe", icon: CreditCard },
   { id: "notifications", label: "Notificaciones", icon: Bell },
-  { id: "maps", label: "Mapas / ubicación", icon: Map },
+  { id: "maps", label: "Mapas", icon: Map },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
-  { id: "chat", label: "Chat en vivo", icon: MessageCircle },
+  { id: "chat", label: "Chat", icon: MessageCircle },
 ];
 
 const STYLES: Array<{ id: VisualStyle; label: string; icon: React.ElementType }> = [
-  { id: "dark", label: "Oscuro", icon: Moon },
-  { id: "light", label: "Claro", icon: Sun },
+  { id: "dark", label: "Dark moderno", icon: Moon },
+  { id: "light", label: "Light limpio", icon: Sun },
   { id: "colorful", label: "Colorido", icon: Palette },
   { id: "minimal", label: "Minimalista", icon: Minimize2 },
 ];
 
 const PROJECT_LABELS: Record<ProjectType, string> = {
-  saas: "aplicación SaaS",
+  saas: "aplicación SaaS con dashboard",
   store: "tienda online",
-  landing: "landing page",
+  landing: "sitio web / landing page",
   mobile: "app móvil",
-  api: "API REST",
+  api: "API / backend",
   marketplace: "marketplace",
 };
 
 const INDUSTRY_LABELS: Record<Industry, string> = {
   restaurant: "restaurantes y hostelería",
-  education: "educación y formación",
-  health: "salud y bienestar",
-  business: "negocios y servicios profesionales",
-  music: "música y entretenimiento",
+  education: "educación",
+  health: "salud",
+  business: "negocios",
+  music: "música",
   general: "uso general",
 };
 
 const STYLE_LABELS: Record<VisualStyle, string> = {
-  dark: "tema oscuro elegante",
-  light: "tema claro limpio",
-  colorful: "diseño colorido y vibrante",
-  minimal: "estilo minimalista con mucho espacio en blanco",
+  dark: "dark moderno con acentos violeta",
+  light: "light limpio y profesional",
+  colorful: "colorido y vibrante",
+  minimal: "minimalista con mucho espacio en blanco",
 };
 
 const FEATURE_PROMPTS: Record<FeatureId, string> = {
-  login: "autenticación con registro, login y sesión de usuario",
-  stripe: "pagos con Stripe (checkout o suscripciones)",
+  login: "login y autenticación de usuarios",
+  stripe: "pagos con Stripe",
   notifications: "notificaciones push o por email",
-  maps: "mapas interactivos y geolocalización",
-  analytics: "panel de analytics y métricas de uso",
-  chat: "chat en vivo o mensajería entre usuarios",
+  maps: "mapas y geolocalización",
+  analytics: "analytics y métricas",
+  chat: "chat en vivo o mensajería",
 };
 
 export function buildGafcoreOnboardingPrompt(opts: {
@@ -133,10 +133,10 @@ export function buildGafcoreOnboardingPrompt(opts: {
       : "las funcionalidades esenciales del tipo de proyecto";
 
   return [
-    `Crea una ${PROJECT_LABELS[opts.projectType]} para el sector de ${INDUSTRY_LABELS[opts.industry]}.`,
+    `Crea una ${PROJECT_LABELS[opts.projectType]} para la industria de ${INDUSTRY_LABELS[opts.industry]}.`,
     `Incluye: ${featuresText}.`,
-    `Diseño visual: ${STYLE_LABELS[opts.visualStyle]}.`,
-    "Usa React + Vite, componentes funcionales, datos persistentes en localStorage donde aplique, y deja el proyecto listo para seguir iterando en el IDE de GafCore.",
+    `Estilo visual: ${STYLE_LABELS[opts.visualStyle]}.`,
+    "Usa React + Vite, componentes funcionales, datos en localStorage donde aplique, y deja el proyecto listo para iterar en el IDE de GafCore.",
   ].join(" ");
 }
 
@@ -156,6 +156,34 @@ export function markGafcoreOnboardingDone(): void {
   } catch {
     /* quota */
   }
+}
+
+function SelectionCard({
+  selected,
+  onClick,
+  children,
+  className,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-xl border text-left transition-all duration-200",
+        selected
+          ? "border-violet-400/60 bg-violet-500/15 shadow-[0_0_24px_-6px_rgba(139,92,246,0.55)] ring-1 ring-violet-400/40"
+          : "border-white/10 bg-white/[0.03] hover:border-violet-400/35 hover:bg-violet-500/8",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
@@ -201,132 +229,136 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
   };
 
   const titles = [
-    "¿Qué quieres crear?",
+    "¿Qué quieres construir?",
     "¿Para qué industria?",
-    "¿Qué funcionalidades necesitas?",
-    "¿Qué estilo visual prefieres?",
+    "¿Qué funciones necesitas?",
+    "¿Estilo visual?",
   ];
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent
-        className="max-w-lg gap-0 overflow-hidden p-0 sm:max-w-xl"
+        className="max-w-lg gap-0 overflow-hidden border-violet-500/20 bg-[#0a0c14] p-0 text-slate-100 shadow-2xl shadow-violet-950/40 sm:max-w-xl"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader className="space-y-1 border-b border-border px-6 py-4">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-violet-600/25 via-fuchsia-600/10 to-transparent"
+          aria-hidden
+        />
+
+        <DialogHeader className="relative space-y-1 border-b border-white/10 px-6 py-5">
           <div className="flex items-center justify-between gap-2">
-            <DialogTitle className="text-base">Bienvenido a GafCore</DialogTitle>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {step + 1} / 4
-            </span>
+            <div className="flex items-center gap-2.5">
+              <div
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold text-white"
+                style={{ background: "linear-gradient(135deg,#6366f1,#a855f7)" }}
+              >
+                G
+              </div>
+              <DialogTitle className="text-base font-semibold text-white">
+                Bienvenido a GafCore
+              </DialogTitle>
+            </div>
+            <span className="text-xs text-violet-200/70 tabular-nums">{step + 1} / 4</span>
           </div>
-          <DialogDescription>{titles[step]}</DialogDescription>
-          <div className="flex gap-1 pt-2">
+          <DialogDescription className="text-slate-300">{titles[step]}</DialogDescription>
+          <div className="flex gap-1.5 pt-2">
             {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
                 className={cn(
-                  "h-1 flex-1 rounded-full transition-colors",
-                  i <= step ? "bg-primary" : "bg-muted",
+                  "h-1 flex-1 rounded-full transition-all duration-300",
+                  i <= step
+                    ? "bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                    : "bg-white/10",
                 )}
               />
             ))}
           </div>
         </DialogHeader>
 
-        <div className="max-h-[min(52vh,420px)] overflow-y-auto px-6 py-4">
+        <div className="relative max-h-[min(52vh,420px)] overflow-y-auto px-6 py-5">
           {step === 0 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
               {PROJECT_TYPES.map(({ id, label, desc, icon: Icon }) => (
-                <button
+                <SelectionCard
                   key={id}
-                  type="button"
+                  selected={projectType === id}
                   onClick={() => setProjectType(id)}
-                  className={cn(
-                    "rounded-xl border p-3 text-left transition",
-                    projectType === id
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/30"
-                      : "border-border bg-muted/30 hover:border-primary/40",
-                  )}
+                  className="p-3"
                 >
-                  <Icon className="mb-2 h-5 w-5 text-primary" />
-                  <div className="text-sm font-semibold">{label}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground leading-snug">{desc}</div>
-                </button>
+                  <Icon className="mb-2 h-5 w-5 text-violet-300" />
+                  <div className="text-sm font-semibold text-white">{label}</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{desc}</div>
+                </SelectionCard>
               ))}
             </div>
           ) : null}
 
           {step === 1 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
               {INDUSTRIES.map(({ id, label, icon: Icon }) => (
-                <button
+                <SelectionCard
                   key={id}
-                  type="button"
+                  selected={industry === id}
                   onClick={() => setIndustry(id)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition",
-                    industry === id
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/30"
-                      : "border-border bg-muted/30 hover:border-primary/40",
-                  )}
+                  className="flex items-center gap-2 px-3 py-2.5"
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-primary" />
-                  {label}
-                </button>
+                  <Icon className="h-4 w-4 shrink-0 text-violet-300" />
+                  <span className="text-sm font-medium text-white">{label}</span>
+                </SelectionCard>
               ))}
             </div>
           ) : null}
 
           {step === 2 ? (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <p className="col-span-full mb-1 text-[11px] text-slate-400">
+                Selección múltiple — elige todas las que necesites
+              </p>
               {FEATURES.map(({ id, label, icon: Icon }) => {
                 const on = features.includes(id);
                 return (
-                  <button
+                  <SelectionCard
                     key={id}
-                    type="button"
+                    selected={on}
                     onClick={() => toggleFeature(id)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition",
-                      on
-                        ? "border-primary bg-primary/10 ring-1 ring-primary/30"
-                        : "border-border bg-muted/30 hover:border-primary/40",
-                    )}
+                    className="flex items-center gap-2 px-3 py-2.5"
                   >
-                    <Icon className="h-4 w-4 shrink-0 text-primary" />
-                    {label}
-                  </button>
+                    <Icon className="h-4 w-4 shrink-0 text-violet-300" />
+                    <span className="text-sm font-medium text-white">{label}</span>
+                  </SelectionCard>
                 );
               })}
             </div>
           ) : null}
 
           {step === 3 ? (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               {STYLES.map(({ id, label, icon: Icon }) => (
-                <button
+                <SelectionCard
                   key={id}
-                  type="button"
+                  selected={visualStyle === id}
                   onClick={() => setVisualStyle(id)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-xl border px-3 py-3 text-left text-sm transition",
-                    visualStyle === id
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/30"
-                      : "border-border bg-muted/30 hover:border-primary/40",
-                  )}
+                  className="flex items-center gap-2 px-3 py-3"
                 >
-                  <Icon className="h-4 w-4 shrink-0 text-primary" />
-                  {label}
-                </button>
+                  <Icon className="h-4 w-4 shrink-0 text-violet-300" />
+                  <span className="text-sm font-medium text-white">{label}</span>
+                </SelectionCard>
               ))}
             </div>
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-border px-6 py-4">
-          <Button type="button" variant="ghost" size="sm" onClick={skip}>
+        <div className="relative flex items-center justify-between gap-2 border-t border-white/10 bg-black/20 px-6 py-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:bg-white/5 hover:text-white"
+            onClick={skip}
+          >
             Saltar
           </Button>
           <div className="flex gap-2">
@@ -335,13 +367,20 @@ export function GafCoreOnboarding({ open, onComplete, onSkip }: Props) {
                 type="button"
                 variant="outline"
                 size="sm"
+                className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                 onClick={() => setStep((s) => s - 1)}
               >
                 <ChevronLeft className="h-4 w-4" />
                 Atrás
               </Button>
             ) : null}
-            <Button type="button" size="sm" disabled={!canNext} onClick={goNext}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!canNext}
+              className="border-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:from-violet-500 hover:to-fuchsia-500 disabled:opacity-40"
+              onClick={goNext}
+            >
               {step === 3 ? "Empezar" : "Siguiente"}
               {step < 3 ? <ChevronRight className="h-4 w-4" /> : null}
             </Button>
