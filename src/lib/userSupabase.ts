@@ -124,7 +124,7 @@ export type ProjectRow = { id: string; name: string; created_at?: string; update
 /** Espera a que la sesión Supabase esté lista (RLS requiere JWT). */
 async function waitForAuthSession(
   sb: NonNullable<ReturnType<typeof getUserSupabase>>,
-  maxMs = 6_000,
+  maxMs = 12_000,
 ): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < maxMs) {

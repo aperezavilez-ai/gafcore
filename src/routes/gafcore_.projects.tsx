@@ -118,7 +118,12 @@ function GafcoreProjectsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await listProjects();
+      let list = await listProjects();
+      // Si devuelve vacío pero hay sesión, reintentar una vez después de 1s
+      if (list.length === 0 && (user?.id || hasSession)) {
+        await new Promise((r) => setTimeout(r, 1000));
+        list = await listProjects();
+      }
       setProjects(list);
     } catch (e) {
       console.error(e);
@@ -126,7 +131,7 @@ function GafcoreProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id, hasSession]);
 
   useEffect(() => {
     if (authLoading || graceChecking) return;
