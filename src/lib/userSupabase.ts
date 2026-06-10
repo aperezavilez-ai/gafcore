@@ -152,7 +152,7 @@ async function waitForAuthSession(
 }
 
 export async function listProjects(): Promise<ProjectRow[]> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return [];
   await waitForAuthSession(sb);
 

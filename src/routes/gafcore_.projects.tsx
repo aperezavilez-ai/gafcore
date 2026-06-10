@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { hydrateAuthFromStorage, initAuthOnce, useAuth } from "@/hooks/useAuth";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
+import { listGafcoreProjects } from "@/lib/gafcore-projects.functions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,7 +46,7 @@ import {
 } from "@/lib/userSupabase";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
 import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
-import { activateProjectRow, readCachedProjectName } from "@/core/project";
+import { activateProjectRow, readCachedProjectId, readCachedProjectName } from "@/core/project";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
 import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
@@ -63,25 +64,9 @@ export const Route = createFileRoute("/gafcore_/projects")({
   }),
 });
 
-/** Misma cadena que crear proyecto: POST + service role en servidor. */
-async function loadProjectsFromApi(): Promise<ProjectRow[]> {
-  const res = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[]; error?: string }>(
-    "/api/gafcore/projects-list",
-  );
-  if (!res.ok || !Array.isArray(res.projects)) {
-    throw new Error(res.error ?? "list_failed");
-  }
-  return res.projects;
-}
-
-/** Respaldo: misma función que el menú del IDE. */
-async function loadProjectsFromClient(): Promise<ProjectRow[]> {
-  return listProjects();
-}
-
 /** Si hay proyecto activo en caché y no viene en la lista, incluirlo (como el IDE). */
 function mergeActiveProject(list: ProjectRow[]): ProjectRow[] {
-  const activeId = getCurrentProjectId();
+  const activeId = getCurrentProjectId() ?? readCachedProjectId();
   if (!activeId || list.some((p) => p.id === activeId)) return list;
   const name = readCachedProjectName();
   return [{ id: activeId, name: name === "GafCore" ? "Mi proyecto" : name }, ...list];
@@ -108,6 +93,7 @@ function GafcoreProjectsPage() {
   } | null>(null);
 
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
+  const listProjectsFn = useServerFn(listGafcoreProjects);
 
   useEffect(() => {
     void (async () => {
@@ -119,38 +105,61 @@ function GafcoreProjectsPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    let loadError: string | null = null;
+
     try {
       await initAuthOnce();
-      await hydrateAuthFromStorage(3_000);
+      try {
+        await hydrateAuthFromStorage(3_000);
+      } catch {
+        /* ignore */
+      }
 
       let list: ProjectRow[] = [];
+
       try {
-        list = await loadProjectsFromApi();
-      } catch (apiErr) {
-        console.warn("[projects] API list fallback:", apiErr);
-        list = await loadProjectsFromClient();
+        const res = await listProjectsFn();
+        if (res.ok && Array.isArray(res.projects)) {
+          list = res.projects as ProjectRow[];
+        } else {
+          loadError = res.error ?? "list_failed";
+        }
+      } catch (e) {
+        console.warn("[projects] server fn fallback:", e);
+        loadError = e instanceof Error ? e.message : "list_failed";
       }
 
       if (list.length === 0) {
-        list = await loadProjectsFromClient();
+        try {
+          list = await listProjects();
+        } catch (e) {
+          console.warn("[projects] client list:", e);
+        }
       }
 
-      setProjects(mergeActiveProject(list));
+      const merged = mergeActiveProject(list);
+      setProjects(merged);
+
+      if (merged.length === 0 && loadError) {
+        if (loadError === "server_misconfigured") {
+          toast.error("Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.");
+        } else if (loadError === "Inicia sesión para continuar." || loadError === "unauthorized") {
+          toast.error("Inicia sesión para ver tus proyectos.");
+        } else {
+          toast.error("No se pudieron cargar los proyectos.");
+        }
+      }
     } catch (e) {
       console.error("[projects]", e);
-      const msg = e instanceof Error ? e.message : "";
-      if (msg === "server_misconfigured") {
-        toast.error("Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.");
-      } else if (msg === "Inicia sesión para continuar.") {
-        toast.error("Inicia sesión para ver tus proyectos.");
-      } else {
+      const merged = mergeActiveProject([]);
+      setProjects(merged);
+      if (merged.length === 0) {
         toast.error("No se pudieron cargar los proyectos.");
       }
-      setProjects(mergeActiveProject([]));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listProjectsFn]);
 
   useEffect(() => {
     if (authLoading || !bootReady) return;
