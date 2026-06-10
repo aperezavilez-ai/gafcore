@@ -46,6 +46,51 @@ export async function listProjectTemplatesForUser(userId: string) {
   }
 }
 
+export type ProjectListRow = {
+  id: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+  deploy_site_url?: string | null;
+  github_repo?: string | null;
+};
+
+/** Lista proyectos del usuario (service role — evita fallos de JWT/RLS en el cliente). */
+export async function listProjectsForUser(
+  userId: string,
+): Promise<{ ok: true; projects: ProjectListRow[] } | { ok: false; error: string }> {
+  try {
+    const admin = await isGafcoreAdminUser(userId);
+    let q = supabaseAdmin
+      .from("projects")
+      .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
+      .order("updated_at", { ascending: false, nullsFirst: false });
+
+    if (!admin) {
+      q = q.eq("user_id", userId);
+    }
+
+    const { data, error } = await q;
+    if (error) {
+      console.error("[projects-api] list:", error);
+      const fallback = await supabaseAdmin
+        .from("projects")
+        .select("id, name, created_at, updated_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      if (fallback.error) {
+        return { ok: false, error: fallback.error.message?.trim() || "No se pudieron listar proyectos." };
+      }
+      return { ok: true, projects: (fallback.data ?? []) as ProjectListRow[] };
+    }
+
+    return { ok: true, projects: (data ?? []) as ProjectListRow[] };
+  } catch (e) {
+    console.error("[projects-api] list exception:", e);
+    return adminUnavailable();
+  }
+}
+
 export async function createProjectForUser(
   userId: string,
   name: string,

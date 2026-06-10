@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
+import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
 
 export type SaveProjectFilesResult =
@@ -141,6 +142,18 @@ async function waitForAuthSession(
 }
 
 export async function listProjects(): Promise<ProjectRow[]> {
+  // Preferir API autenticada (misma vía que projects-create) — evita RLS/JWT en cliente
+  try {
+    const api = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[] }>(
+      "/api/gafcore/projects-list",
+    );
+    if (api.ok && Array.isArray(api.projects)) {
+      return api.projects;
+    }
+  } catch (e) {
+    console.warn("[Supabase] list projects API fallback:", e);
+  }
+
   const sb = getUserSupabase();
   if (!sb) return [];
   await waitForAuthSession(sb);
@@ -168,7 +181,6 @@ export async function listProjects(): Promise<ProjectRow[]> {
   const rows = (data ?? []) as ProjectRow[];
   if (rows.length > 0) return rows;
 
-  // Reintento breve: proyecto recién creado puede no aparecer al instante
   await new Promise((r) => setTimeout(r, 400));
   const retry = await query("id, name, created_at, updated_at", "created_at");
   if (!retry.error && retry.data?.length) {

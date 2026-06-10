@@ -8,6 +8,7 @@ import {
   createProjectForUser,
   deleteProjectForUser,
   listProjectTemplatesForUser,
+  listProjectsForUser,
 } from "@/lib/gafcore-projects-api.server";
 import { validateTemplateFiles } from "@/lib/gafcore-templates.shared";
 
@@ -37,6 +38,19 @@ const DeleteBodySchema = z.object({
   projectId: z.string().uuid(),
   approvalId: z.string().min(1).max(128).optional(),
 });
+
+/** POST /api/gafcore/projects-list */
+export async function handleGafcoreProjectsListPost(request: Request): Promise<Response> {
+  const userId = await requireGafcoreApiUser(request);
+  if (userId instanceof Response) return userId;
+
+  const result = await listProjectsForUser(userId);
+  if (!result.ok) {
+    return json({ ok: false, error: result.error }, 503);
+  }
+
+  return json({ ok: true, projects: result.projects });
+}
 
 /** POST /api/gafcore/projects-create */
 export async function handleGafcoreProjectsCreatePost(request: Request): Promise<Response> {

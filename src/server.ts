@@ -246,6 +246,10 @@ export default {
       const { handleGafcoreChatCompletePost } = await import("./lib/gafcore-chat-api.server");
       return handleGafcoreChatCompletePost(request);
     }
+    if (request.method === "POST" && path === "/api/gafcore/projects-list") {
+      const { handleGafcoreProjectsListPost } = await import("./lib/gafcore-projects-http.server");
+      return handleGafcoreProjectsListPost(request);
+    }
     if (request.method === "POST" && path === "/api/gafcore/projects-create") {
       const { handleGafcoreProjectsCreatePost } = await import("./lib/gafcore-projects-http.server");
       return handleGafcoreProjectsCreatePost(request);

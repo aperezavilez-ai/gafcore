@@ -1,11 +1,27 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
+
+async function resolveAuthAccessToken(): Promise<string | null> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.access_token) {
+    return sessionData.session.access_token;
+  }
+  try {
+    const sb = await getGafcoreSupabaseBrowser();
+    const { data } = await sb.auth.getSession();
+    if (data.session?.access_token) return data.session.access_token;
+    const { data: refreshed } = await sb.auth.refreshSession();
+    return refreshed.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function gafcoreAuthJsonFetch<T = unknown>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token;
+  const token = await resolveAuthAccessToken();
   if (!token) {
     throw new Error("Inicia sesión para continuar.");
   }
