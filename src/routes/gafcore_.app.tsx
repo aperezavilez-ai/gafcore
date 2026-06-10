@@ -12,8 +12,6 @@ import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
 import { GafCoreBuilderShell } from "@/components/GafCoreBuilderShell";
-import { GafCoreOnboarding, markGafcoreOnboardingDone } from "@/components/gafcore/GafCoreOnboarding";
-import { useProfile } from "@/hooks/useProfile";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
   GAFCORE_ADMIN_VIEW_CHANGE_EVENT,
@@ -268,8 +266,6 @@ function GafCoreIDEWithShell({
   const userId = user?.id ?? authUser?.id;
   const { isAdmin, loading: subLoading } = useSubscription(userId);
   const [adminBuilderView, setAdminBuilderView] = useState(readGafcoreAdminBuilderView);
-  const { profile, loading: profileLoading, updateProfile } = useProfile(userId);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     const sync = () => setAdminBuilderView(readGafcoreAdminBuilderView());
@@ -283,13 +279,6 @@ function GafCoreIDEWithShell({
     setGafcoreAdminBuilderView(false);
     setAdminBuilderView(false);
   }, [isAdmin, subLoading, adminBuilderView]);
-
-  // Mostrar onboarding para usuarios normales si no lo han completado
-  useEffect(() => {
-    if (profileLoading || isAdmin) return;
-    const done = profile?.onboarding_completed === true;
-    if (!done) setOnboardingOpen(true);
-  }, [profile, profileLoading, isAdmin]);
 
   const userName =
     (user?.user_metadata?.["full_name"] as string | undefined) ??
@@ -320,29 +309,5 @@ function GafCoreIDEWithShell({
     );
   }
 
-  return (
-    <>
-      <GafCoreOnboarding
-        open={onboardingOpen}
-        onComplete={(prompt) => {
-          markGafcoreOnboardingDone();
-          void updateProfile({ onboarding_completed: true }).catch(() => {});
-          setOnboardingOpen(false);
-          try {
-            sessionStorage.setItem("gafcore_initial_prompt", prompt);
-          } catch {}
-          // Disparar apertura del dialog de nuevo proyecto via evento
-          window.setTimeout(() => {
-            window.dispatchEvent(new Event("gafcore:open-new-project"));
-          }, 100);
-        }}
-        onSkip={() => {
-          markGafcoreOnboardingDone();
-          void updateProfile({ onboarding_completed: true }).catch(() => {});
-          setOnboardingOpen(false);
-        }}
-      />
-      <GafCoreIDE />
-    </>
-  );
+  return <GafCoreIDE />;
 }
