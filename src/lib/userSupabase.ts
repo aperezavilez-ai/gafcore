@@ -2,10 +2,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
-import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
-import { getGafcoreSupabaseBrowserSync } from "@/lib/gafcore-supabase-browser";
-import { getAuthAccessToken, initAuthOnce } from "@/hooks/useAuth";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
+import {
+  getGafcoreSupabaseBrowser,
+  getGafcoreSupabaseBrowserSync,
+} from "@/lib/gafcore-supabase-browser";
 
 export type SaveProjectFilesResult =
   | { ok: true }
@@ -65,14 +66,17 @@ function isRlsAuthError(message: string | undefined): boolean {
 
 export function getUserSupabase(): SupabaseClient | null {
   try {
-    const browser = getGafcoreSupabaseBrowserSync();
-    if (browser) return browser;
-
     if (typeof window !== "undefined") {
       const host = window.location.hostname.toLowerCase();
+      // En producción de GafCore usar el cliente dinámico (mismo que useAuth),
+      // así la sesión JWT está disponible para RLS.
       if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
         localStorage.removeItem(CFG_KEY);
-        return null;
+        const synced = getGafcoreSupabaseBrowserSync();
+        if (synced) return synced as unknown as SupabaseClient;
+        // Cliente aún no inicializado — devolver defaultSupabase como fallback
+        // (se reemplazará en cuanto getGafcoreSupabaseBrowser resuelva)
+        return defaultSupabase as unknown as SupabaseClient;
       }
     }
     const cfg = JSON.parse(localStorage.getItem(CFG_KEY) ?? "{}");
@@ -93,18 +97,8 @@ export function getUserSupabase(): SupabaseClient | null {
   }
 }
 
-export async function getUserSupabaseAsync(): Promise<SupabaseClient | null> {
-  try {
-    await initAuthOnce();
-    const { getGafcoreSupabaseBrowser } = await import("@/lib/gafcore-supabase-browser");
-    return await getGafcoreSupabaseBrowser();
-  } catch {
-    return getUserSupabase();
-  }
-}
-
 export async function ensureProjectId(): Promise<string | null> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return null;
 
   // Validate cached id actually exists in the projects table
@@ -140,12 +134,6 @@ async function waitForAuthSession(
   sb: NonNullable<ReturnType<typeof getUserSupabase>>,
   maxMs = 12_000,
 ): Promise<boolean> {
-  try {
-    const { data: refreshData } = await sb.auth.refreshSession();
-    if (refreshData.session?.access_token) return true;
-  } catch {
-    /* ignore */
-  }
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     const { data } = await sb.auth.getSession();
@@ -156,41 +144,21 @@ async function waitForAuthSession(
 }
 
 export async function listProjects(): Promise<ProjectRow[]> {
-  await initAuthOnce();
-
-  const sb = await getUserSupabaseAsync();
-  if (sb) await waitForAuthSession(sb);
-
-  try {
-    const api = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[] }>(
-      "/api/gafcore/projects-list",
-    );
-    if (api.ok && Array.isArray(api.projects)) {
-      return await mergeCachedProjectRow(api.projects);
+  // En producción usar el cliente dinámico (mismo JWT que useAuth)
+  let sb: SupabaseClient;
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
+      sb = (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
+    } else {
+      sb = getUserSupabase() as SupabaseClient;
+      if (!sb) return [];
     }
-  } catch (e) {
-    console.warn("[Supabase] list projects API POST:", e);
+  } else {
+    sb = getUserSupabase() as SupabaseClient;
+    if (!sb) return [];
   }
-
-  try {
-    const token = await getAuthAccessToken();
-    if (token) {
-      const res = await fetch("/api/gafcore/projects-list", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { ok?: boolean; projects?: ProjectRow[] };
-        if (data.ok && Array.isArray(data.projects)) {
-          return await mergeCachedProjectRow(data.projects);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("[Supabase] list projects API GET:", e);
-  }
-
-  if (!sb) return [];
+  await waitForAuthSession(sb);
 
   const query = async (select: string, orderCol: string) =>
     sb
@@ -207,47 +175,26 @@ export async function listProjects(): Promise<ProjectRow[]> {
     const fallback = await query("id, name, created_at, updated_at", "created_at");
     if (fallback.error) {
       console.error("[Supabase] list projects fallback error:", fallback.error);
-      return mergeCachedProjectRow([]);
+      return [];
     }
     data = fallback.data;
   }
 
   const rows = (data ?? []) as ProjectRow[];
-  if (rows.length > 0) return mergeCachedProjectRow(rows);
+  if (rows.length > 0) return rows;
 
+  // Reintento breve: proyecto recién creado puede no aparecer al instante
   await new Promise((r) => setTimeout(r, 400));
   const retry = await query("id, name, created_at, updated_at", "created_at");
   if (!retry.error && retry.data?.length) {
-    return mergeCachedProjectRow(retry.data as ProjectRow[]);
+    return retry.data as ProjectRow[];
   }
-  return mergeCachedProjectRow(rows);
-}
-
-async function mergeCachedProjectRow(projects: ProjectRow[]): Promise<ProjectRow[]> {
-  if (projects.length > 0) return projects;
-  const cachedId = getCurrentProjectId();
-  if (!cachedId) return projects;
-  const row = await fetchProjectRowById(cachedId);
-  return row ? [row] : projects;
-}
-
-async function fetchProjectRowById(projectId: string): Promise<ProjectRow | null> {
-  const sb = await getUserSupabaseAsync();
-  if (!sb) return null;
-  await waitForAuthSession(sb);
-  const { data, error } = await sb
-    .from("projects")
-    .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (error || !data?.id) return null;
-  return data as ProjectRow;
+  return rows;
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return null;
-  await waitForAuthSession(sb);
   const { data: userRes } = await sb.auth.getUser();
   const userId = userRes?.user?.id;
   const payload: Record<string, unknown> = { name };
@@ -265,9 +212,8 @@ export async function createProject(name: string): Promise<ProjectRow | null> {
 }
 
 export async function renameProject(id: string, name: string): Promise<boolean> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return false;
-  await waitForAuthSession(sb);
   const { error } = await sb.from("projects").update({ name }).eq("id", id);
   if (error) {
     console.error("[Supabase] rename project error:", error);
@@ -357,9 +303,8 @@ export function clearCurrentProjectId() {
 export async function loadProjectFiles(
   explicitProjectId?: string | null,
 ): Promise<FileItem[] | null> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return null;
-  await waitForAuthSession(sb);
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
   if (!projectId) return null;
@@ -394,11 +339,9 @@ export async function upsertSingleProjectFile(
   projectId: string,
   file: FileItem,
 ): Promise<{ ok: boolean; detail?: string }> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return { ok: false, detail: "no_client" };
-  await waitForAuthSession(sb);
-  if (projectSaveSuppressed) return { ok: true };
-  if (!(await hasActiveAuthSession(sb))) return { ok: false, detail: "session_required" };
+  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
   const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
   if (!owned?.id) return { ok: false, detail: "project_not_visible" };
@@ -504,13 +447,9 @@ export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,
 ): Promise<SaveProjectFilesResult> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return { ok: false, reason: "no_client" };
-  await waitForAuthSession(sb);
-  if (projectSaveSuppressed) return { ok: true };
-  if (!(await hasActiveAuthSession(sb))) {
-    return { ok: false, reason: "no_client", detail: "session_required" };
-  }
+  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
