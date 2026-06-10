@@ -97,6 +97,21 @@ export function getUserSupabase(): SupabaseClient | null {
   }
 }
 
+/** Versión async de getUserSupabase — en producción espera al cliente dinámico. */
+export async function getUserSupabaseAsync(): Promise<SupabaseClient | null> {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.toLowerCase();
+    if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
+      try {
+        return (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
+      } catch {
+        return defaultSupabase as unknown as SupabaseClient;
+      }
+    }
+  }
+  return getUserSupabase();
+}
+
 export async function ensureProjectId(): Promise<string | null> {
   const sb = getUserSupabase();
   if (!sb) return null;
