@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { handleGafcoreProjectsListPost } from "@/lib/gafcore-projects-http.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -42,6 +43,7 @@ async function getUserIdFromRequest(request: Request): Promise<string | null> {
 export const Route = createFileRoute("/api/gafcore/projects-list")({
   server: {
     handlers: {
+      POST: ({ request }: { request: Request }) => handleGafcoreProjectsListPost(request),
       GET: async ({ request }: { request: Request }) => {
         const userId = await getUserIdFromRequest(request);
         if (!userId) {

@@ -4,7 +4,7 @@ import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { getGafcoreSupabaseBrowserSync } from "@/lib/gafcore-supabase-browser";
-import { initAuthOnce } from "@/hooks/useAuth";
+import { getAuthAccessToken, initAuthOnce } from "@/hooks/useAuth";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
 
 export type SaveProjectFilesResult =
@@ -156,21 +156,43 @@ async function waitForAuthSession(
 }
 
 export async function listProjects(): Promise<ProjectRow[]> {
-  // Preferir API autenticada (misma vía que projects-create) — evita RLS/JWT en cliente
+  await initAuthOnce();
+
+  const sb = await getUserSupabaseAsync();
+  if (sb) await waitForAuthSession(sb);
+
+  // API POST (service role en servidor — misma vía que crear)
   try {
     const api = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[] }>(
       "/api/gafcore/projects-list",
     );
     if (api.ok && Array.isArray(api.projects)) {
-      return api.projects;
+      return await mergeCachedProjectRow(api.projects);
     }
   } catch (e) {
-    console.warn("[Supabase] list projects API fallback:", e);
+    console.warn("[Supabase] list projects API POST:", e);
   }
 
-  const sb = await getUserSupabaseAsync();
+  // API GET con Bearer (respaldo si POST no enruta)
+  try {
+    const token = await getAuthAccessToken();
+    if (token) {
+      const res = await fetch("/api/gafcore/projects-list", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { ok?: boolean; projects?: ProjectRow[] };
+        if (data.ok && Array.isArray(data.projects)) {
+          return await mergeCachedProjectRow(data.projects);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[Supabase] list projects API GET:", e);
+  }
+
   if (!sb) return [];
-  await waitForAuthSession(sb);
 
   const query = async (select: string, orderCol: string) =>
     sb
@@ -187,20 +209,48 @@ export async function listProjects(): Promise<ProjectRow[]> {
     const fallback = await query("id, name, created_at, updated_at", "created_at");
     if (fallback.error) {
       console.error("[Supabase] list projects fallback error:", fallback.error);
-      return [];
+      return mergeCachedProjectRow([]);
     }
     data = fallback.data;
   }
 
   const rows = (data ?? []) as ProjectRow[];
-  if (rows.length > 0) return rows;
+  if (rows.length > 0) return mergeCachedProjectRow(rows);
 
   await new Promise((r) => setTimeout(r, 400));
   const retry = await query("id, name, created_at, updated_at", "created_at");
   if (!retry.error && retry.data?.length) {
-    return retry.data as ProjectRow[];
+    return mergeCachedProjectRow(retry.data as ProjectRow[]);
   }
-  return rows;
+  return mergeCachedProjectRow(rows);
+}
+
+/** Si el listado viene vacío pero hay id en caché, intenta cargar esa fila (evita «fantasma» solo en IDE). */
+async function mergeCachedProjectRow(projects: ProjectRow[]): Promise<ProjectRow[]> {
+  if (projects.length > 0) return projects;
+  const cachedId = getCurrentProjectId();
+  if (!cachedId) return projects;
+
+  const row = await fetchProjectRowById(cachedId);
+  return row ? [row] : projects;
+}
+
+async function fetchProjectRowById(projectId: string): Promise<ProjectRow | null> {
+  const sb = await getUserSupabaseAsync();
+  if (!sb) return null;
+  await waitForAuthSession(sb);
+
+  const { data, error } = await sb
+    .from("projects")
+    .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
+    .eq("id", projectId)
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    if (error) console.warn("[Supabase] fetch project by id:", error);
+    return null;
+  }
+  return data as ProjectRow;
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {

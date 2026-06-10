@@ -4,7 +4,7 @@ import {
   createProject,
   getCurrentProjectId,
   getProjectDeployMeta,
-  getUserSupabase,
+  getUserSupabaseAsync,
   listProjects,
   renameProject,
   saveProjectDeployMeta,
@@ -55,8 +55,8 @@ function activeFromRow(row: ProjectRow | null): ActiveProjectState {
 
 /** Carga proyectos y resuelve el activo (caché local o el más reciente). */
 export async function bootstrapWorkspace(): Promise<WorkspaceBootstrap> {
-  const hasSupabase = Boolean(getUserSupabase());
-  if (!hasSupabase) {
+  const sb = await getUserSupabaseAsync();
+  if (!sb) {
     return {
       hasSupabase: false,
       projects: [],
