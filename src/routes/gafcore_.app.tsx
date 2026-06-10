@@ -328,7 +328,13 @@ function GafCoreIDEWithShell({
           markGafcoreOnboardingDone();
           void updateProfile({ onboarding_completed: true }).catch(() => {});
           setOnboardingOpen(false);
-          try { sessionStorage.setItem("gafcore_initial_prompt", prompt); } catch {}
+          try {
+            sessionStorage.setItem("gafcore_initial_prompt", prompt);
+          } catch {}
+          // Disparar apertura del dialog de nuevo proyecto via evento
+          window.setTimeout(() => {
+            window.dispatchEvent(new Event("gafcore:open-new-project"));
+          }, 100);
         }}
         onSkip={() => {
           markGafcoreOnboardingDone();
