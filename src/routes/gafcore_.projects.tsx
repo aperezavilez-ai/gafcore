@@ -140,6 +140,15 @@ function GafcoreProjectsPage() {
   }, [authLoading, graceChecking, user?.id, hasSession, refresh]);
 
   useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+        void refresh();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [refresh]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     if (url.searchParams.get("newProject") !== "1") return;

@@ -124,14 +124,18 @@ export type ProjectRow = { id: string; name: string; created_at?: string; update
 /** Espera a que la sesión Supabase esté lista (RLS requiere JWT). */
 async function waitForAuthSession(
   sb: NonNullable<ReturnType<typeof getUserSupabase>>,
-  maxMs = 12_000,
+  maxMs = 8_000,
 ): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     const { data } = await sb.auth.getSession();
     if (data.session?.access_token) return true;
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 200));
   }
+  try {
+    const { data } = await sb.auth.refreshSession();
+    if (data.session?.access_token) return true;
+  } catch {}
   return false;
 }
 
