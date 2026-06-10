@@ -15,6 +15,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { hydrateAuthFromStorage, initAuthOnce } from "@/hooks/useAuth";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,6 +88,19 @@ function GafcoreProjectsPage() {
   } | null>(null);
 
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
+
+  // Hidratar sesión igual que app.tsx
+  useEffect(() => {
+    void (async () => {
+      try {
+        await initAuthOnce();
+        const sb = await getGafcoreSupabaseBrowser();
+        const { data } = await sb.auth.getSession();
+        if (data.session?.user) return;
+        await hydrateAuthFromStorage(2_500);
+      } catch {}
+    })();
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
