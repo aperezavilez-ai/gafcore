@@ -18,10 +18,11 @@ export const GAFCORE_INTEGRITY_SHIELD_RULE = `
 1) ANÁLISIS DE IMPACTO: Antes de editar, revisa el árbol de imports/componentes del contexto. Si tocas un hijo, no rompas dependencias del padre.
 2) PROHIBICIÓN DE ELIMINACIÓN: NO elimines imports, \`import type\`, hooks (useState, useEffect, useMemo, useCallback, useRef) ni tipos/interfaces que ya existan, salvo que el usuario pida explícitamente quitar/eliminar/borrar.
 3) INCREMENTAL: Añade funcionalidad extendiendo código; cada archivo modificado debe ser el contenido COMPLETO del archivo, no un fragmento incompleto.
-4) CIERRE SINTÁCTICO OBLIGATORIO — REGLA MÁS IMPORTANTE: Antes de responder, cuenta manualmente cada \`{\` y su \`}\`, cada \`(\` y su \`)\`, cada tag JSX de apertura \`<Tag\` y su cierre \`</Tag>\` o \`/>\`. Si el conteo no coincide EXACTAMENTE, corrige antes de responder. UN SOLO par desbalanceado rompe toda la app. Esto aplica especialmente en generación desde cero.
+4) CIERRE SINTÁCTICO OBLIGATORIO — APLICA A TODOS LOS ARCHIVOS: En CADA archivo que generes o modifiques (App.tsx, lib/store.tsx, components/*.tsx, cualquier otro), cuenta manualmente cada \`{\` y su \`}\`, cada \`(\` y su \`)\`, cada tag JSX \`<Tag\` y su cierre \`</Tag>\` o \`/>\`. Si el conteo no coincide EXACTAMENTE en cualquier archivo, corrige antes de responder. UN SOLO par desbalanceado en CUALQUIER archivo rompe toda la app.
 5) LAYOUT RAÍZ: Si el cambio es en un componente hijo (components/*), NO reescribas App.tsx/layout padre salvo que el usuario lo pida. Mantén la estructura del padre intacta.
 6) ANTI-CRASH: No devuelvas componentes que retornen \`undefined\`; usa \`null\` o JSX vacío con mensaje. Accede a props con optional chaining cuando duden.
-7) GENERACIÓN DESDE CERO: Cuando generes archivos nuevos, usa estructuras simples y directas. Evita ternarios anidados dentro de JSX return(). Prefiere variables auxiliares antes del return para lógica compleja.
+7) ARCHIVOS SECUNDARIOS: lib/store.tsx, lib/utils.ts, components/*.tsx y cualquier archivo auxiliar deben tener la misma precisión sintáctica que App.tsx. No son menos importantes.
+8) GENERACIÓN DESDE CERO: Cuando generes archivos nuevos, usa estructuras simples y directas. Evita ternarios anidados dentro de JSX return(). Prefiere variables auxiliares antes del return para lógica compleja.
 `.trim();
 
 export type SyntaxClosureAudit = {
@@ -254,7 +255,14 @@ export function runIntegrityShield(
   files = files.map((f) => {
     if (!/\.(tsx|jsx|ts)$/i.test(f.name)) return f;
     const base = baselineMap.get(normalizePath(f.name));
-    if (!base) return f;
+    if (!base) {
+      // Archivo nuevo — auditar sintaxis aunque no tenga baseline
+      const syntax = auditSyntaxClosure(f.content);
+      if (!syntax.ok) {
+        notes.push(`sintaxis inválida en archivo nuevo ${f.name}: ${syntax.messages.join("; ")} — se requiere corrección`);
+      }
+      return f;
+    }
 
     if (
       /^app\.(tsx|jsx)$/i.test(normalizePath(f.name)) &&

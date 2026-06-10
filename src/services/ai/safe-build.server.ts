@@ -120,9 +120,25 @@ export async function runSafeBuildQualityLoop(
     actionableFix: diagnosis.actionableFix,
   });
 
+  // Incluir contenido de archivos con errores de sintaxis para reparación precisa
+  const errorFiles = firstAudit.issues
+    .filter((i) => i.severity === "error" && i.category === "syntax")
+    .map((i) => i.file)
+    .filter((v, idx, arr) => arr.indexOf(v) === idx)
+    .slice(0, 3);
+
+  const errorFilesContext = errorFiles
+    .map((name) => {
+      const f = files.find((f) => f.name === name);
+      if (!f) return "";
+      return `\n--- ARCHIVO CON ERROR: ${name} ---\n${f.content.slice(0, 3000)}\n--- FIN ${name} ---`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
   const fixInstruction = fixText
-    ? `[SAFE-BUILD / GAFCORE] Corrige el proyecto. Diagnóstico: ${diagnosis.rootCause}\n\nParche sugerido:\n${fixText}\n\nPedido original: ${input.instruction.slice(0, 400)}`
-    : `[SAFE-BUILD] ${buildValidationFixInstruction(firstAudit.issues, input.instruction)}\n\nContexto diagnóstico: ${diagnosis.userFriendlyMessage}`;
+    ? `[SAFE-BUILD / GAFCORE] Corrige el proyecto. Diagnóstico: ${diagnosis.rootCause}\n\nParche sugerido:\n${fixText}\n\nArchivos con errores que DEBES corregir completamente:${errorFilesContext}\n\nPedido original: ${input.instruction.slice(0, 400)}`
+    : `[SAFE-BUILD] ${buildValidationFixInstruction(firstAudit.issues, input.instruction)}\n\nArchivos con errores que DEBES corregir completamente:${errorFilesContext}\n\nContexto diagnóstico: ${diagnosis.userFriendlyMessage}`;
 
   const repairModel = resolveSafeBuildRepairModel(input.gateway, Boolean(input.deepMode));
 
