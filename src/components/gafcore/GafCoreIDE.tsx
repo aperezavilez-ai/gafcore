@@ -2074,7 +2074,7 @@ export function GafCoreIDE() {
             </div>
           )}
         </main>
-        {loaded && getUserSupabase() && !currentProjectId ? (
+        {loaded && getUserSupabase() && !currentProjectId && !newProjectDialogOpen ? (
           <div
             className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 border-t border-border bg-background/95 px-6 text-center backdrop-blur-sm"
             role="status"
