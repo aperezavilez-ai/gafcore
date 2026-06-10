@@ -126,16 +126,17 @@ async function waitForAuthSession(
   sb: NonNullable<ReturnType<typeof getUserSupabase>>,
   maxMs = 8_000,
 ): Promise<boolean> {
+  // Intentar refresh inmediato primero para hidratar desde cookie
+  try {
+    const { data: refreshData } = await sb.auth.refreshSession();
+    if (refreshData.session?.access_token) return true;
+  } catch {}
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     const { data } = await sb.auth.getSession();
     if (data.session?.access_token) return true;
     await new Promise((r) => setTimeout(r, 200));
   }
-  try {
-    const { data } = await sb.auth.refreshSession();
-    if (data.session?.access_token) return true;
-  } catch {}
   return false;
 }
 
@@ -198,6 +199,7 @@ export async function createProject(name: string): Promise<ProjectRow | null> {
 export async function renameProject(id: string, name: string): Promise<boolean> {
   const sb = getUserSupabase();
   if (!sb) return false;
+  await waitForAuthSession(sb);
   const { error } = await sb.from("projects").update({ name }).eq("id", id);
   if (error) {
     console.error("[Supabase] rename project error:", error);
