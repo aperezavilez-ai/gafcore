@@ -129,14 +129,26 @@ function GafcoreProjectsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      // Usar el API del servidor directamente — usa supabaseAdmin y Bearer token,
-      // evita problemas de cliente Supabase en el browser.
-      const result = await gafcoreAuthJsonFetch<{ ok: boolean; projects: ProjectRow[] }>(
-        "/api/gafcore/projects-list",
-      );
-      const list = result.projects ?? [];
-      console.log("[projects] API result:", list.length, list);
-      setProjects(list);
+      // Usar GET al endpoint — usa supabaseAdmin con Bearer token
+      const { getAuthAccessToken, hydrateAuthFromStorage, initAuthOnce } = await import("@/hooks/useAuth");
+      await initAuthOnce();
+      let token = await getAuthAccessToken();
+      if (!token) {
+        await hydrateAuthFromStorage(5_000);
+        token = await getAuthAccessToken();
+      }
+      if (!token) {
+        toast.error("Inicia sesión para ver tus proyectos.");
+        return;
+      }
+      const res = await fetch("/api/gafcore/projects-list", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json() as { ok: boolean; projects?: ProjectRow[]; error?: string };
+      console.log("[projects] GET result:", data);
+      if (!data.ok) throw new Error(data.error ?? "Error del servidor");
+      setProjects(data.projects ?? []);
     } catch (e) {
       console.error(e);
       toast.error("No se pudieron cargar los proyectos.");
