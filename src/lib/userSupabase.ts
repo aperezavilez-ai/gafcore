@@ -99,23 +99,19 @@ export function getUserSupabase(): SupabaseClient | null {
   }
 }
 
-/** Versión async de getUserSupabase — en producción espera al cliente dinámico. */
+/** Versión async — siempre preferir cliente dinámico (mismo JWT que useAuth). */
 export async function getUserSupabaseAsync(): Promise<SupabaseClient | null> {
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname.toLowerCase();
-    if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
-      try {
-        return (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
-      } catch {
-        return defaultSupabase as unknown as SupabaseClient;
-      }
-    }
+  if (typeof window === "undefined") return null;
+  try {
+    await initAuthOnce();
+    return (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
+  } catch {
+    return getUserSupabase();
   }
-  return getUserSupabase();
 }
 
 export async function ensureProjectId(): Promise<string | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
 
   // Validate cached id actually exists in the projects table
@@ -513,9 +509,7 @@ export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,
 ): Promise<SaveProjectFilesResult> {
-  const sb = getUserSupabase();
-  if (!sb) return { ok: false, reason: "no_client" };
-  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
+  if (projectSaveSuppressed) return { ok: true };
 
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
@@ -524,8 +518,34 @@ export async function saveProjectFilesDetailed(
   const generation = allocateProjectSaveGeneration(projectId);
   const snapshot = files.map((f) => ({ ...f }));
 
-  return runSerializedProjectSave(projectId, () => {
-    if (isProjectSaveGenerationStale(projectId, generation)) return Promise.resolve({ ok: true });
+  return runSerializedProjectSave(projectId, async () => {
+    if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
+
+    // API servidor (service role) — misma vía que crear/listar
+    try {
+      const api = await gafcoreAuthJsonFetch<{ ok: boolean; error?: string }>(
+        "/api/gafcore/projects-files-save",
+        {
+          projectId,
+          files: snapshot.map((f) => ({
+            name: f.name,
+            language: f.language,
+            content: f.content,
+          })),
+        },
+      );
+      if (api.ok) return { ok: true };
+    } catch (e) {
+      console.warn("[Supabase] save files API fallback:", e);
+    }
+
+    const sb = await getUserSupabaseAsync();
+    if (!sb) return { ok: false, reason: "no_client" };
+    await waitForAuthSession(sb);
+    if (!(await hasActiveAuthSession(sb))) {
+      return { ok: false, reason: "no_client", detail: "session_required" };
+    }
+
     return writeProjectFilesToDb(sb, snapshot, projectId, generation);
   });
 }

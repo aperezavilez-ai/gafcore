@@ -41,6 +41,7 @@ import { Route as ApiGafcoreVercelOauthStatusRouteImport } from './routes/api/ga
 import { Route as ApiGafcoreVercelOauthStartRouteImport } from './routes/api/gafcore/vercel-oauth-start'
 import { Route as ApiGafcorePublishRouteImport } from './routes/api/gafcore/publish'
 import { Route as ApiGafcoreProjectsListRouteImport } from './routes/api/gafcore/projects-list'
+import { Route as ApiGafcoreProjectsFilesSaveRouteImport } from './routes/api/gafcore/projects-files-save'
 import { Route as ApiGafcoreProjectsDeleteRouteImport } from './routes/api/gafcore/projects-delete'
 import { Route as ApiGafcoreProjectsCreateRouteImport } from './routes/api/gafcore/projects-create'
 import { Route as ApiGafcoreProjectTemplatesRouteImport } from './routes/api/gafcore/project-templates'
@@ -232,6 +233,12 @@ const ApiGafcoreProjectsListRoute = ApiGafcoreProjectsListRouteImport.update({
   path: '/api/gafcore/projects-list',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreProjectsFilesSaveRoute =
+  ApiGafcoreProjectsFilesSaveRouteImport.update({
+    id: '/api/gafcore/projects-files-save',
+    path: '/api/gafcore/projects-files-save',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGafcoreProjectsDeleteRoute =
   ApiGafcoreProjectsDeleteRouteImport.update({
     id: '/api/gafcore/projects-delete',
@@ -410,6 +417,7 @@ export interface FileRoutesByFullPath {
   '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
+  '/api/gafcore/projects-files-save': typeof ApiGafcoreProjectsFilesSaveRoute
   '/api/gafcore/projects-list': typeof ApiGafcoreProjectsListRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
   '/api/gafcore/vercel-oauth-start': typeof ApiGafcoreVercelOauthStartRoute
@@ -471,6 +479,7 @@ export interface FileRoutesByTo {
   '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
+  '/api/gafcore/projects-files-save': typeof ApiGafcoreProjectsFilesSaveRoute
   '/api/gafcore/projects-list': typeof ApiGafcoreProjectsListRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
   '/api/gafcore/vercel-oauth-start': typeof ApiGafcoreVercelOauthStartRoute
@@ -533,6 +542,7 @@ export interface FileRoutesById {
   '/api/gafcore/project-templates': typeof ApiGafcoreProjectTemplatesRoute
   '/api/gafcore/projects-create': typeof ApiGafcoreProjectsCreateRoute
   '/api/gafcore/projects-delete': typeof ApiGafcoreProjectsDeleteRoute
+  '/api/gafcore/projects-files-save': typeof ApiGafcoreProjectsFilesSaveRoute
   '/api/gafcore/projects-list': typeof ApiGafcoreProjectsListRoute
   '/api/gafcore/publish': typeof ApiGafcorePublishRoute
   '/api/gafcore/vercel-oauth-start': typeof ApiGafcoreVercelOauthStartRoute
@@ -596,6 +606,7 @@ export interface FileRouteTypes {
     | '/api/gafcore/project-templates'
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
+    | '/api/gafcore/projects-files-save'
     | '/api/gafcore/projects-list'
     | '/api/gafcore/publish'
     | '/api/gafcore/vercel-oauth-start'
@@ -657,6 +668,7 @@ export interface FileRouteTypes {
     | '/api/gafcore/project-templates'
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
+    | '/api/gafcore/projects-files-save'
     | '/api/gafcore/projects-list'
     | '/api/gafcore/publish'
     | '/api/gafcore/vercel-oauth-start'
@@ -718,6 +730,7 @@ export interface FileRouteTypes {
     | '/api/gafcore/project-templates'
     | '/api/gafcore/projects-create'
     | '/api/gafcore/projects-delete'
+    | '/api/gafcore/projects-files-save'
     | '/api/gafcore/projects-list'
     | '/api/gafcore/publish'
     | '/api/gafcore/vercel-oauth-start'
@@ -780,6 +793,7 @@ export interface RootRouteChildren {
   ApiGafcoreProjectTemplatesRoute: typeof ApiGafcoreProjectTemplatesRoute
   ApiGafcoreProjectsCreateRoute: typeof ApiGafcoreProjectsCreateRoute
   ApiGafcoreProjectsDeleteRoute: typeof ApiGafcoreProjectsDeleteRoute
+  ApiGafcoreProjectsFilesSaveRoute: typeof ApiGafcoreProjectsFilesSaveRoute
   ApiGafcoreProjectsListRoute: typeof ApiGafcoreProjectsListRoute
   ApiGafcorePublishRoute: typeof ApiGafcorePublishRoute
   ApiGafcoreVercelOauthStartRoute: typeof ApiGafcoreVercelOauthStartRoute
@@ -1041,6 +1055,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreProjectsListRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/projects-files-save': {
+      id: '/api/gafcore/projects-files-save'
+      path: '/api/gafcore/projects-files-save'
+      fullPath: '/api/gafcore/projects-files-save'
+      preLoaderRoute: typeof ApiGafcoreProjectsFilesSaveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/projects-delete': {
       id: '/api/gafcore/projects-delete'
       path: '/api/gafcore/projects-delete'
@@ -1271,6 +1292,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGafcoreProjectTemplatesRoute: ApiGafcoreProjectTemplatesRoute,
   ApiGafcoreProjectsCreateRoute: ApiGafcoreProjectsCreateRoute,
   ApiGafcoreProjectsDeleteRoute: ApiGafcoreProjectsDeleteRoute,
+  ApiGafcoreProjectsFilesSaveRoute: ApiGafcoreProjectsFilesSaveRoute,
   ApiGafcoreProjectsListRoute: ApiGafcoreProjectsListRoute,
   ApiGafcorePublishRoute: ApiGafcorePublishRoute,
   ApiGafcoreVercelOauthStartRoute: ApiGafcoreVercelOauthStartRoute,

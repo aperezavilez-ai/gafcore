@@ -112,32 +112,47 @@ function GafcoreProjectsPage() {
     setLoading(true);
     try {
       await initAuthOnce();
-      const token = await getAuthAccessToken();
+      let token = await getAuthAccessToken();
       if (!token) {
         toast.error("Inicia sesión para ver tus proyectos.");
         setProjects([]);
         return;
       }
 
+      let list: ProjectRow[] = [];
+
       const res = await fetch("/api/gafcore/projects-list", {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
       });
-
       const data = (await res.json()) as {
         ok: boolean;
         projects?: ProjectRow[];
         error?: string;
       };
 
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error ?? `Error del servidor (HTTP ${res.status})`);
+      if (res.ok && data.ok && Array.isArray(data.projects)) {
+        list = data.projects;
+      } else {
+        const post = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[]; error?: string }>(
+          "/api/gafcore/projects-list",
+        );
+        if (post.ok && Array.isArray(post.projects)) {
+          list = post.projects;
+        } else {
+          throw new Error(data.error ?? post.error ?? `HTTP ${res.status}`);
+        }
       }
 
-      setProjects(data.projects ?? []);
+      setProjects(list);
     } catch (e) {
       console.error("[projects] refresh error:", e);
-      toast.error("No se pudieron cargar los proyectos.");
+      const msg = e instanceof Error ? e.message : "";
+      if (msg === "server_misconfigured") {
+        toast.error("Falta SUPABASE_SERVICE_ROLE_KEY en el servidor (.env.local).");
+      } else {
+        toast.error("No se pudieron cargar los proyectos.");
+      }
     } finally {
       setLoading(false);
     }

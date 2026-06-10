@@ -250,6 +250,14 @@ export default {
       const { handleGafcoreProjectsListPost } = await import("./lib/gafcore-projects-http.server");
       return handleGafcoreProjectsListPost(request);
     }
+    if (request.method === "GET" && path === "/api/gafcore/projects-list") {
+      const { handleGafcoreProjectsListGet } = await import("./lib/gafcore-projects-http.server");
+      return handleGafcoreProjectsListGet(request);
+    }
+    if (request.method === "POST" && path === "/api/gafcore/projects-files-save") {
+      const { handleGafcoreProjectsFilesSavePost } = await import("./lib/gafcore-projects-http.server");
+      return handleGafcoreProjectsFilesSavePost(request);
+    }
     if (request.method === "POST" && path === "/api/gafcore/projects-create") {
       const { handleGafcoreProjectsCreatePost } = await import("./lib/gafcore-projects-http.server");
       return handleGafcoreProjectsCreatePost(request);

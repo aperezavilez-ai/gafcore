@@ -91,6 +91,72 @@ export async function listProjectsForUser(
   }
 }
 
+export type ProjectFileSaveRow = {
+  name: string;
+  language?: string;
+  content: string;
+};
+
+/** Guarda archivos del proyecto (service role — evita fallos RLS en cliente). */
+export async function saveProjectFilesForUser(
+  userId: string,
+  projectId: string,
+  files: ProjectFileSaveRow[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const admin = await isGafcoreAdminUser(userId);
+    const { data: proj, error: qErr } = await supabaseAdmin
+      .from("projects")
+      .select("id, user_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (qErr || !proj?.id) {
+      return { ok: false, error: "project_not_found" };
+    }
+    if (!admin && proj.user_id !== userId) {
+      return { ok: false, error: "forbidden" };
+    }
+    if (!proj.user_id) {
+      await supabaseAdmin.from("projects").update({ user_id: userId }).eq("id", projectId);
+    }
+
+    const map = new Map<string, ProjectFileSaveRow>();
+    for (const f of files) map.set(f.name, f);
+    const rows = Array.from(map.values()).map((f) => ({
+      project_id: projectId,
+      name: f.name,
+      language: f.language ?? "plaintext",
+      content: f.content,
+    }));
+
+    const { error: delErr } = await supabaseAdmin
+      .from("project_files")
+      .delete()
+      .eq("project_id", projectId);
+    if (delErr) {
+      return { ok: false, error: delErr.message?.trim() || "delete_failed" };
+    }
+
+    if (rows.length > 0) {
+      const { error: insErr } = await supabaseAdmin.from("project_files").insert(rows);
+      if (insErr) {
+        return { ok: false, error: insErr.message?.trim() || "insert_failed" };
+      }
+    }
+
+    await supabaseAdmin
+      .from("projects")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", projectId);
+
+    return { ok: true };
+  } catch (e) {
+    console.error("[projects-api] save files exception:", e);
+    return adminUnavailable();
+  }
+}
+
 export async function createProjectForUser(
   userId: string,
   name: string,

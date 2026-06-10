@@ -9,6 +9,7 @@ import {
   deleteProjectForUser,
   listProjectTemplatesForUser,
   listProjectsForUser,
+  saveProjectFilesForUser,
 } from "@/lib/gafcore-projects-api.server";
 import { validateTemplateFiles } from "@/lib/gafcore-templates.shared";
 
@@ -38,6 +39,24 @@ const DeleteBodySchema = z.object({
   projectId: z.string().uuid(),
   approvalId: z.string().min(1).max(128).optional(),
 });
+
+const SaveFilesBodySchema = z.object({
+  projectId: z.string().uuid(),
+  files: z.array(FileRowSchema).max(500),
+});
+
+/** GET /api/gafcore/projects-list */
+export async function handleGafcoreProjectsListGet(request: Request): Promise<Response> {
+  const userId = await requireGafcoreApiUser(request);
+  if (userId instanceof Response) return userId;
+
+  const result = await listProjectsForUser(userId);
+  if (!result.ok) {
+    return json({ ok: false, error: result.error }, 503);
+  }
+
+  return json({ ok: true, projects: result.projects });
+}
 
 /** POST /api/gafcore/projects-list */
 export async function handleGafcoreProjectsListPost(request: Request): Promise<Response> {
@@ -109,6 +128,35 @@ export async function handleGafcoreProjectsDeletePost(request: Request): Promise
     userId,
     parsed.data.projectId,
     parsed.data.approvalId,
+  );
+  if (!result.ok) {
+    return json({ ok: false, error: result.error }, 400);
+  }
+
+  return json({ ok: true });
+}
+
+/** POST /api/gafcore/projects-files-save */
+export async function handleGafcoreProjectsFilesSavePost(request: Request): Promise<Response> {
+  const userId = await requireGafcoreApiUser(request);
+  if (userId instanceof Response) return userId;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = SaveFilesBodySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "invalid_body" }, 400);
+  }
+
+  const result = await saveProjectFilesForUser(
+    userId,
+    parsed.data.projectId,
+    parsed.data.files,
   );
   if (!result.ok) {
     return json({ ok: false, error: result.error }, 400);

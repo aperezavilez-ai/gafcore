@@ -14,6 +14,12 @@ export function ensureSupabaseSsrEnv(): void {
   ) {
     process.env.SUPABASE_PUBLISHABLE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY.trim();
   }
+  if (
+    !process.env.SUPABASE_PUBLISHABLE_KEY?.trim() &&
+    process.env.VITE_SUPABASE_ANON_KEY?.trim()
+  ) {
+    process.env.SUPABASE_PUBLISHABLE_KEY = process.env.VITE_SUPABASE_ANON_KEY.trim();
+  }
   if (!process.env.VITE_SUPABASE_URL?.trim() && process.env.SUPABASE_URL?.trim()) {
     process.env.VITE_SUPABASE_URL = process.env.SUPABASE_URL.trim();
   }
