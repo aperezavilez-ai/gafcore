@@ -133,12 +133,22 @@ function GafcoreProjectsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      let list = await listProjects();
-      // Si devuelve vacío pero hay sesión, reintentar una vez después de 1s
-      if (list.length === 0 && (user?.id || hasSession)) {
-        await new Promise((r) => setTimeout(r, 1000));
-        list = await listProjects();
+      // Usar endpoint API con autenticación por cookie
+      const res = await fetch("/api/gafcore/projects-list", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json() as { ok: boolean; projects?: ProjectRow[] };
+        if (data.ok && data.projects) {
+          setProjects(data.projects);
+          setLoading(false);
+          return;
+        }
       }
+      // Fallback al cliente Supabase
+      const list = await listProjects();
       setProjects(list);
     } catch (e) {
       console.error(e);
@@ -146,7 +156,7 @@ function GafcoreProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, hasSession]);
+  }, []);
 
   useEffect(() => {
     if (authLoading || graceChecking) return;
