@@ -164,6 +164,10 @@ export async function listProjects(): Promise<ProjectRow[]> {
   if (typeof window !== "undefined") {
     const host = window.location.hostname.toLowerCase();
     if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
+      // Garantizar que el token esté listo antes de hacer la query
+      const { getAuthAccessToken } = await import("@/hooks/useAuth");
+      const token = await getAuthAccessToken();
+      if (!token) return [];
       sb = (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
     } else {
       sb = getUserSupabase() as SupabaseClient;
