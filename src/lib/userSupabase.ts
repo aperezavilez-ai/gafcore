@@ -2,13 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
-import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
-import { getAuthAccessToken, initAuthOnce } from "@/hooks/useAuth";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
-import {
-  getGafcoreSupabaseBrowser,
-  getGafcoreSupabaseBrowserSync,
-} from "@/lib/gafcore-supabase-browser";
 
 export type SaveProjectFilesResult =
   | { ok: true }
@@ -70,14 +64,10 @@ export function getUserSupabase(): SupabaseClient | null {
   try {
     if (typeof window !== "undefined") {
       const host = window.location.hostname.toLowerCase();
-      // En producción de GafCore usar el cliente dinámico (mismo que useAuth),
-      // así la sesión JWT está disponible para RLS.
+      // En producción de GafCore no se debe usar config local legacy,
+      // porque puede apuntar a otro proyecto y romper guardado por RLS.
       if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
         localStorage.removeItem(CFG_KEY);
-        const synced = getGafcoreSupabaseBrowserSync();
-        if (synced) return synced as unknown as SupabaseClient;
-        // Cliente aún no inicializado — devolver defaultSupabase como fallback
-        // (se reemplazará en cuanto getGafcoreSupabaseBrowser resuelva)
         return defaultSupabase as unknown as SupabaseClient;
       }
     }
@@ -99,19 +89,8 @@ export function getUserSupabase(): SupabaseClient | null {
   }
 }
 
-/** Versión async — siempre preferir cliente dinámico (mismo JWT que useAuth). */
-export async function getUserSupabaseAsync(): Promise<SupabaseClient | null> {
-  if (typeof window === "undefined") return null;
-  try {
-    await initAuthOnce();
-    return (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
-  } catch {
-    return getUserSupabase();
-  }
-}
-
 export async function ensureProjectId(): Promise<string | null> {
-  const sb = await getUserSupabaseAsync();
+  const sb = getUserSupabase();
   if (!sb) return null;
 
   // Validate cached id actually exists in the projects table
@@ -147,12 +126,6 @@ async function waitForAuthSession(
   sb: NonNullable<ReturnType<typeof getUserSupabase>>,
   maxMs = 12_000,
 ): Promise<boolean> {
-  try {
-    const { data: refreshed } = await sb.auth.refreshSession();
-    if (refreshed.session?.access_token) return true;
-  } catch {
-    /* ignore */
-  }
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     const { data } = await sb.auth.getSession();
@@ -162,66 +135,10 @@ async function waitForAuthSession(
   return false;
 }
 
-async function mergeCachedProjectRow(projects: ProjectRow[]): Promise<ProjectRow[]> {
-  if (projects.length > 0) return projects;
-  const cachedId = getCurrentProjectId();
-  if (!cachedId) return projects;
-  const row = await fetchProjectRowById(cachedId);
-  return row ? [row] : projects;
-}
-
-async function fetchProjectRowById(projectId: string): Promise<ProjectRow | null> {
-  const sb = await getUserSupabaseAsync();
-  if (!sb) return null;
-  await waitForAuthSession(sb);
-  const { data, error } = await sb
-    .from("projects")
-    .select("id, name, created_at, updated_at, deploy_site_url, github_repo")
-    .eq("id", projectId)
-    .maybeSingle();
-  if (error || !data?.id) return null;
-  return data as ProjectRow;
-}
-
 export async function listProjects(): Promise<ProjectRow[]> {
-  await initAuthOnce();
-
-  const sb = await getUserSupabaseAsync();
-  if (sb) await waitForAuthSession(sb);
-
-  // 1) API POST (service role — incluye admin y evita RLS)
-  try {
-    const api = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[] }>(
-      "/api/gafcore/projects-list",
-    );
-    if (api.ok && Array.isArray(api.projects)) {
-      return await mergeCachedProjectRow(api.projects);
-    }
-  } catch (e) {
-    console.warn("[Supabase] list projects API POST:", e);
-  }
-
-  // 2) API GET con Bearer (respaldo)
-  try {
-    const token = await getAuthAccessToken();
-    if (token) {
-      const res = await fetch("/api/gafcore/projects-list", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { ok?: boolean; projects?: ProjectRow[] };
-        if (data.ok && Array.isArray(data.projects)) {
-          return await mergeCachedProjectRow(data.projects);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("[Supabase] list projects API GET:", e);
-  }
-
-  // 3) Cliente Supabase + RLS
+  const sb = getUserSupabase();
   if (!sb) return [];
+  await waitForAuthSession(sb);
 
   const query = async (select: string, orderCol: string) =>
     sb
@@ -238,20 +155,21 @@ export async function listProjects(): Promise<ProjectRow[]> {
     const fallback = await query("id, name, created_at, updated_at", "created_at");
     if (fallback.error) {
       console.error("[Supabase] list projects fallback error:", fallback.error);
-      return mergeCachedProjectRow([]);
+      return [];
     }
     data = fallback.data;
   }
 
   const rows = (data ?? []) as ProjectRow[];
-  if (rows.length > 0) return mergeCachedProjectRow(rows);
+  if (rows.length > 0) return rows;
 
+  // Reintento breve: proyecto recién creado puede no aparecer al instante
   await new Promise((r) => setTimeout(r, 400));
   const retry = await query("id, name, created_at, updated_at", "created_at");
   if (!retry.error && retry.data?.length) {
-    return mergeCachedProjectRow(retry.data as ProjectRow[]);
+    return retry.data as ProjectRow[];
   }
-  return mergeCachedProjectRow(rows);
+  return rows;
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {
@@ -509,7 +427,9 @@ export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,
 ): Promise<SaveProjectFilesResult> {
-  if (projectSaveSuppressed) return { ok: true };
+  const sb = getUserSupabase();
+  if (!sb) return { ok: false, reason: "no_client" };
+  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
@@ -518,34 +438,8 @@ export async function saveProjectFilesDetailed(
   const generation = allocateProjectSaveGeneration(projectId);
   const snapshot = files.map((f) => ({ ...f }));
 
-  return runSerializedProjectSave(projectId, async () => {
-    if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
-
-    // API servidor (service role) — misma vía que crear/listar
-    try {
-      const api = await gafcoreAuthJsonFetch<{ ok: boolean; error?: string }>(
-        "/api/gafcore/projects-files-save",
-        {
-          projectId,
-          files: snapshot.map((f) => ({
-            name: f.name,
-            language: f.language,
-            content: f.content,
-          })),
-        },
-      );
-      if (api.ok) return { ok: true };
-    } catch (e) {
-      console.warn("[Supabase] save files API fallback:", e);
-    }
-
-    const sb = await getUserSupabaseAsync();
-    if (!sb) return { ok: false, reason: "no_client" };
-    await waitForAuthSession(sb);
-    if (!(await hasActiveAuthSession(sb))) {
-      return { ok: false, reason: "no_client", detail: "session_required" };
-    }
-
+  return runSerializedProjectSave(projectId, () => {
+    if (isProjectSaveGenerationStale(projectId, generation)) return Promise.resolve({ ok: true });
     return writeProjectFilesToDb(sb, snapshot, projectId, generation);
   });
 }
