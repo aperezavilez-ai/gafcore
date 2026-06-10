@@ -14,7 +14,8 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { useAuth, initAuthOnce, getAuthAccessToken } from "@/hooks/useAuth";
+import { hydrateAuthFromStorage, initAuthOnce, useAuth } from "@/hooks/useAuth";
+import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,14 +38,14 @@ import { toast } from "sonner";
 import {
   clearCurrentProjectId,
   getCurrentProjectId,
+  listProjects,
   renameProject,
   setCurrentProjectId,
   type ProjectRow,
 } from "@/lib/userSupabase";
-import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
 import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
-import { activateProjectRow } from "@/core/project";
+import { activateProjectRow, readCachedProjectName } from "@/core/project";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
 import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
@@ -62,25 +63,34 @@ export const Route = createFileRoute("/gafcore_/projects")({
   }),
 });
 
-/** Llama al endpoint GET /api/gafcore/projects-list con Bearer token. */
-async function fetchProjectsList(): Promise<ProjectRow[]> {
-  await initAuthOnce();
-  const token = await getAuthAccessToken();
-  if (!token) throw new Error("Sin sesión");
+/** Misma cadena que crear proyecto: POST + service role en servidor. */
+async function loadProjectsFromApi(): Promise<ProjectRow[]> {
+  const res = await gafcoreAuthJsonFetch<{ ok: boolean; projects?: ProjectRow[]; error?: string }>(
+    "/api/gafcore/projects-list",
+  );
+  if (!res.ok || !Array.isArray(res.projects)) {
+    throw new Error(res.error ?? "list_failed");
+  }
+  return res.projects;
+}
 
-  const res = await fetch("/api/gafcore/projects-list", {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
-  });
+/** Respaldo: misma función que el menú del IDE. */
+async function loadProjectsFromClient(): Promise<ProjectRow[]> {
+  return listProjects();
+}
 
-  const data = (await res.json()) as { ok: boolean; projects?: ProjectRow[]; error?: string };
-  if (!data.ok) throw new Error(data.error ?? `Error del servidor (${res.status})`);
-  return data.projects ?? [];
+/** Si hay proyecto activo en caché y no viene en la lista, incluirlo (como el IDE). */
+function mergeActiveProject(list: ProjectRow[]): ProjectRow[] {
+  const activeId = getCurrentProjectId();
+  if (!activeId || list.some((p) => p.id === activeId)) return list;
+  const name = readCachedProjectName();
+  return [{ id: activeId, name: name === "GafCore" ? "Mi proyecto" : name }, ...list];
 }
 
 function GafcoreProjectsPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [bootReady, setBootReady] = useState(false);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -99,27 +109,55 @@ function GafcoreProjectsPage() {
 
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
+  useEffect(() => {
+    void (async () => {
+      await initAuthOnce();
+      await hydrateAuthFromStorage(5_000);
+      setBootReady(true);
+    })();
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await fetchProjectsList();
-      setProjects(list);
+      await initAuthOnce();
+      await hydrateAuthFromStorage(3_000);
+
+      let list: ProjectRow[] = [];
+      try {
+        list = await loadProjectsFromApi();
+      } catch (apiErr) {
+        console.warn("[projects] API list fallback:", apiErr);
+        list = await loadProjectsFromClient();
+      }
+
+      if (list.length === 0) {
+        list = await loadProjectsFromClient();
+      }
+
+      setProjects(mergeActiveProject(list));
     } catch (e) {
-      console.error("[projects] refresh error:", e);
-      toast.error("No se pudieron cargar los proyectos.");
+      console.error("[projects]", e);
+      const msg = e instanceof Error ? e.message : "";
+      if (msg === "server_misconfigured") {
+        toast.error("Falta SUPABASE_SERVICE_ROLE_KEY en el servidor.");
+      } else if (msg === "Inicia sesión para continuar.") {
+        toast.error("Inicia sesión para ver tus proyectos.");
+      } else {
+        toast.error("No se pudieron cargar los proyectos.");
+      }
+      setProjects(mergeActiveProject([]));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Cargar proyectos en cuanto useAuth resuelva la sesión
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !bootReady) return;
     if (!user?.id) return;
     void refresh();
-  }, [authLoading, user?.id, refresh]);
+  }, [authLoading, bootReady, user?.id, refresh]);
 
-  // Abrir dialog de nuevo proyecto si viene con ?newProject=1
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -128,8 +166,6 @@ function GafcoreProjectsPage() {
     url.searchParams.delete("newProject");
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   }, []);
-
-  const openNewProjectDialog = () => setNewProjectOpen(true);
 
   const onProjectCreated = async (
     project: { id: string; name: string; created_at: string },
@@ -141,7 +177,6 @@ function GafcoreProjectsPage() {
       created_at: project.created_at,
     });
     setNewProjectOpen(false);
-    // Esperar refresh antes de navegar para que el proyecto ya esté en la lista al regresar
     await refresh();
     void navigate({ to: "/gafcore/app" });
     toast.success(`Proyecto «${project.name}» listo en el editor`);
@@ -168,8 +203,15 @@ function GafcoreProjectsPage() {
   const commitRename = async () => {
     if (!renameTarget) return;
     const next = renameDraft.trim();
-    if (!next) { toast.error("El nombre no puede estar vacío"); return; }
-    if (next === renameTarget.name) { setRenameOpen(false); setRenameTarget(null); return; }
+    if (!next) {
+      toast.error("El nombre no puede estar vacío");
+      return;
+    }
+    if (next === renameTarget.name) {
+      setRenameOpen(false);
+      setRenameTarget(null);
+      return;
+    }
     const ok = await renameProject(renameTarget.id, next);
     if (ok) {
       toast.success("Proyecto renombrado");
@@ -206,7 +248,10 @@ function GafcoreProjectsPage() {
         "/api/gafcore/projects-delete",
         { projectId: deleteTarget.id, approvalId: deletePendingApproval.approvalId },
       );
-      if (!res.ok) { toast.error(res.error ?? "No se pudo eliminar"); return; }
+      if (!res.ok) {
+        toast.error(res.error ?? "No se pudo eliminar");
+        return;
+      }
       if (getCurrentProjectId() === deleteTarget.id) clearCurrentProjectId();
       setDeleteConfirmOpen(false);
       setDeleteTarget(null);
@@ -214,15 +259,13 @@ function GafcoreProjectsPage() {
       toast.success(`Proyecto «${deleteTarget.name}» eliminado`);
       await refresh();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "No se pudo eliminar";
-      toast.error(msg === "invalid_body" ? "Error al confirmar. Recarga e inténtalo de nuevo." : msg);
+      toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
     } finally {
       setDeleteConfirmBusy(false);
     }
   };
 
-  // Pantalla de carga mientras useAuth hidrata
-  if (authLoading) {
+  if (authLoading || !bootReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -230,8 +273,7 @@ function GafcoreProjectsPage() {
     );
   }
 
-  // Sin sesión
-  if (!user) {
+  if (!user?.id) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-foreground">
         <Lock className="h-10 w-10 text-muted-foreground" />
@@ -256,7 +298,9 @@ function GafcoreProjectsPage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <Button variant="ghost" size="icon" asChild className="shrink-0" aria-label="Volver al editor">
-              <Link to="/gafcore/app"><ArrowLeft className="h-5 w-5" /></Link>
+              <Link to="/gafcore/app">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
             </Button>
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold tracking-tight">Proyectos</h1>
@@ -265,7 +309,7 @@ function GafcoreProjectsPage() {
               </p>
             </div>
           </div>
-          <Button type="button" onClick={openNewProjectDialog}>
+          <Button type="button" onClick={() => setNewProjectOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Crear en el editor
           </Button>
@@ -304,12 +348,12 @@ function GafcoreProjectsPage() {
                 ? "Pulsa el botón de arriba para nombrar tu proyecto y abrir el editor."
                 : "Prueba otra búsqueda."}
             </p>
-            {projects.length === 0 && (
-              <Button type="button" className="mt-4" onClick={openNewProjectDialog}>
+            {projects.length === 0 ? (
+              <Button type="button" className="mt-4" onClick={() => setNewProjectOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Crear proyecto
               </Button>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -345,14 +389,20 @@ function GafcoreProjectsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuItem onSelect={() => { window.setTimeout(() => openRenameDialog(p), 0); }}>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              window.setTimeout(() => openRenameDialog(p), 0);
+                            }}
+                          >
                             <Pencil className="mr-2 h-4 w-4" />
                             Renombrar
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
-                            onSelect={() => { window.setTimeout(() => void beginDelete(p), 0); }}
+                            onSelect={() => {
+                              window.setTimeout(() => void beginDelete(p), 0);
+                            }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Eliminar
@@ -365,19 +415,26 @@ function GafcoreProjectsPage() {
                 <div className="border-t border-border px-3 py-2">
                   <div className="flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{p.name}</p>
-                    {p.id === getCurrentProjectId() && (
+                    {p.id === getCurrentProjectId() ? (
                       <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
                         Activo
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <span className="text-[10px] text-muted-foreground">
                       {p.updated_at
-                        ? new Date(p.updated_at).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })
+                        ? new Date(p.updated_at).toLocaleDateString("es", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })
                         : p.created_at
-                        ? new Date(p.created_at).toLocaleDateString("es", { day: "2-digit", month: "short" })
-                        : "—"}
+                          ? new Date(p.created_at).toLocaleDateString("es", {
+                              day: "2-digit",
+                              month: "short",
+                            })
+                          : "—"}
                     </span>
                     {p.deploy_site_url ? (
                       <a
@@ -398,7 +455,11 @@ function GafcoreProjectsPage() {
                   </div>
                   <p className="text-[11px] text-muted-foreground">
                     {p.created_at
-                      ? `Creado ${new Date(p.created_at).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}`
+                      ? `Creado ${new Date(p.created_at).toLocaleDateString("es", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}`
                       : "Proyecto GafCore"}
                   </p>
                 </div>
@@ -410,13 +471,17 @@ function GafcoreProjectsPage() {
 
       <NewProjectDialog open={newProjectOpen} onOpenChange={setNewProjectOpen} onCreated={onProjectCreated} />
 
-      <Dialog open={renameOpen} onOpenChange={(open) => { setRenameOpen(open); if (!open) setRenameTarget(null); }}>
+      <Dialog
+        open={renameOpen}
+        onOpenChange={(open) => {
+          setRenameOpen(open);
+          if (!open) setRenameTarget(null);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Renombrar proyecto</DialogTitle>
-            <DialogDescription>
-              El nombre se muestra en tarjetas y menús.
-            </DialogDescription>
+            <DialogDescription>El nombre se muestra en tarjetas y menús.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-2">
             <Label htmlFor="gafcore-rename-project">Nombre</Label>
@@ -425,12 +490,21 @@ function GafcoreProjectsPage() {
               value={renameDraft}
               onChange={(e) => setRenameDraft(e.target.value)}
               autoComplete="off"
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void commitRename(); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commitRename();
+                }
+              }}
             />
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>Cancelar</Button>
-            <Button type="button" onClick={() => void commitRename()}>Guardar</Button>
+            <Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void commitRename()}>
+              Guardar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -439,12 +513,17 @@ function GafcoreProjectsPage() {
         open={deleteConfirmOpen}
         onOpenChange={(open) => {
           setDeleteConfirmOpen(open);
-          if (!open) { setDeleteTarget(null); setDeletePendingApproval(null); }
+          if (!open) {
+            setDeleteTarget(null);
+            setDeletePendingApproval(null);
+          }
         }}
         title="Eliminar proyecto"
         summary={
           deletePendingApproval?.summary ??
-          (deleteTarget ? `Eliminar definitivamente «${deleteTarget.name}» y todos sus datos.` : "Esta acción no se puede deshacer.")
+          (deleteTarget
+            ? `Eliminar definitivamente «${deleteTarget.name}» y todos sus datos.`
+            : "Esta acción no se puede deshacer.")
         }
         risk={deletePendingApproval?.risk ?? null}
         confirmLabel="Eliminar definitivamente"
