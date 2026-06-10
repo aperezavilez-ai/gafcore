@@ -87,6 +87,15 @@ function GafcoreProjectsPage() {
 
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
+  // Hidratar sesión al cargar la página
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        void supabase.auth.refreshSession();
+      }
+    });
+  }, []);
+
   useEffect(() => {
     if (authLoading) return;
     if (user) {
