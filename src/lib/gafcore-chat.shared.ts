@@ -23,7 +23,7 @@ import {
   inferAiBrainTaskFromInstruction,
 } from "@/services/ai/design-engine.shared";
 import { prepareIncrementalEditSession } from "@/lib/gafcore-incremental-edit.shared";
-import { buildIntegrityShieldPromptAppend } from "@/lib/gafcore-integrity-shield.shared";
+import { buildIntegrityShieldPromptAppend, GAFCORE_INTEGRITY_SHIELD_RULE } from "@/lib/gafcore-integrity-shield.shared";
 import { GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
 
 export const gafcoreChatBodySchema = z.object({
@@ -404,7 +404,7 @@ export function buildGafcoreMessages(
   const mergedPriority = [...new Set([...priorityPaths, ...incremental.priorityPaths])];
   const incrementalNote = incremental.active
     ? `${incremental.promptAppend}${buildIntegrityShieldPromptAppend(allFiles, data.instruction)}`
-    : "";
+    : GAFCORE_INTEGRITY_SHIELD_RULE;
   const visionImages = extractVisionImageParts(allFiles);
   const hasVision = visionImages.length > 0;
   const model =

@@ -18,9 +18,10 @@ export const GAFCORE_INTEGRITY_SHIELD_RULE = `
 1) ANÁLISIS DE IMPACTO: Antes de editar, revisa el árbol de imports/componentes del contexto. Si tocas un hijo, no rompas dependencias del padre.
 2) PROHIBICIÓN DE ELIMINACIÓN: NO elimines imports, \`import type\`, hooks (useState, useEffect, useMemo, useCallback, useRef) ni tipos/interfaces que ya existan, salvo que el usuario pida explícitamente quitar/eliminar/borrar.
 3) INCREMENTAL: Añade funcionalidad extendiendo código; cada archivo modificado debe ser el contenido COMPLETO del archivo, no un fragmento incompleto.
-4) CIERRE OBLIGATORIO: Antes de responder, verifica mentalmente que cada \`{\`, \`(\` y tag JSX \`<\` tenga su cierre. Script error ≈ tag/import sin cerrar.
+4) CIERRE SINTÁCTICO OBLIGATORIO — REGLA MÁS IMPORTANTE: Antes de responder, cuenta manualmente cada \`{\` y su \`}\`, cada \`(\` y su \`)\`, cada tag JSX de apertura \`<Tag\` y su cierre \`</Tag>\` o \`/>\`. Si el conteo no coincide EXACTAMENTE, corrige antes de responder. UN SOLO par desbalanceado rompe toda la app. Esto aplica especialmente en generación desde cero.
 5) LAYOUT RAÍZ: Si el cambio es en un componente hijo (components/*), NO reescribas App.tsx/layout padre salvo que el usuario lo pida. Mantén la estructura del padre intacta.
 6) ANTI-CRASH: No devuelvas componentes que retornen \`undefined\`; usa \`null\` o JSX vacío con mensaje. Accede a props con optional chaining cuando duden.
+7) GENERACIÓN DESDE CERO: Cuando generes archivos nuevos, usa estructuras simples y directas. Evita ternarios anidados dentro de JSX return(). Prefiere variables auxiliares antes del return para lógica compleja.
 `.trim();
 
 export type SyntaxClosureAudit = {
