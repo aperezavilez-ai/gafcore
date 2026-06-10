@@ -38,7 +38,6 @@ import { toast } from "sonner";
 import {
   clearCurrentProjectId,
   getCurrentProjectId,
-  listProjects,
   renameProject,
   setCurrentProjectId,
   type ProjectRow,
@@ -130,14 +129,13 @@ function GafcoreProjectsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      let list = await listProjects();
-      // Si devuelve vacío pero hay sesión, reintentar una vez después de 2s
-      // (el proyecto recién creado puede tardar en propagarse con RLS)
-      if (list.length === 0 && (user?.id || hasSession)) {
-        await new Promise((r) => setTimeout(r, 2000));
-        list = await listProjects();
-      }
-      console.log("[projects] listProjects result:", list.length, list);
+      // Usar el API del servidor directamente — usa supabaseAdmin y Bearer token,
+      // evita problemas de cliente Supabase en el browser.
+      const result = await gafcoreAuthJsonFetch<{ ok: boolean; projects: ProjectRow[] }>(
+        "/api/gafcore/projects-list",
+      );
+      const list = result.projects ?? [];
+      console.log("[projects] API result:", list.length, list);
       setProjects(list);
     } catch (e) {
       console.error(e);
@@ -145,7 +143,7 @@ function GafcoreProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, hasSession]);
+  }, []);
 
   useEffect(() => {
     if (authLoading || graceChecking) return;
