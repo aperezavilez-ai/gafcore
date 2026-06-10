@@ -14,7 +14,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { hydrateAuthFromStorage, initAuthOnce, useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,7 +70,8 @@ function GafcoreProjectsPage() {
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [sessionReady, setSessionReady] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  const [graceChecking, setGraceChecking] = useState(true);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<ProjectRow | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -86,27 +87,57 @@ function GafcoreProjectsPage() {
 
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
+  // Hidratar sesión al cargar la página
   useEffect(() => {
     void (async () => {
-      try {
-        await initAuthOnce();
-        await hydrateAuthFromStorage(5_000);
-      } catch {
-        /* ignore */
-      } finally {
-        setSessionReady(true);
+      const sb = await getGafcoreSupabaseBrowser();
+      const { data } = await sb.auth.getSession();
+      if (!data.session) {
+        void sb.auth.refreshSession();
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (user) {
+      setHasSession(true);
+      setGraceChecking(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const sb = await getGafcoreSupabaseBrowser();
+      for (let i = 0; i < 50; i++) {
+        if (cancelled) return;
+        const { data } = await sb.auth.getSession();
+        if (data.session?.user) {
+          if (!cancelled) {
+            setHasSession(true);
+            setGraceChecking(false);
+          }
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      if (!cancelled) setGraceChecking(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       let list = await listProjects();
-      if (list.length === 0 && user?.id) {
-        await new Promise((r) => setTimeout(r, 1500));
+      // Si devuelve vacío pero hay sesión, reintentar una vez después de 2s
+      // (el proyecto recién creado puede tardar en propagarse con RLS)
+      if (list.length === 0 && (user?.id || hasSession)) {
+        await new Promise((r) => setTimeout(r, 2000));
         list = await listProjects();
       }
+      console.log("[projects] listProjects result:", list.length, list);
       setProjects(list);
     } catch (e) {
       console.error(e);
@@ -114,35 +145,13 @@ function GafcoreProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, hasSession]);
 
   useEffect(() => {
-    if (!sessionReady || authLoading) return;
-    if (!user?.id) return;
+    if (authLoading || graceChecking) return;
+    if (!user?.id && !hasSession) return;
     void refresh();
-  }, [sessionReady, authLoading, user?.id, refresh]);
-
-  useEffect(() => {
-    if (!sessionReady) return;
-    let subscription: { unsubscribe: () => void } | null = null;
-    void (async () => {
-      try {
-        const sb = await getGafcoreSupabaseBrowser();
-        const { data } = sb.auth.onAuthStateChange((event, session) => {
-          if (
-            session &&
-            (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION")
-          ) {
-            void refresh();
-          }
-        });
-        subscription = data.subscription;
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => subscription?.unsubscribe();
-  }, [sessionReady, refresh]);
+  }, [authLoading, graceChecking, user?.id, hasSession, refresh]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -265,7 +274,7 @@ function GafcoreProjectsPage() {
     }
   };
 
-  if (authLoading || !sessionReady) {
+  if (authLoading || graceChecking) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -273,7 +282,7 @@ function GafcoreProjectsPage() {
     );
   }
 
-  if (!user?.id) {
+  if (!user && !hasSession) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-foreground">
         <Lock className="h-10 w-10 text-muted-foreground" />
