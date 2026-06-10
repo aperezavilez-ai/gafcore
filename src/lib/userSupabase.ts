@@ -3,6 +3,8 @@ import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
+import { getGafcoreSupabaseBrowserSync } from "@/lib/gafcore-supabase-browser";
+import { initAuthOnce } from "@/hooks/useAuth";
 import { supabase as defaultSupabase } from "@/integrations/supabase/client";
 
 export type SaveProjectFilesResult =
@@ -63,13 +65,14 @@ function isRlsAuthError(message: string | undefined): boolean {
 
 export function getUserSupabase(): SupabaseClient | null {
   try {
+    const browser = getGafcoreSupabaseBrowserSync();
+    if (browser) return browser;
+
     if (typeof window !== "undefined") {
       const host = window.location.hostname.toLowerCase();
-      // En producción de GafCore no se debe usar config local legacy,
-      // porque puede apuntar a otro proyecto y romper guardado por RLS.
       if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
         localStorage.removeItem(CFG_KEY);
-        return defaultSupabase as unknown as SupabaseClient;
+        return null;
       }
     }
     const cfg = JSON.parse(localStorage.getItem(CFG_KEY) ?? "{}");
@@ -90,8 +93,19 @@ export function getUserSupabase(): SupabaseClient | null {
   }
 }
 
+/** Cliente Supabase del usuario con sesión hidratada (preferir sobre getUserSupabase sync). */
+export async function getUserSupabaseAsync(): Promise<SupabaseClient | null> {
+  try {
+    await initAuthOnce();
+    const { getGafcoreSupabaseBrowser } = await import("@/lib/gafcore-supabase-browser");
+    return await getGafcoreSupabaseBrowser();
+  } catch {
+    return getUserSupabase();
+  }
+}
+
 export async function ensureProjectId(): Promise<string | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
 
   // Validate cached id actually exists in the projects table
@@ -154,7 +168,7 @@ export async function listProjects(): Promise<ProjectRow[]> {
     console.warn("[Supabase] list projects API fallback:", e);
   }
 
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return [];
   await waitForAuthSession(sb);
 
@@ -190,8 +204,9 @@ export async function listProjects(): Promise<ProjectRow[]> {
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
+  await waitForAuthSession(sb);
   const { data: userRes } = await sb.auth.getUser();
   const userId = userRes?.user?.id;
   const payload: Record<string, unknown> = { name };
@@ -209,7 +224,7 @@ export async function createProject(name: string): Promise<ProjectRow | null> {
 }
 
 export async function renameProject(id: string, name: string): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   await waitForAuthSession(sb);
   const { error } = await sb.from("projects").update({ name }).eq("id", id);
@@ -301,8 +316,9 @@ export function clearCurrentProjectId() {
 export async function loadProjectFiles(
   explicitProjectId?: string | null,
 ): Promise<FileItem[] | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
+  await waitForAuthSession(sb);
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
   if (!projectId) return null;
@@ -337,9 +353,13 @@ export async function upsertSingleProjectFile(
   projectId: string,
   file: FileItem,
 ): Promise<{ ok: boolean; detail?: string }> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return { ok: false, detail: "no_client" };
-  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
+  await waitForAuthSession(sb);
+  if (projectSaveSuppressed) return { ok: true };
+  if (!(await hasActiveAuthSession(sb))) {
+    return { ok: false, detail: "session_required" };
+  }
 
   const { data: owned } = await sb.from("projects").select("id").eq("id", projectId).maybeSingle();
   if (!owned?.id) return { ok: false, detail: "project_not_visible" };
@@ -445,9 +465,13 @@ export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,
 ): Promise<SaveProjectFilesResult> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return { ok: false, reason: "no_client" };
-  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
+  await waitForAuthSession(sb);
+  if (projectSaveSuppressed) return { ok: true };
+  if (!(await hasActiveAuthSession(sb))) {
+    return { ok: false, reason: "no_client", detail: "session_required" };
+  }
 
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();

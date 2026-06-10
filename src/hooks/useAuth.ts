@@ -103,7 +103,30 @@ export function initAuthOnce() {
 
 export async function getAuthAccessToken() {
   await initAuthOnce();
-  return authState.session?.access_token ?? null;
+  if (authState.session?.access_token) return authState.session.access_token;
+
+  try {
+    const supabase = await getGafcoreSupabaseBrowser();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        applySession(data.session, false);
+        return data.session.access_token;
+      }
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      if (refreshed.session?.access_token) {
+        applySession(refreshed.session, false);
+        return refreshed.session.access_token;
+      }
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return null;
 }
 
 export function useAuth() {

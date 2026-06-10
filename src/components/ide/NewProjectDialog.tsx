@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { hydrateAuthFromStorage, initAuthOnce } from "@/hooks/useAuth";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import { clearPendingMarketplaceTemplate } from "@/lib/gafcore-marketplace-template-pending.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
@@ -35,6 +36,9 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
     if (!trimmedName) return;
     setLoading(true);
     try {
+      await initAuthOnce();
+      await hydrateAuthFromStorage(4_000);
+
       const result = await gafcoreAuthJsonFetch<{
         ok: boolean;
         project?: { id: string; name: string; created_at: string };

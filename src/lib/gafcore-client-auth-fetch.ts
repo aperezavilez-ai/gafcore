@@ -1,20 +1,20 @@
-import { supabase } from "@/integrations/supabase/client";
-import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
+import {
+  getAuthAccessToken,
+  hydrateAuthFromStorage,
+  initAuthOnce,
+} from "@/hooks/useAuth";
 
 async function resolveAuthAccessToken(): Promise<string | null> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (sessionData.session?.access_token) {
-    return sessionData.session.access_token;
+  await initAuthOnce();
+  let token = await getAuthAccessToken();
+  if (token) return token;
+
+  if (await hydrateAuthFromStorage(5_000)) {
+    token = await getAuthAccessToken();
+    if (token) return token;
   }
-  try {
-    const sb = await getGafcoreSupabaseBrowser();
-    const { data } = await sb.auth.getSession();
-    if (data.session?.access_token) return data.session.access_token;
-    const { data: refreshed } = await sb.auth.refreshSession();
-    return refreshed.session?.access_token ?? null;
-  } catch {
-    return null;
-  }
+
+  return null;
 }
 
 export async function gafcoreAuthJsonFetch<T = unknown>(

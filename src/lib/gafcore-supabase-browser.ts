@@ -84,3 +84,8 @@ export async function getGafcoreSupabaseBrowser(): Promise<SupabaseClient<Databa
     browserClientPromise = null;
   }
 }
+
+/** Cliente ya inicializado (null hasta el primer await de getGafcoreSupabaseBrowser). */
+export function getGafcoreSupabaseBrowserSync(): SupabaseClient<Database> | null {
+  return browserClient;
+}
