@@ -3097,6 +3097,7 @@ export function ChatPanel({
       let replyText = sanitizeUserFacingAiText(
         softenRoboticReply(raw, result.reply || "Listo."),
       );
+      replyText = replyText.replace(/\n*\[(syntax|import|build)\][^\n]*/gi, "").trim();
       // Mostrar respuesta en cuanto la IA responde (no esperar personalización/reintentos).
       appendMessageDeduped("ai", replyText);
       scrollChatToBottomSoon("auto");
@@ -3190,13 +3191,18 @@ export function ChatPanel({
           }
         } else if (!applyBlocked) {
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
+          setLastError(null);
         }
+
+        const syntaxOnlyErrors =
+          issues.length > 0 &&
+          issues.every((i) => i.severity === "error" && i.category === "syntax");
 
         const buildSucceeded =
           !applyBlocked &&
-          !hasBlockingValidationIssues(issues) &&
+          !stillWelcomeTemplate &&
           !generationValidationBlocked &&
-          !stillWelcomeTemplate;
+          (!hasBlockingValidationIssues(issues) || syntaxOnlyErrors);
 
         if (buildSucceeded) {
           const buildLabel = (userFacingRaw || raw || coreText || instruction).trim().slice(0, 200);
@@ -3263,7 +3269,7 @@ export function ChatPanel({
                 retryResult.files,
                 fixInstruction,
                 raw,
-                { runFunctionalAudit: true },
+                { runFunctionalAudit: true, serverDelivered: true },
               );
               merged = retryBatch.merged;
               issues = retryBatch.issues;
@@ -3297,7 +3303,7 @@ export function ChatPanel({
               }
             }
           }
-        } else if (issues.some((i) => i.severity === "error")) {
+        } else if (issues.some((i) => i.severity === "error") && !syntaxOnlyErrors) {
           const blockText = formatValidationForUser(
             issues.filter((i) => i.severity === "error"),
           );

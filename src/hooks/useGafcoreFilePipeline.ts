@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { prepareWorkspaceForPreview } from "@/core/pipeline/apply-build.shared";
 import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
+import { repairCommonJsxSyntaxErrors } from "@/lib/gafcore-media.shared";
 import { mergeGeneratedIntoWorkspace } from "@/core/pipeline/file-merge.shared";
 import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import { validateGafcoreSources } from "@/lib/gafcore-validate.functions";
@@ -238,52 +239,27 @@ export function useGafcoreFilePipeline({
         language: f.language ?? "typescript",
       }));
 
-      if (prepared.blocking) {
-        logPipelineEvent(
-          "warn",
-          "apply.blocked_local_audit",
-          pipelineTraceMeta(
-            {
-              traceId: requestEpochRef.current,
-              projectId: genProjectId,
-              phase: "apply",
-              pipelineRunId: pipelineRunIdRef.current,
-            },
-            { issueCount: prepared.issues.length },
-          ),
-        );
-        return { merged: baseFiles, issues: prepared.issues, blocked: true };
-      }
-
       let transpile = await transpileValidate(merged);
       if (!transpile.ok) {
-        const healed = healUntilStable(merged);
-        if (healed.healed) {
-          merged = healed.files.map((f) => ({
-            name: f.name,
-            content: f.content,
-            language: f.language ?? "typescript",
-          }));
-          transpile = await transpileValidate(merged);
-        }
+        merged = merged.map((f) =>
+          /\.(tsx|jsx)$/i.test(f.name)
+            ? { ...f, content: repairCommonJsxSyntaxErrors(f.content) }
+            : f,
+        );
+        const reHealed = healUntilStable(merged);
+        merged = reHealed.files.map((f) => ({
+          name: f.name,
+          content: f.content,
+          language: f.language ?? "typescript",
+        }));
+        transpile = await transpileValidate(merged);
       }
 
-      if (!transpile.ok) {
+      const applyBlocked = !transpile.ok;
+
+      if (applyBlocked) {
         const sourceErr = transpile.errors.map((e) => `${e.name}: ${e.message}`).join("\n");
         setLastError(sourceErr);
-        logPipelineEvent(
-          "warn",
-          "apply.blocked_transpile",
-          pipelineTraceMeta(
-            {
-              traceId: requestEpochRef.current,
-              projectId: genProjectId,
-              phase: "apply",
-              pipelineRunId: pipelineRunIdRef.current,
-            },
-            { errors: transpile.errors.length },
-          ),
-        );
         if (
           isPreviewAutofixAiEnabled() &&
           shouldAttemptAiAutofix(sourceErr) &&
@@ -291,11 +267,7 @@ export function useGafcoreFilePipeline({
         ) {
           scheduleRuntimeAutofixRef.current(sourceErr);
         }
-        return {
-          merged: baseFiles,
-          issues: prepared.issues,
-          blocked: true,
-        };
+        return { merged: baseFiles, issues: prepared.issues, blocked: true };
       }
 
       if (isStaleProject()) {

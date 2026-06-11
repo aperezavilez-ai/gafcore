@@ -45,29 +45,19 @@ export function gateDeliveredFiles(
       ok: true,
       files: deliverFiles,
       issues: audit.issues,
-      userMessage: audit.issues.length > 0 ? formatValidationForUser(audit.issues) : "",
+      userMessage: "",
       fixInstruction: "",
     };
   }
 
   const fixInstruction = buildValidationFixInstruction(blocking, originalInstruction);
-  const syntaxOnly = blocking.every((i) => i.category === "syntax" || i.category === "import");
-  if (syntaxOnly && deliverFiles.length > 0) {
-    return {
-      ok: true,
-      files: deliverFiles,
-      issues: audit.issues,
-      userMessage: formatValidationForUser(blocking),
-      fixInstruction,
-    };
-  }
 
   if (deliverFiles.length > 0) {
     return {
       ok: true,
       files: deliverFiles,
-      issues: blocking,
-      userMessage: formatValidationForUser(blocking),
+      issues: audit.issues,
+      userMessage: "",
       fixInstruction,
     };
   }

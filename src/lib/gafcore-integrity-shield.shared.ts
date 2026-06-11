@@ -172,7 +172,7 @@ function fixJsxTagBalance(content: string, delta: number): string {
     const closers = [...tagsToClose].reverse().map((t) => `</${t}>`).join("");
     return insertBeforeReturnClose(content, closers);
   }
-  let out = content.trimEnd();
+  let out = fixJsxSurplusClosers(content).content;
   let remaining = -delta;
   while (remaining > 0) {
     const m = out.match(/<\/([A-Za-z][A-Za-z0-9.-]*)>\s*$/);
@@ -183,6 +183,34 @@ function fixJsxTagBalance(content: string, delta: number): string {
   return out.endsWith("\n") ? out : `${out}\n`;
 }
 
+/** Elimina cierres JSX huérfanos (p. ej. `</Carrito></header>` tras cerrar el return). */
+export function fixJsxSurplusClosers(content: string): { content: string; removed: number } {
+  const tagRe = /<\/?([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>/]*)?\/?>/g;
+  const orphans: { start: number; end: number }[] = [];
+  const stack: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(content)) !== null) {
+    const full = m[0];
+    const name = m[1];
+    const start = m.index;
+    const end = start + full.length;
+    if (full.startsWith("</")) {
+      const idx = stack.lastIndexOf(name);
+      if (idx >= 0) stack.splice(idx, 1);
+      else orphans.push({ start, end });
+      continue;
+    }
+    if (full.endsWith("/>") || JSX_VOID_TAGS.has(name.toLowerCase())) continue;
+    stack.push(name);
+  }
+  if (orphans.length === 0) return { content, removed: 0 };
+  let out = content;
+  for (const o of orphans.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, o.start) + out.slice(o.end);
+  }
+  return { content: out, removed: orphans.length };
+}
+
 /**
  * Intenta autocorregir desbalances de llaves, paréntesis y tags JSX.
  * Devuelve el contenido corregido y notas de lo aplicado.
@@ -190,6 +218,11 @@ function fixJsxTagBalance(content: string, delta: number): string {
 export function autoFixSyntaxClosure(content: string): { content: string; fixes: string[] } {
   const fixes: string[] = [];
   let out = content;
+  const surplus = fixJsxSurplusClosers(out);
+  if (surplus.removed > 0) {
+    out = surplus.content;
+    fixes.push(`eliminados ${surplus.removed} cierre(s) JSX huérfano(s)`);
+  }
   let audit = auditSyntaxClosure(out);
   let guard = 0;
 

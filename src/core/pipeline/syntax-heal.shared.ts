@@ -1,4 +1,5 @@
 import { auditJsxTagBalance } from "@/lib/gafcore-incremental-edit.shared";
+import { repairCommonJsxSyntaxErrors } from "@/lib/gafcore-media.shared";
 import {
   auditSyntaxClosure,
   autoFixSyntaxClosure,
@@ -18,6 +19,24 @@ function fileNeedsSyntaxHeal(content: string): boolean {
   return auditJsxTagBalance(content) !== 0;
 }
 
+function healFileContent(content: string): { content: string; notes: string[] } {
+  const notes: string[] = [];
+  let out = repairCommonJsxSyntaxErrors(content);
+  if (out !== content) notes.push("reparación JSX común");
+
+  if (!fileNeedsSyntaxHeal(out)) {
+    return { content: out, notes };
+  }
+
+  const fixed = autoFixSyntaxClosure(out);
+  if (fixed.fixes.length > 0) {
+    out = fixed.content;
+    notes.push(...fixed.fixes);
+  }
+
+  return { content: out, notes };
+}
+
 /** Autocorrige llaves/JSX en archivos fuente antes de validar o mostrar preview. */
 export function healWorkspaceSyntax<T extends SyntaxHealableFile>(
   files: T[],
@@ -27,27 +46,20 @@ export function healWorkspaceSyntax<T extends SyntaxHealableFile>(
 
   const out = files.map((f) => {
     if (!/\.(tsx|jsx|ts)$/i.test(f.name)) return f;
-    if (!fileNeedsSyntaxHeal(f.content)) return f;
-
-    const fixed = autoFixSyntaxClosure(f.content);
-    if (fixed.fixes.length === 0) return f;
-
-    const after = auditSyntaxClosure(fixed.content);
-    const tagOk = auditJsxTagBalance(fixed.content) === 0;
-    if (!after.ok && !tagOk) return f;
-
+    const { content, notes: fileNotes } = healFileContent(f.content);
+    if (content === f.content) return f;
     healed = true;
-    notes.push(`${f.name}: ${fixed.fixes.join("; ")}`);
-    return { ...f, content: fixed.content };
+    notes.push(`${f.name}: ${fileNotes.join("; ")}`);
+    return { ...f, content };
   });
 
   return { files: out, healed, notes };
 }
 
-/** Repite heal hasta estabilizar o alcanzar maxPasses (evita un solo pase insuficiente). */
+/** Repite heal hasta estabilizar o alcanzar maxPasses. */
 export function healUntilStable<T extends SyntaxHealableFile>(
   files: T[],
-  maxPasses = 4,
+  maxPasses = 8,
 ): WorkspaceSyntaxHealResult<T> {
   let current = files;
   const notes: string[] = [];

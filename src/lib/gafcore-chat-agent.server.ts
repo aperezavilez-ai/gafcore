@@ -131,12 +131,8 @@ export async function runGafcoreAgentChatCompletion(input: {
     const gate = gateDeliveredFiles(input.contextFiles, safeFiles, input.instruction);
     if (gate.ok) {
       logDev("gafcore_agent_chat_ok", { attempt, files: gate.files.length });
-      const reply =
-        gate.issues.length > 0 && gate.userMessage
-          ? `${replyRaw}\n\n${gate.userMessage}`
-          : replyRaw;
       return {
-        reply,
+        reply: replyRaw,
         files: gate.files,
         attempts: attempt,
         validationBlocked: false,
@@ -158,9 +154,7 @@ export async function runGafcoreAgentChatCompletion(input: {
           syntaxHealed: healed.healed,
         });
         return {
-          reply: gate.userMessage
-            ? `${replyRaw}\n\n${gate.userMessage}`
-            : replyRaw,
+          reply: replyRaw,
           files: healed.files,
           attempts: attempt,
           validationBlocked: false,
