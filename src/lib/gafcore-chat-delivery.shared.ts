@@ -19,6 +19,7 @@ import {
 } from "@/lib/gafcore-incremental-edit.shared";
 import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
+import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
 export type GafcoreDeliveredFile = {
   name: string;
@@ -150,6 +151,11 @@ export function finalizeGafcoreBuildDelivery(
       instruction,
     });
     files = shield.files;
+  }
+
+  const syntaxHeal = healWorkspaceSyntax(files);
+  if (syntaxHeal.healed) {
+    files = syntaxHeal.files;
   }
 
   return { reply: unwrapped.reply, files, source, planOnly };

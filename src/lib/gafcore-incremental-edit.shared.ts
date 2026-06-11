@@ -6,6 +6,7 @@ import type { ProjFile } from "@/lib/gafcore-chat.shared";
 export type { ProjFile };
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { isReplacingWelcomeApp } from "@/lib/gafcore-project-stale.shared";
+import { autoFixSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 
 export const GAFCORE_STRUCTURE_PRESERVATION_RULE = `
 [REGLA DE ORO — PRESERVACIÓN DE ESTRUCTURA]
@@ -256,11 +257,18 @@ export function validateAndHealBeforePreview(
     const balance = auditJsxTagBalance(content);
     const baseBalance = base ? auditJsxTagBalance(base.content) : 0;
     if (balance !== 0 && base && baseBalance === 0) {
-      const shrunk = content.length < base.content.length * 0.55;
-      if (shrunk || balance <= -1 || balance >= 2) {
-        content = restoreImportsInFile(base.content, base.content);
+      const fixed = autoFixSyntaxClosure(content);
+      if (fixed.fixes.length > 0 && auditJsxTagBalance(fixed.content) === 0) {
+        content = fixed.content;
         healed = true;
-        notes.push(`estructura JSX restaurada desde snapshot en ${f.name}`);
+        notes.push(`sintaxis autocorregida en ${f.name}`);
+      } else {
+        const shrunk = content.length < base.content.length * 0.55;
+        if (shrunk || balance <= -1 || balance >= 2) {
+          content = restoreImportsInFile(base.content, base.content);
+          healed = true;
+          notes.push(`estructura JSX restaurada desde snapshot en ${f.name}`);
+        }
       }
     }
 

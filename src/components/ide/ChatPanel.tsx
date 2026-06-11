@@ -54,7 +54,7 @@ import {
   persistProjectWorkspaceFiles,
   useGafcoreFilePipeline,
 } from "@/hooks/useGafcoreFilePipeline";
-import { resolveBuildDelivery } from "@/core/pipeline/build-delivery.shared";
+import { resolveAgentBuildDelivery } from "@/core/pipeline/build-delivery.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
@@ -2328,9 +2328,9 @@ export function ChatPanel({
 
     if (!factoryRes.ok) {
       if (factoryRes.error === "workflow_limit_reached") {
-        toast.error(
-          `Límite de workflows activos (${factoryRes.active ?? 0}/${factoryRes.max ?? 2})`,
-          { duration: 8000 },
+        toast.message(
+          `Límite de workflows activos (${factoryRes.active ?? 0}/${factoryRes.max ?? 2}). Puedes seguir construyendo manualmente.`,
+          { duration: 6000 },
         );
         throw new Error("WORKFLOW_LIMIT_REACHED");
       }
@@ -2500,9 +2500,8 @@ export function ChatPanel({
       if (started.error === "workflow_limit_reached") {
         const active = "active" in started ? started.active : 0;
         const max = "max" in started ? started.max : 2;
-        toast.error(`Límite de workflows activos (${active}/${max})`, {
-          description: "Espera a que termine uno o desactiva multiagente en segundo plano.",
-          duration: 8000,
+        toast.message(`Límite de workflows activos (${active}/${max}). Puedes seguir construyendo manualmente.`, {
+          duration: 6000,
         });
         throw new Error("WORKFLOW_LIMIT_REACHED");
       }
@@ -3125,11 +3124,11 @@ export function ChatPanel({
       let generationValidationBlocked = result.validationBlocked === true;
 
       if (effectiveBuild) {
-        let delivery = resolveBuildDelivery({
+        let delivery = resolveAgentBuildDelivery({
           instruction: raw || coreText,
           contextFiles: contextForDelivery,
           reply: result.reply || "",
-          rawFiles: result.files ?? [],
+          agentFiles: result.files ?? [],
         });
         filesToApply = delivery.files;
         if (fastWelcomeBuild && filesToApply.length > 0) {
@@ -3168,11 +3167,11 @@ export function ChatPanel({
           );
           if (staleDrop(replyText)) return;
           generationValidationBlocked = customized.validationBlocked === true;
-          delivery = resolveBuildDelivery({
+          delivery = resolveAgentBuildDelivery({
             instruction: raw || coreText,
             contextFiles: filesToApply,
             reply: customized.reply || "",
-            rawFiles: customized.files ?? [],
+            agentFiles: customized.files ?? [],
           });
           filesToApply = delivery.files;
           replyText = sanitizeUserFacingAiText(
@@ -3201,11 +3200,11 @@ export function ChatPanel({
           );
           if (staleDrop(replyText)) return;
           generationValidationBlocked = strictRetry.validationBlocked === true;
-          delivery = resolveBuildDelivery({
+          delivery = resolveAgentBuildDelivery({
             instruction: raw || coreText,
             contextFiles: contextForDelivery,
             reply: strictRetry.reply || "",
-            rawFiles: strictRetry.files ?? [],
+            agentFiles: strictRetry.files ?? [],
           });
           filesToApply = delivery.files;
           replyText = sanitizeUserFacingAiText(

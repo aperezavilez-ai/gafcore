@@ -1,5 +1,5 @@
 /**
- * Bucle agente: generar → validar → reintentar (máx. 2 correcciones).
+ * Bucle agente: generar → validar → reintentar (máx. 3 correcciones).
  */
 import type { GafcoreChatMessage } from "@/lib/gafcore-media.shared";
 import { completeChatMessage } from "@/lib/gafcore-ai-gateway.server";
@@ -9,8 +9,17 @@ import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { logDev } from "@/lib/gafcore-logger.server";
+import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
-const MAX_ATTEMPTS = 1;
+const MAX_ATTEMPTS = 3;
+
+const JSON_RETRY_INSTRUCTION =
+  'Tu respuesta no fue JSON válido con archivos. Responde SOLO JSON { "reply": "...", "files": [...] } ' +
+  "con el contenido COMPLETO de cada archivo modificado. Sin markdown ni texto fuera del JSON.";
+
+const EMPTY_FILES_RETRY_INSTRUCTION =
+  "No se recibieron archivos aplicables. Responde SOLO JSON con files no vacío. " +
+  "Incluye App.tsx (export default function App) con código completo y funcional.";
 
 export type AgentChatRunResult = {
   reply: string;
@@ -74,6 +83,23 @@ export async function runGafcoreAgentChatCompletion(input: {
       const expectedFiles =
         buildRequest && (parseFailed || rawFilesCount > 0 || /"files"\s*:/.test(content));
 
+      if (expectedFiles && attempt < MAX_ATTEMPTS) {
+        logDev("gafcore_agent_empty_delivery_retry", {
+          attempt,
+          parseFailed,
+          rawFilesCount,
+          deliverySource: delivery.source,
+        });
+        workingMessages.push(
+          { role: "assistant", content: content.slice(0, 12000) },
+          {
+            role: "user",
+            content: parseFailed ? JSON_RETRY_INSTRUCTION : EMPTY_FILES_RETRY_INSTRUCTION,
+          },
+        );
+        continue;
+      }
+
       if (expectedFiles) {
         logDev("gafcore_agent_empty_delivery", {
           attempt,
@@ -104,14 +130,14 @@ export async function runGafcoreAgentChatCompletion(input: {
 
     const gate = gateDeliveredFiles(input.contextFiles, safeFiles, input.instruction);
     if (gate.ok) {
-      logDev("gafcore_agent_chat_ok", { attempt, files: safeFiles.length });
+      logDev("gafcore_agent_chat_ok", { attempt, files: gate.files.length });
       const reply =
         gate.issues.length > 0 && gate.userMessage
           ? `${replyRaw}\n\n${gate.userMessage}`
           : replyRaw;
       return {
         reply,
-        files: safeFiles,
+        files: gate.files,
         attempts: attempt,
         validationBlocked: false,
       };
@@ -124,16 +150,18 @@ export async function runGafcoreAgentChatCompletion(input: {
 
     if (attempt >= MAX_ATTEMPTS) {
       if (safeFiles.length > 0) {
+        const healed = healWorkspaceSyntax(safeFiles);
         logDev("gafcore_agent_chat_best_effort", {
           attempt,
-          files: safeFiles.length,
+          files: healed.files.length,
           issues: gate.issues.length,
+          syntaxHealed: healed.healed,
         });
         return {
           reply: gate.userMessage
             ? `${replyRaw}\n\n${gate.userMessage}`
             : replyRaw,
-          files: safeFiles,
+          files: healed.files,
           attempts: attempt,
           validationBlocked: false,
         };

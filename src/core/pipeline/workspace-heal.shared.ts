@@ -10,6 +10,7 @@ import {
 } from "@/lib/gafcore-incremental-edit.shared";
 import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace, type PipelineFile } from "@/core/pipeline/file-merge.shared";
+import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
 export type WorkspaceBuildResult = {
   merged: PipelineFile[];
@@ -60,7 +61,14 @@ export function finalizeWorkspaceFromDelta(
     deltaPaths: deltaFiles.map((f) => f.name),
     instruction: userInstruction,
   });
-  return shield.files.map((f) => ({
+  const syntaxHeal = healWorkspaceSyntax(
+    shield.files.map((f) => ({
+      name: f.name,
+      content: f.content,
+      language: f.language,
+    })),
+  );
+  return syntaxHeal.files.map((f) => ({
     name: f.name,
     content: f.content,
     language: f.language ?? "typescript",

@@ -11,6 +11,7 @@ import {
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { mergeContextWithDelta } from "@/lib/gafcore-brain-agent.shared";
 import type { GafcoreDeliveredFile } from "@/lib/gafcore-chat-delivery.shared";
+import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
 export type DeliveryGateResult = {
   ok: boolean;
@@ -29,14 +30,20 @@ export function gateDeliveredFiles(
     return { ok: true, files: [], issues: [], userMessage: "", fixInstruction: "" };
   }
 
-  const merged = mergeContextWithDelta(contextFiles, deltaFiles);
-  const audit = auditProjectLocally(merged);
+  const healedDelta = healWorkspaceSyntax(deltaFiles);
+  const merged = mergeContextWithDelta(contextFiles, healedDelta.files);
+  const healedMerged = healWorkspaceSyntax(merged);
+  const audit = auditProjectLocally(healedMerged.files);
   const blocking = audit.issues.filter((i) => i.severity === "error");
+  const deliverFiles = healedDelta.files.map((d) => {
+    const m = healedMerged.files.find((f) => f.name === d.name);
+    return m ? { ...d, content: m.content } : d;
+  });
 
   if (!hasBlockingValidationIssues(audit.issues)) {
     return {
       ok: true,
-      files: deltaFiles,
+      files: deliverFiles,
       issues: audit.issues,
       userMessage: audit.issues.length > 0 ? formatValidationForUser(audit.issues) : "",
       fixInstruction: "",
@@ -45,10 +52,10 @@ export function gateDeliveredFiles(
 
   const fixInstruction = buildValidationFixInstruction(blocking, originalInstruction);
   const syntaxOnly = blocking.every((i) => i.category === "syntax" || i.category === "import");
-  if (syntaxOnly && deltaFiles.length > 0) {
+  if (syntaxOnly && deliverFiles.length > 0) {
     return {
       ok: true,
-      files: deltaFiles,
+      files: deliverFiles,
       issues: audit.issues,
       userMessage: formatValidationForUser(blocking),
       fixInstruction,
