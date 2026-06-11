@@ -5,35 +5,22 @@
 import { z } from "zod";
 import { requireGafcoreApiUser } from "@/lib/gafcore-api-auth.server";
 import {
-  createProjectForUser,
   deleteProjectForUser,
   listProjectTemplatesForUser,
   listProjectsForUser,
   saveProjectFilesForUser,
 } from "@/lib/gafcore-projects-api.server";
-import { validateTemplateFiles } from "@/lib/gafcore-templates.shared";
+import {
+  CreateProjectFileSchema,
+  CreateProjectInputSchema,
+} from "@/lib/projects/project-create.shared";
+import { executeCreateProject } from "@/lib/projects/project-create.service.server";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
 }
-
-const FileRowSchema = z.object({
-  name: z.string().min(1).max(512),
-  language: z.string().max(64).optional(),
-  content: z.string().max(500_000),
-});
-
-const CreateBodySchema = z
-  .object({
-    name: z.string().min(1).max(200),
-    templateSlug: z.string().min(1).max(80).optional(),
-    files: z.array(FileRowSchema).max(500).optional(),
-  })
-  .refine((d) => !(d.files?.length && d.templateSlug), {
-    message: "Usa plantilla o archivos importados, no ambos",
-  });
 
 const DeleteBodySchema = z.object({
   projectId: z.string().uuid(),
@@ -42,7 +29,7 @@ const DeleteBodySchema = z.object({
 
 const SaveFilesBodySchema = z.object({
   projectId: z.string().uuid(),
-  files: z.array(FileRowSchema).max(500),
+  files: z.array(CreateProjectFileSchema).max(500),
 });
 
 /** GET /api/gafcore/projects-list */
@@ -83,27 +70,24 @@ export async function handleGafcoreProjectsCreatePost(request: Request): Promise
     return json({ ok: false, error: "invalid_json" }, 400);
   }
 
-  const parsed = CreateBodySchema.safeParse(body);
+  const parsed = CreateProjectInputSchema.safeParse(body);
   if (!parsed.success) {
     return json({ ok: false, error: "invalid_body" }, 400);
   }
 
-  const customFiles = parsed.data.files?.length
-    ? validateTemplateFiles(parsed.data.files)
-    : undefined;
-
-  const result = await createProjectForUser(userId, parsed.data.name, {
-    templateSlug: parsed.data.templateSlug,
-    customFiles,
-  });
+  const result = await executeCreateProject(userId, parsed.data);
   if (!result.ok) {
-    return json({ ok: false, error: result.error }, 400);
+    return json(
+      { ok: false, error: result.error, code: result.code, requestId: result.requestId },
+      result.code === "SERVER_MISCONFIGURED" ? 503 : 400,
+    );
   }
 
   return json({
     ok: true,
     project: result.project,
     files: result.files,
+    requestId: result.requestId,
   });
 }
 

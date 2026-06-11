@@ -137,6 +137,13 @@ import { getProjectDeployStatus } from "@/lib/gafcore-deploy.functions";
 import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, getAuthAccessToken } from "@/hooks/useAuth";
+import { useCreateProject } from "@/hooks/useCreateProject";
+import {
+  clearPendingMarketplaceTemplate,
+  readPendingMarketplaceTemplate,
+  shouldAutoCreatePendingMarketplaceTemplate,
+  suggestProjectNameFromTemplate,
+} from "@/lib/gafcore-marketplace-template-pending.shared";
 import { useProfile } from "@/hooks/useProfile";
 import { useCredits } from "@/hooks/useCredits";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -664,6 +671,36 @@ export function GafCoreIDE() {
       }
     } catch { /* ignore */ }
   };
+
+  const { createProject, projectCreateErrorMessage } = useCreateProject();
+  const marketplaceAutoCreateStarted = useRef(false);
+
+  useEffect(() => {
+    if (!user?.id || marketplaceAutoCreateStarted.current) return;
+    if (!shouldAutoCreatePendingMarketplaceTemplate()) return;
+    const pending = readPendingMarketplaceTemplate();
+    if (!pending?.slug) return;
+
+    marketplaceAutoCreateStarted.current = true;
+    clearPendingMarketplaceTemplate();
+
+    void (async () => {
+      const result = await createProject({
+        name: suggestProjectNameFromTemplate(pending.name),
+        templateSlug: pending.slug,
+        source: "marketplace",
+      });
+      if (!result.ok) {
+        marketplaceAutoCreateStarted.current = false;
+        toast.error("No se pudo crear el proyecto desde el marketplace", {
+          description: projectCreateErrorMessage(result),
+        });
+        openNewProjectDialog();
+        return;
+      }
+      await onProjectCreatedFromTemplate(result.project, result.files as FileItem[]);
+    })();
+  }, [user?.id, createProject, projectCreateErrorMessage, openNewProjectDialog]);
 
   const beginDeleteCurrentProject = async () => {
     const cur = currentProjectId ?? getCurrentProjectId();

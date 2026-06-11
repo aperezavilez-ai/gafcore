@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FolderOpen, Github, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
+import { useCreateProject } from "@/hooks/useCreateProject";
 import {
   fileItemsFromBrowserFileList,
   fileItemsFromDirectoryHandle,
@@ -28,10 +28,10 @@ type Props = {
 };
 
 export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
+  const { createProject, loading: submitting, projectCreateErrorMessage } = useCreateProject();
   const [name, setName] = useState("Mi proyecto importado");
   const [pendingFiles, setPendingFiles] = useState<FileItem[] | null>(null);
   const [reading, setReading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [githubUrl, setGithubUrl] = useState("");
   const folderRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
@@ -40,7 +40,6 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
     setPendingFiles(null);
     setName("Mi proyecto importado");
     setReading(false);
-    setSubmitting(false);
     setGithubUrl("");
   };
 
@@ -125,32 +124,23 @@ export function ImportProjectDialog({ open, onOpenChange, onImported }: Props) {
       toast.error("Clona un repo de GitHub o elige una carpeta/archivos antes de importar");
       return;
     }
-    setSubmitting(true);
-    try {
-      const result = await gafcoreAuthJsonFetch<{
-        ok: boolean;
-        project?: { id: string; name: string; created_at: string };
-        files?: FileItem[];
-        error?: string;
-      }>("/api/gafcore/projects-create", {
-        name: trimmed,
-        files: pendingFiles.map((f) => ({
-          name: f.name,
-          language: f.language,
-          content: f.content,
-        })),
+    const result = await createProject({
+      name: trimmed,
+      files: pendingFiles.map((f) => ({
+        name: f.name,
+        language: f.language,
+        content: f.content,
+      })),
+      source: "import",
+    });
+    if (!result.ok) {
+      toast.error("No se pudo importar el proyecto", {
+        description: projectCreateErrorMessage(result),
       });
-      if (!result.ok || !result.project) {
-        toast.error(result.error ?? "No se pudo importar el proyecto");
-        return;
-      }
-      onImported(result.project, (result.files ?? pendingFiles) as FileItem[]);
-      handleOpenChange(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al importar");
-    } finally {
-      setSubmitting(false);
+      return;
     }
+    onImported(result.project, (result.files ?? pendingFiles) as FileItem[]);
+    handleOpenChange(false);
   };
 
   const importFromGithub = async () => {

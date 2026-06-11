@@ -11,9 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { hydrateAuthFromStorage, initAuthOnce } from "@/hooks/useAuth";
-import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
-import { clearPendingMarketplaceTemplate } from "@/lib/gafcore-marketplace-template-pending.shared";
+import { useCreateProject } from "@/hooks/useCreateProject";
+import {
+  clearPendingMarketplaceTemplate,
+  readPendingMarketplaceTemplate,
+  suggestProjectNameFromTemplate,
+} from "@/lib/gafcore-marketplace-template-pending.shared";
 import type { FileItem } from "@/components/ide/CodeEditor";
 
 type Props = {
@@ -24,41 +27,42 @@ type Props = {
 
 export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
   const [name, setName] = useState("Mi proyecto");
-  const [loading, setLoading] = useState(false);
+  const [templateSlug, setTemplateSlug] = useState<string | undefined>();
+  const { createProject, loading, projectCreateErrorMessage } = useCreateProject();
 
   useEffect(() => {
     if (!open) return;
-    clearPendingMarketplaceTemplate();
+    const pending = readPendingMarketplaceTemplate();
+    if (pending) {
+      setName(suggestProjectNameFromTemplate(pending.name));
+      setTemplateSlug(pending.slug);
+    } else {
+      setTemplateSlug(undefined);
+    }
   }, [open]);
 
   const submit = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) return;
-    setLoading(true);
-    try {
-      await initAuthOnce();
-      await hydrateAuthFromStorage(4_000);
 
-      const result = await gafcoreAuthJsonFetch<{
-        ok: boolean;
-        project?: { id: string; name: string; created_at: string };
-        files?: FileItem[];
-        error?: string;
-      }>("/api/gafcore/projects-create", { name: trimmedName });
+    const result = await createProject({
+      name: trimmedName,
+      templateSlug,
+      source: templateSlug ? "marketplace" : "dialog",
+    });
 
-      if (!result.ok || !result.project) {
-        toast.error(result.error ?? "No se pudo crear el proyecto");
-        return;
-      }
-      onCreated(result.project, (result.files ?? []) as FileItem[]);
-      onOpenChange(false);
-      setName("Mi proyecto");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Error de red o sesión";
-      toast.error("No se pudo crear el proyecto", { description: msg });
-    } finally {
-      setLoading(false);
+    if (!result.ok) {
+      toast.error("No se pudo crear el proyecto", {
+        description: projectCreateErrorMessage(result),
+      });
+      return;
     }
+
+    clearPendingMarketplaceTemplate();
+    onCreated(result.project, (result.files ?? []) as FileItem[]);
+    onOpenChange(false);
+    setName("Mi proyecto");
+    setTemplateSlug(undefined);
   };
 
   return (
@@ -80,21 +84,18 @@ export function NewProjectDialog({ open, onOpenChange, onCreated }: Props) {
                   void submit();
                 }
               }}
-              placeholder="Mi tienda"
-              autoFocus
+              autoComplete="off"
+              disabled={loading}
             />
-            <p className="text-xs text-muted-foreground">
-              Después, en el chat del editor, pídele al cerebro de GafCore lo que quieras
-              construir.
-            </p>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={() => void submit()} disabled={loading || !name.trim()}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crear"}
+          <Button type="button" onClick={() => void submit()} disabled={!name.trim() || loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Crear
           </Button>
         </DialogFooter>
       </DialogContent>

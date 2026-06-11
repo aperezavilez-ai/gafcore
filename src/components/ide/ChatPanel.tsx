@@ -186,13 +186,14 @@ import {
 } from "@/lib/gafcore-chat-delivery.shared";
 import { formatValidationScoreShort } from "@/validation/runner";
 import { parseJsonLoose } from "@/lib/gafcore-json-loose.shared";
-import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
 import {
   buildFreshProjectInstructionPrefix,
+  resolveTemplateSlugForChatInstruction,
   suggestProjectNameFromInstruction,
   userWantsFreshProject,
   userWantsInPlaceRebuild,
 } from "@/lib/gafcore-chat-project.shared";
+import { useCreateProject } from "@/hooks/useCreateProject";
 
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
@@ -450,6 +451,7 @@ export function ChatPanel({
   pendingPrompt?: string | null;
 }) {
   const isMobile = useIsMobile();
+  const { createProject, projectCreateErrorMessage } = useCreateProject();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   // Aplicar prompt pendiente del onboarding cuando llega con un proyecto activo
@@ -2817,36 +2819,28 @@ export function ChatPanel({
           }
         }
         const name = suggestProjectNameFromInstruction(raw);
-        try {
-          const created = await gafcoreAuthJsonFetch<{
-            ok: boolean;
-            project?: { id: string; name: string; created_at: string };
-            files?: FileItem[];
-            error?: string;
-          }>("/api/gafcore/projects-create", { name });
-          if (!created.ok || !created.project) {
-            toast.error("No se pudo crear el proyecto", {
-              description: created.error ?? "Reintenta con «+ Nuevo».",
-              duration: 10_000,
-            });
-            return;
-          }
-          isFreshProject = true;
-          activeProjectIdRef.current = created.project.id;
-          buildContextFiles = (created.files?.length ? created.files : files) as FileItem[];
-          setFiles(buildContextFiles);
-          filesRef.current = buildContextFiles;
-          setMessages([]);
-          await onProjectCreated?.(created.project, buildContextFiles);
-          toast.success(`Proyecto «${created.project.name}» listo — construyendo…`, {
-            duration: 6000,
-          });
-        } catch (e) {
-          toast.error("Error al crear proyecto", {
-            description: e instanceof Error ? e.message : "Error de red",
+        const created = await createProject({
+          name,
+          templateSlug: resolveTemplateSlugForChatInstruction(raw),
+          source: "chat",
+        });
+        if (!created.ok) {
+          toast.error("No se pudo crear el proyecto", {
+            description: projectCreateErrorMessage(created),
+            duration: 10_000,
           });
           return;
         }
+        isFreshProject = true;
+        activeProjectIdRef.current = created.project.id;
+        buildContextFiles = (created.files?.length ? created.files : files) as FileItem[];
+        setFiles(buildContextFiles);
+        filesRef.current = buildContextFiles;
+        setMessages([]);
+        await onProjectCreated?.(created.project, buildContextFiles);
+        toast.success(`Proyecto «${created.project.name}» listo — construyendo…`, {
+          duration: 6000,
+        });
       } else if (userWantsInPlaceRebuild(raw)) {
         /* Reconstrucción in-place: la IA sustituye archivos; sin plantillas predefinidas. */
       }
