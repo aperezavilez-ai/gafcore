@@ -18,7 +18,7 @@ export const GAFCORE_INTEGRITY_SHIELD_RULE = `
 1) ANÁLISIS DE IMPACTO: Antes de editar, revisa el árbol de imports/componentes del contexto. Si tocas un hijo, no rompas dependencias del padre.
 2) PROHIBICIÓN DE ELIMINACIÓN: NO elimines imports, \`import type\`, hooks (useState, useEffect, useMemo, useCallback, useRef) ni tipos/interfaces que ya existan, salvo que el usuario pida explícitamente quitar/eliminar/borrar.
 3) INCREMENTAL: Añade funcionalidad extendiendo código; cada archivo modificado debe ser el contenido COMPLETO del archivo, no un fragmento incompleto.
-4) CIERRE SINTÁCTICO OBLIGATORIO — APLICA A TODOS LOS ARCHIVOS: En CADA archivo que generes o modifiques (App.tsx, lib/store.tsx, components/*.tsx, cualquier otro), cuenta manualmente cada \`{\` y su \`}\`, cada \`(\` y su \`)\`, cada tag JSX \`<Tag\` y su cierre \`</Tag>\` o \`/>\`. Si el conteo no coincide EXACTAMENTE en cualquier archivo, corrige antes de responder. UN SOLO par desbalanceado en CUALQUIER archivo rompe toda la app.
+4) CIERRE OBLIGATORIO: Antes de responder, cuenta manualmente: por cada \`{\` debe haber un \`}\`. Por cada tag JSX abierto \`<Tag\` debe haber \`</Tag>\` o \`/>\`. Si no coinciden, corrige ANTES de responder. NO es aceptable enviar código con desbalances. Aplica a TODOS los archivos (App.tsx, lib/*, components/*). UN SOLO desbalance en CUALQUIER archivo rompe toda la app.
 5) LAYOUT RAÍZ: Si el cambio es en un componente hijo (components/*), NO reescribas App.tsx/layout padre salvo que el usuario lo pida. Mantén la estructura del padre intacta.
 6) ANTI-CRASH: No devuelvas componentes que retornen \`undefined\`; usa \`null\` o JSX vacío con mensaje. Accede a props con optional chaining cuando duden.
 7) ARCHIVOS SECUNDARIOS: lib/store.tsx, lib/utils.ts, components/*.tsx y cualquier archivo auxiliar deben tener la misma precisión sintáctica que App.tsx. No son menos importantes.
@@ -68,6 +68,161 @@ export function auditSyntaxClosure(content: string): SyntaxClosureAudit {
 
   const ok = messages.length === 0;
   return { ok, braceDelta, parenDelta, jsxTagDelta, messages };
+}
+
+const JSX_VOID_TAGS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
+
+function stripForJsxFix(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''")
+    .replace(/`(?:\\.|[^`\\])*`/g, "``");
+}
+
+/** Pila de tags JSX abiertos sin cerrar (orden de apertura). */
+function collectUnclosedJsxTags(content: string): string[] {
+  const code = stripForJsxFix(content);
+  const stack: string[] = [];
+  const tagRe = /<\/?([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>]*)?\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(code)) !== null) {
+    const full = m[0];
+    const name = m[1];
+    if (full.startsWith("</")) {
+      const idx = stack.lastIndexOf(name);
+      if (idx >= 0) stack.splice(idx, 1);
+      continue;
+    }
+    if (full.endsWith("/>") || JSX_VOID_TAGS.has(name.toLowerCase())) continue;
+    stack.push(name);
+  }
+  return stack;
+}
+
+function fixBraceBalance(content: string, delta: number): string {
+  if (delta === 0) return content;
+  if (delta > 0) return `${content.trimEnd()}\n${"}".repeat(delta)}\n`;
+  let out = content.trimEnd();
+  let remaining = -delta;
+  while (remaining > 0 && /\}\s*$/.test(out)) {
+    out = out.replace(/\}\s*$/, "").trimEnd();
+    remaining--;
+  }
+  return out.endsWith("\n") ? out : `${out}\n`;
+}
+
+function fixParenBalance(content: string, delta: number): string {
+  if (delta === 0) return content;
+  if (delta > 0) {
+    const insertAt = content.lastIndexOf(";");
+    if (insertAt > 0) {
+      return `${content.slice(0, insertAt)}${")".repeat(delta)}${content.slice(insertAt)}`;
+    }
+    return `${content.trimEnd()}${")".repeat(delta)}\n`;
+  }
+  let out = content.trimEnd();
+  let remaining = -delta;
+  while (remaining > 0 && /\)\s*$/.test(out)) {
+    out = out.replace(/\)\s*$/, "").trimEnd();
+    remaining--;
+  }
+  return out.endsWith("\n") ? out : `${out}\n`;
+}
+
+function insertBeforeReturnClose(content: string, insertion: string): string {
+  const returnClose = content.lastIndexOf(");");
+  if (returnClose > 0) {
+    return `${content.slice(0, returnClose)}${insertion}${content.slice(returnClose)}`;
+  }
+  const lastBrace = content.lastIndexOf("}");
+  if (lastBrace > 0) {
+    return `${content.slice(0, lastBrace)}${insertion}${content.slice(lastBrace)}`;
+  }
+  return `${content.trimEnd()}${insertion}\n`;
+}
+
+function fixJsxTagBalance(content: string, delta: number): string {
+  if (delta === 0) return content;
+  if (delta > 0) {
+    const unclosed = collectUnclosedJsxTags(content);
+    const tagsToClose =
+      unclosed.length >= delta ? unclosed.slice(-delta) : unclosed;
+    if (tagsToClose.length === 0) {
+      return `${content.trimEnd()}\n${"</div>".repeat(delta)}\n`;
+    }
+    const closers = [...tagsToClose].reverse().map((t) => `</${t}>`).join("");
+    return insertBeforeReturnClose(content, closers);
+  }
+  let out = content.trimEnd();
+  let remaining = -delta;
+  while (remaining > 0) {
+    const m = out.match(/<\/([A-Za-z][A-Za-z0-9.-]*)>\s*$/);
+    if (!m) break;
+    out = out.slice(0, m.index).trimEnd();
+    remaining--;
+  }
+  return out.endsWith("\n") ? out : `${out}\n`;
+}
+
+/**
+ * Intenta autocorregir desbalances de llaves, paréntesis y tags JSX.
+ * Devuelve el contenido corregido y notas de lo aplicado.
+ */
+export function autoFixSyntaxClosure(content: string): { content: string; fixes: string[] } {
+  const fixes: string[] = [];
+  let out = content;
+  let audit = auditSyntaxClosure(out);
+  let guard = 0;
+
+  while (!audit.ok && guard < 8) {
+    guard++;
+    const prev = out;
+    if (audit.braceDelta !== 0) {
+      out = fixBraceBalance(out, audit.braceDelta);
+      fixes.push(
+        audit.braceDelta > 0
+          ? `añadidas ${audit.braceDelta} llave(s) de cierre`
+          : `eliminadas ${-audit.braceDelta} llave(s) sobrante(s)`,
+      );
+    }
+    if (audit.parenDelta !== 0) {
+      out = fixParenBalance(out, audit.parenDelta);
+      fixes.push(
+        audit.parenDelta > 0
+          ? `añadidos ${audit.parenDelta} paréntesis de cierre`
+          : `eliminados ${-audit.parenDelta} paréntesis sobrante(s)`,
+      );
+    }
+    if (audit.jsxTagDelta !== 0) {
+      out = fixJsxTagBalance(out, audit.jsxTagDelta);
+      fixes.push(
+        audit.jsxTagDelta > 0
+          ? `cerrados ${audit.jsxTagDelta} tag(s) JSX pendiente(s)`
+          : `eliminados ${-audit.jsxTagDelta} cierre(s) JSX sobrante(s)`,
+      );
+    }
+    if (out === prev) break;
+    audit = auditSyntaxClosure(out);
+  }
+
+  return { content: out, fixes };
 }
 
 /** Grafo de dependencias antes de aplicar un delta. */
@@ -256,10 +411,16 @@ export function runIntegrityShield(
     if (!/\.(tsx|jsx|ts)$/i.test(f.name)) return f;
     const base = baselineMap.get(normalizePath(f.name));
     if (!base) {
-      // Archivo nuevo — auditar sintaxis aunque no tenga baseline
       const syntax = auditSyntaxClosure(f.content);
       if (!syntax.ok) {
-        notes.push(`sintaxis inválida en archivo nuevo ${f.name}: ${syntax.messages.join("; ")} — se requiere corrección`);
+        const fixed = autoFixSyntaxClosure(f.content);
+        const after = auditSyntaxClosure(fixed.content);
+        if (after.ok) {
+          notes.push(`sintaxis autocorregida en archivo nuevo ${f.name}: ${fixed.fixes.join("; ")}`);
+          healed = true;
+          return { ...f, content: fixed.content };
+        }
+        notes.push(`sintaxis inválida en archivo nuevo ${f.name}: ${syntax.messages.join("; ")}`);
       }
       return f;
     }
@@ -272,17 +433,27 @@ export function runIntegrityShield(
     }
 
     let content = restoreHooksAndTypesInFile(f.content, base.content);
-    const syntax = auditSyntaxClosure(content);
+    let syntax = auditSyntaxClosure(content);
     const baseSyntax = auditSyntaxClosure(base.content);
 
-    if (!syntax.ok && baseSyntax.ok) {
-      const tagOnly =
-        syntax.jsxTagDelta !== 0 && syntax.braceDelta === 0 && syntax.parenDelta === 0;
-      if (tagOnly || content.length < base.content.length * 0.5) {
-        content = restoreHooksAndTypesInFile(base.content, base.content);
-        notes.push(`sintaxis restaurada en ${f.name}: ${syntax.messages.join("; ")}`);
-        healed = true;
+    if (!syntax.ok) {
+      const fixed = autoFixSyntaxClosure(content);
+      if (fixed.fixes.length > 0) {
+        content = fixed.content;
+        syntax = auditSyntaxClosure(content);
+        if (syntax.ok) {
+          notes.push(`sintaxis autocorregida en ${f.name}: ${fixed.fixes.join("; ")}`);
+          healed = true;
+        }
       }
+    }
+
+    if (!syntax.ok && baseSyntax.ok) {
+      content = restoreHooksAndTypesInFile(base.content, base.content);
+      notes.push(
+        `sintaxis restaurada en ${f.name} tras autocorrección fallida: ${syntax.messages.join("; ")}`,
+      );
+      healed = true;
     }
 
     if (content !== f.content) healed = true;

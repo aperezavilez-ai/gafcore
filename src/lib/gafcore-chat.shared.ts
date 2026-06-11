@@ -95,7 +95,7 @@ Pilares (aplícalos en cada cambio):
    - Antes de editar: analiza el árbol de imports/componentes; identifica impacto en padres e hijos.
    - PROHIBIDO eliminar imports, \`import type\`, hooks (useState, useEffect, etc.) o tipos existentes salvo petición explícita de borrado.
    - Cambios INCREMENTALES: extiende código; no sustituyas el layout padre (App.tsx) si solo pidieron un componente hijo.
-   - Antes de cerrar la respuesta: verifica cierre de \`{\`, \`(\` y cada tag JSX \`<\` — la mayoría de Script errors vienen de tags sin cerrar.
+   - **CIERRE OBLIGATORIO**: Antes de responder, cuenta manualmente: por cada \`{\` debe haber un \`}\`. Por cada tag JSX abierto \`<Tag\` debe haber \`</Tag>\` o \`/>\`. Si no coinciden, corrige ANTES de responder. NO es aceptable enviar código con desbalances.
    - Ningún componente debe \`return undefined\`; usa \`null\` o JSX de fallback.
 
 11) **FUNCTIONAL-FIRST (obligatorio en modo Construir — Capa 0 GafCore)**:
