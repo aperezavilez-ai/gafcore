@@ -54,7 +54,6 @@ import {
   persistProjectWorkspaceFiles,
   useGafcoreFilePipeline,
 } from "@/hooks/useGafcoreFilePipeline";
-import { resolveAgentBuildDelivery } from "@/core/pipeline/build-delivery.shared";
 import { ChatNextStepSuggestions } from "@/components/ide/ChatNextStepSuggestions";
 import { FixConventionDialog } from "@/components/ide/FixConventionDialog";
 import type { GafcoreChatSuggestionContext } from "@/lib/gafcore-chat-suggestions.shared";
@@ -3081,13 +3080,10 @@ export function ChatPanel({
         ),
       );
 
-      const unwrappedChat = unwrapGafcoreChatPayload(result.reply ?? "", result.files ?? []);
+      const unwrappedChat = unwrapGafcoreChatPayload(result.reply ?? "", []);
       result = {
         ...result,
         reply: unwrappedChat.reply,
-        files: Array.isArray(unwrappedChat.files)
-          ? (unwrappedChat.files as Array<{ name: string; language?: string; content: string }>)
-          : result.files,
       };
 
       if (
@@ -3114,105 +3110,16 @@ export function ChatPanel({
         );
       }
 
-      const contextForDelivery = buildContextFiles.map((f) => ({
-        name: f.name,
-        language: f.language,
-        content: f.content,
-      }));
-
       let filesToApply: Array<{ name: string; language?: string; content: string }> = [];
       let generationValidationBlocked = result.validationBlocked === true;
+      const serverDeliveredBuild =
+        !factoryMode && !multiAgentMode && (result.files?.length ?? 0) > 0;
 
       if (effectiveBuild) {
-        let delivery = resolveAgentBuildDelivery({
-          instruction: raw || coreText,
-          contextFiles: contextForDelivery,
-          reply: result.reply || "",
-          agentFiles: result.files ?? [],
-        });
-        filesToApply = delivery.files;
+        filesToApply = Array.isArray(result.files) ? result.files : [];
         if (fastWelcomeBuild && filesToApply.length > 0) {
           const appOnly = filesToApply.filter((f) => /^app\.(tsx|jsx)$/i.test(f.name));
           if (appOnly.length > 0) filesToApply = appOnly;
-        }
-
-        const needsCustomize = filesToApply.length > 0 && delivery.planOnly;
-
-        if (
-          filesToApply.length > 0 &&
-          !needsCustomize &&
-          !outputReplacesWelcome(contextForDelivery, filesToApply)
-        ) {
-          toast.message("Proyecto generado. Revisa la vista previa.", { duration: 6000 });
-        }
-
-        if (needsCustomize && !fastWelcomeBuild && myEpoch === requestEpochRef.current) {
-          setLoading(true);
-          toast.message("Personalizando proyecto con IA…", { duration: 8000 });
-          const customizeInstruction = GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX + (raw || coreText);
-          const customizeHistory: ChatMsg[] = [
-            ...history,
-            { role: "assistant", content: replyText },
-            { role: "user", content: customizeInstruction },
-          ];
-          const customized = await requestGafcoreGeneration(
-            tok,
-            customizeHistory,
-            customizeInstruction,
-            buildContextFiles as FileItem[],
-            ac.signal,
-            myEpoch,
-            raw || coreText,
-            { preferReliableJson: true },
-          );
-          if (staleDrop(replyText)) return;
-          generationValidationBlocked = customized.validationBlocked === true;
-          delivery = resolveAgentBuildDelivery({
-            instruction: raw || coreText,
-            contextFiles: filesToApply,
-            reply: customized.reply || "",
-            agentFiles: customized.files ?? [],
-          });
-          filesToApply = delivery.files;
-          replyText = sanitizeUserFacingAiText(
-            softenRoboticReply(raw, customized.reply || `${replyText}\n\nProyecto personalizado.`),
-          );
-        } else if (filesToApply.length === 0 && !fastWelcomeBuild) {
-          setLoading(true);
-          setHealthPhase("optimizing_design");
-          const strictInstruction =
-            FUNCTIONAL_FIRST_BUILD_PREFIX +
-            GAFCORE_FORCE_FILES_BUILD_PREFIX +
-            (raw || coreText);
-          const strictRetry = await requestGafcoreGeneration(
-            tok,
-            [
-              ...history,
-              { role: "assistant", content: replyText },
-              { role: "user", content: strictInstruction },
-            ],
-            strictInstruction,
-            buildContextFiles,
-            ac.signal,
-            myEpoch,
-            raw || coreText,
-            { preferReliableJson: true },
-          );
-          if (staleDrop(replyText)) return;
-          generationValidationBlocked = strictRetry.validationBlocked === true;
-          delivery = resolveAgentBuildDelivery({
-            instruction: raw || coreText,
-            contextFiles: contextForDelivery,
-            reply: strictRetry.reply || "",
-            agentFiles: strictRetry.files ?? [],
-          });
-          filesToApply = delivery.files;
-          replyText = sanitizeUserFacingAiText(
-            softenRoboticReply(
-              raw,
-              strictRetry.reply || `${replyText}\n\nProyecto generado tras reintento.`,
-            ),
-          );
         }
 
         if (filesToApply.length === 0) {
@@ -3246,7 +3153,7 @@ export function ChatPanel({
 
       if (filesToApply.length > 0 && effectiveBuild) {
         const runFunctional = effectiveBuild && !visualEditOn && !fastWelcomeBuild;
-        let { merged, issues } = await applyGenerationFiles(
+        let { merged, issues, blocked: applyBlocked } = await applyGenerationFiles(
           buildContextFiles,
           filesToApply,
           instruction,
@@ -3254,8 +3161,17 @@ export function ChatPanel({
           {
             runFunctionalAudit: runFunctional,
             snapshotLabel: `auto: ${raw.slice(0, 60)}`,
+            serverDelivered: serverDeliveredBuild,
           },
         );
+
+        if (applyBlocked) {
+          toast.error(
+            "El código generado no compiló. Pulsa Construir de nuevo o pide una versión más simple.",
+            { duration: 12_000 },
+          );
+          offerGenerationRollback("El build no pasó validación de transpile.");
+        }
 
         const appAfterBuild = merged.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
         const stillWelcomeTemplate =
@@ -3272,11 +3188,12 @@ export function ChatPanel({
           if (!fastWelcomeBuild) {
             offerGenerationRollback("El build no reemplazó la plantilla de bienvenida.");
           }
-        } else {
+        } else if (!applyBlocked) {
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
         }
 
         const buildSucceeded =
+          !applyBlocked &&
           !hasBlockingValidationIssues(issues) &&
           !generationValidationBlocked &&
           !stillWelcomeTemplate;

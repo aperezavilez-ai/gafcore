@@ -7,10 +7,8 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import type { FileItem } from "@/components/ide/CodeEditor";
-import {
-  finalizeWorkspaceFromDelta,
-  repairGenerationDelta,
-} from "@/core/pipeline/workspace-heal.shared";
+import { prepareWorkspaceForPreview } from "@/core/pipeline/apply-build.shared";
+import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 import { mergeGeneratedIntoWorkspace } from "@/core/pipeline/file-merge.shared";
 import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import { validateGafcoreSources } from "@/lib/gafcore-validate.functions";
@@ -27,11 +25,14 @@ import {
 export type ApplyGenerationOptions = {
   runFunctionalAudit: boolean;
   snapshotLabel?: string;
+  /** Archivos ya curados por agente HTTP (finalize+gate). Evita triple shield. */
+  serverDelivered?: boolean;
 };
 
 export type ApplyGenerationResult = {
   merged: FileItem[];
   issues: ProjectValidationIssue[];
+  blocked?: boolean;
 };
 
 type RunProjectValidation = (
@@ -129,6 +130,26 @@ export function useGafcoreFilePipeline({
     [],
   );
 
+  const transpileValidate = useCallback(
+    async (files: FileItem[]): Promise<{ ok: boolean; errors: Array<{ name: string; message: string }> }> => {
+      try {
+        const jsxTs = files.filter((f) => /\.(tsx|jsx|ts|mts)$/i.test(f.name));
+        if (jsxTs.length === 0) return { ok: true, errors: [] };
+        const v = await callValidateSources({
+          data: jsxTs.map((f) => ({ name: f.name, content: f.content })),
+        });
+        return {
+          ok: v.ok === true,
+          errors: Array.isArray(v.errors) ? v.errors : [],
+        };
+      } catch (err) {
+        logClientWarn("gafcore-validate-sources", err);
+        return { ok: true, errors: [] };
+      }
+    },
+    [callValidateSources],
+  );
+
   const applyGenerationFiles = useCallback(
     async (
       baseFiles: FileItem[],
@@ -161,7 +182,10 @@ export function useGafcoreFilePipeline({
             phase: "apply",
             pipelineRunId: pipelineRunIdRef.current,
           },
-          { deltaCount: generated.length },
+          {
+            deltaCount: generated.length,
+            serverDelivered: options.serverDelivered === true,
+          },
         ),
       );
 
@@ -185,25 +209,94 @@ export function useGafcoreFilePipeline({
         language: f.language,
       }));
 
-      let outFiles = repairGenerationDelta(baseProj, generated, userInstruction);
-      try {
-        const enriched = await callEnrichMedia({
-          data: {
-            files: outFiles,
-            projectFiles: baseProj,
-            instruction: userInstruction,
-          },
-        });
-        if (enriched?.files?.length) outFiles = enriched.files;
-      } catch {
-        /* reparación local ya aplicada */
+      let delivered = generated;
+      if (!options.serverDelivered) {
+        try {
+          const enriched = await callEnrichMedia({
+            data: {
+              files: delivered,
+              projectFiles: baseProj,
+              instruction: userInstruction,
+            },
+          });
+          if (enriched?.files?.length) delivered = enriched.files;
+        } catch {
+          /* enrich opcional */
+        }
       }
 
-      const merged = finalizeWorkspaceFromDelta(baseProj, outFiles, userInstruction).map((f) => ({
+      const prepared = prepareWorkspaceForPreview({
+        baseFiles: baseProj,
+        deliveredFiles: delivered,
+        userInstruction,
+        mode: options.serverDelivered ? "server_delivered" : "local_full",
+      });
+
+      let merged: FileItem[] = prepared.merged.map((f) => ({
         name: f.name,
         content: f.content,
         language: f.language ?? "typescript",
       }));
+
+      if (prepared.blocking) {
+        logPipelineEvent(
+          "warn",
+          "apply.blocked_local_audit",
+          pipelineTraceMeta(
+            {
+              traceId: requestEpochRef.current,
+              projectId: genProjectId,
+              phase: "apply",
+              pipelineRunId: pipelineRunIdRef.current,
+            },
+            { issueCount: prepared.issues.length },
+          ),
+        );
+        return { merged: baseFiles, issues: prepared.issues, blocked: true };
+      }
+
+      let transpile = await transpileValidate(merged);
+      if (!transpile.ok) {
+        const healed = healUntilStable(merged);
+        if (healed.healed) {
+          merged = healed.files.map((f) => ({
+            name: f.name,
+            content: f.content,
+            language: f.language ?? "typescript",
+          }));
+          transpile = await transpileValidate(merged);
+        }
+      }
+
+      if (!transpile.ok) {
+        const sourceErr = transpile.errors.map((e) => `${e.name}: ${e.message}`).join("\n");
+        setLastError(sourceErr);
+        logPipelineEvent(
+          "warn",
+          "apply.blocked_transpile",
+          pipelineTraceMeta(
+            {
+              traceId: requestEpochRef.current,
+              projectId: genProjectId,
+              phase: "apply",
+              pipelineRunId: pipelineRunIdRef.current,
+            },
+            { errors: transpile.errors.length },
+          ),
+        );
+        if (
+          isPreviewAutofixAiEnabled() &&
+          shouldAttemptAiAutofix(sourceErr) &&
+          !validationAutoRetryUsedRef.current
+        ) {
+          scheduleRuntimeAutofixRef.current(sourceErr);
+        }
+        return {
+          merged: baseFiles,
+          issues: prepared.issues,
+          blocked: true,
+        };
+      }
 
       if (isStaleProject()) {
         logClientWarn("gafcore-apply-files-stale-project", {
@@ -217,7 +310,6 @@ export function useGafcoreFilePipeline({
       filesRef.current = merged;
       queueMicrotask(() => onCodeGenerated?.());
 
-      const toPersist = outFiles.map((o) => merged.find((m) => m.name === o.name) ?? o);
       const persistResult = await persistMergedToProjectDb(merged);
       if (!persistResult.ok) {
         logPipelineEvent(
@@ -236,38 +328,7 @@ export function useGafcoreFilePipeline({
         offerGenerationRollback("No se guardó en la nube. Puedes deshacer el último cambio.");
       }
 
-      try {
-        const v = await callValidateSources({
-          data: toPersist.map((f) => ({ name: f.name, content: f.content })),
-        });
-        if (!v.ok && Array.isArray(v.errors) && v.errors.length > 0) {
-          const jsxErrors = v.errors.filter((e) => /\.(tsx|jsx)$/i.test(e.name));
-          const otherErrors = v.errors.filter((e) => !/\.(tsx|jsx)$/i.test(e.name));
-          if (jsxErrors.length > 0) {
-            const sourceErr = jsxErrors.map((e) => `${e.name}: ${e.message}`).join("\n");
-            setLastError(sourceErr);
-            if (
-              isPreviewAutofixAiEnabled() &&
-              shouldAttemptAiAutofix(sourceErr) &&
-              !validationAutoRetryUsedRef.current
-            ) {
-              scheduleRuntimeAutofixRef.current(sourceErr);
-            }
-          } else if (otherErrors.length > 0) {
-            toast.message("Aviso en archivos auxiliares (no bloquea el preview).", {
-              description: otherErrors[0].message.slice(0, 120),
-              duration: 5000,
-            });
-          }
-        }
-      } catch (err) {
-        logClientWarn("gafcore-validate-sources", err);
-        toast.message("No se pudo verificar el código generado. El preview puede tener errores.", {
-          duration: 6000,
-        });
-      }
-
-      let issues: ProjectValidationIssue[] = [];
+      let issues: ProjectValidationIssue[] = prepared.issues;
       let mergedForReturn = merged;
       if (options.runFunctionalAudit) {
         const validation = await runProjectValidation(merged);
@@ -320,10 +381,11 @@ export function useGafcoreFilePipeline({
           },
           {
             fileCount: mergedForReturn.length,
-            deltaCount: outFiles.length,
+            deltaCount: delivered.length,
             persistOk: persistResult.ok,
             issueCount: issues.length,
             blockingCount: issues.filter((i) => i.severity === "error").length,
+            healNotes: prepared.healNotes.length,
           },
         ),
       );
@@ -339,7 +401,7 @@ export function useGafcoreFilePipeline({
       setFiles,
       onCodeGenerated,
       callEnrichMedia,
-      callValidateSources,
+      transpileValidate,
       persistMergedToProjectDb,
       mergeGeneratedFiles,
       runProjectValidation,

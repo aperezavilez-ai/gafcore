@@ -11,7 +11,7 @@ import {
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { mergeContextWithDelta } from "@/lib/gafcore-brain-agent.shared";
 import type { GafcoreDeliveredFile } from "@/lib/gafcore-chat-delivery.shared";
-import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
+import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 
 export type DeliveryGateResult = {
   ok: boolean;
@@ -30,9 +30,9 @@ export function gateDeliveredFiles(
     return { ok: true, files: [], issues: [], userMessage: "", fixInstruction: "" };
   }
 
-  const healedDelta = healWorkspaceSyntax(deltaFiles);
+  const healedDelta = healUntilStable(deltaFiles);
   const merged = mergeContextWithDelta(contextFiles, healedDelta.files);
-  const healedMerged = healWorkspaceSyntax(merged);
+  const healedMerged = healUntilStable(merged);
   const audit = auditProjectLocally(healedMerged.files);
   const blocking = audit.issues.filter((i) => i.severity === "error");
   const deliverFiles = healedDelta.files.map((d) => {
@@ -57,6 +57,16 @@ export function gateDeliveredFiles(
       ok: true,
       files: deliverFiles,
       issues: audit.issues,
+      userMessage: formatValidationForUser(blocking),
+      fixInstruction,
+    };
+  }
+
+  if (deliverFiles.length > 0) {
+    return {
+      ok: true,
+      files: deliverFiles,
+      issues: blocking,
       userMessage: formatValidationForUser(blocking),
       fixInstruction,
     };

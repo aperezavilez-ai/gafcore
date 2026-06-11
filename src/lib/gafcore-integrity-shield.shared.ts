@@ -495,11 +495,20 @@ export function runIntegrityShield(
     }
 
     if (!syntax.ok && baseSyntax.ok) {
-      content = restoreHooksAndTypesInFile(base.content, base.content);
-      notes.push(
-        `sintaxis restaurada en ${f.name} tras autocorrección fallida: ${syntax.messages.join("; ")}`,
-      );
-      healed = true;
+      const retry = autoFixSyntaxClosure(content);
+      if (retry.fixes.length > 0) {
+        content = retry.content;
+        syntax = auditSyntaxClosure(content);
+        if (syntax.ok) {
+          notes.push(`sintaxis reparada en ${f.name} (segundo pase): ${retry.fixes.join("; ")}`);
+          healed = true;
+        }
+      }
+      if (!syntax.ok) {
+        notes.push(
+          `sintaxis parcial en ${f.name} (${syntax.messages.join("; ")}) — se conserva delta IA`,
+        );
+      }
     }
 
     if (content !== f.content) healed = true;

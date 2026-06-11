@@ -43,3 +43,23 @@ export function healWorkspaceSyntax<T extends SyntaxHealableFile>(
 
   return { files: out, healed, notes };
 }
+
+/** Repite heal hasta estabilizar o alcanzar maxPasses (evita un solo pase insuficiente). */
+export function healUntilStable<T extends SyntaxHealableFile>(
+  files: T[],
+  maxPasses = 4,
+): WorkspaceSyntaxHealResult<T> {
+  let current = files;
+  const notes: string[] = [];
+  let healed = false;
+
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const round = healWorkspaceSyntax(current);
+    if (!round.healed) break;
+    healed = true;
+    notes.push(...round.notes);
+    current = round.files;
+  }
+
+  return { files: current, healed, notes };
+}

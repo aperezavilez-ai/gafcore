@@ -539,29 +539,23 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     );
   }
 
-  const finalized = await finalizeChatDeliveryWithSafeBuild({
-    instruction: data.instruction,
-    contextFiles: projFilesComplete,
-    replyRaw: agentResult.reply,
-    rawFiles: agentResult.files,
-    messages,
-    gateway,
-  });
-
+  // El agente ya ejecutó finalize + gate + heal. NO volver a finalizeGafcoreBuildDelivery
+  // (triple shield restauraba App.tsx y vaciaba filesToApply en cliente).
   const reply = sanitizeUserFacingAiText(
-    softenRoboticReply(data.instruction, finalized.reply),
+    softenRoboticReply(data.instruction, agentResult.reply),
   );
+  const deliveredFiles = agentResult.files;
 
-  const finalPayload = { reply, files: finalized.files };
+  const finalPayload = { reply, files: deliveredFiles };
   if (
-    shouldWriteGafcoreChatCache(finalized.files, {
+    shouldWriteGafcoreChatCache(deliveredFiles, {
       validationBlocked: agentResult.validationBlocked,
     })
   ) {
     cacheSet(cacheKey, finalPayload);
     void setPersistedChatCache(cacheKey, userId, model, finalPayload);
   }
-  persistSnapshotAfterChat(data.projectId, userId, projFilesComplete, finalized.files);
+  persistSnapshotAfterChat(data.projectId, userId, projFilesComplete, deliveredFiles);
 
   auditAiActionCompleted({
     userId,
@@ -569,10 +563,14 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     instruction: data.instruction,
     projectId: data.projectId,
     risk: gov.risk,
-    metadata: { mode: "complete", safeBuild: finalized.safeBuild },
+    metadata: {
+      mode: "complete",
+      agentAttempts: agentResult.attempts,
+      agentDelivered: deliveredFiles.length > 0,
+    },
   });
 
-  if (agentResult.validationBlocked && finalized.files.length === 0) {
+  if (agentResult.validationBlocked && deliveredFiles.length === 0) {
     logWarn("gafcore_chat_validation_blocked", {
       projectId: data.projectId,
       instructionLen: data.instruction.length,
@@ -582,9 +580,10 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
 
   return jsonResponse({
     reply,
-    files: finalized.files,
+    files: deliveredFiles,
     balance: balanceAfterConsume,
-    safeBuild: finalized.safeBuild,
-    validationBlocked: agentResult.validationBlocked && finalized.files.length === 0,
+    agentDelivered: deliveredFiles.length > 0,
+    safeBuild: { phase: "ready", repaired: false, skipped: true },
+    validationBlocked: agentResult.validationBlocked && deliveredFiles.length === 0,
   });
 }
