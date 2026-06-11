@@ -89,24 +89,8 @@ export function getUserSupabase(): SupabaseClient | null {
   }
 }
 
-/** Versión async de getUserSupabase — en gafcore.com usa el cliente dinámico con JWT activo. */
-export async function getUserSupabaseAsync(): Promise<SupabaseClient | null> {
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname.toLowerCase();
-    if (host === "gafcore.com" || host.endsWith(".gafcore.com")) {
-      try {
-        const { getGafcoreSupabaseBrowser } = await import("@/lib/gafcore-supabase-browser");
-        return (await getGafcoreSupabaseBrowser()) as unknown as SupabaseClient;
-      } catch {
-        return defaultSupabase as unknown as SupabaseClient;
-      }
-    }
-  }
-  return getUserSupabase();
-}
-
 export async function ensureProjectId(): Promise<string | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
 
   // Validate cached id actually exists in the projects table
@@ -189,7 +173,7 @@ export async function listProjects(): Promise<ProjectRow[]> {
 }
 
 export async function createProject(name: string): Promise<ProjectRow | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
   const { data: userRes } = await sb.auth.getUser();
   const userId = userRes?.user?.id;
@@ -208,7 +192,7 @@ export async function createProject(name: string): Promise<ProjectRow | null> {
 }
 
 export async function renameProject(id: string, name: string): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const { error } = await sb.from("projects").update({ name }).eq("id", id);
   if (error) {
@@ -228,7 +212,7 @@ export type ProjectDeployMeta = {
 export async function getProjectDeployMeta(
   projectId?: string | null,
 ): Promise<ProjectDeployMeta | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
   const id = projectId ?? (await ensureProjectId());
   if (!id) return null;
@@ -259,7 +243,7 @@ export async function saveProjectDeployMeta(
     vercel_deploy_hook_url?: string | null;
   },
 ): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const patch: Record<string, unknown> = {};
   if (meta.github_repo !== undefined) patch.github_repo = meta.github_repo?.trim() || null;
@@ -299,7 +283,7 @@ export function clearCurrentProjectId() {
 export async function loadProjectFiles(
   explicitProjectId?: string | null,
 ): Promise<FileItem[] | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
   let projectId = explicitProjectId?.trim() || null;
   if (!projectId) projectId = await ensureProjectId();
@@ -335,7 +319,7 @@ export async function upsertSingleProjectFile(
   projectId: string,
   file: FileItem,
 ): Promise<{ ok: boolean; detail?: string }> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return { ok: false, detail: "no_client" };
   if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
@@ -443,7 +427,7 @@ export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,
 ): Promise<SaveProjectFilesResult> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return { ok: false, reason: "no_client" };
   if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
 
@@ -468,7 +452,7 @@ export type SnapshotRow = {
 };
 
 export async function listSnapshots(explicitProjectId?: string | null): Promise<SnapshotRow[]> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return [];
   const projectId = explicitProjectId?.trim() || (await ensureProjectId());
   if (!projectId) return [];
@@ -502,7 +486,7 @@ export async function createSnapshot(
   label?: string,
   explicitProjectId?: string | null,
 ): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const projectId = explicitProjectId?.trim() || (await ensureProjectId());
   if (!projectId) return false;
@@ -527,7 +511,7 @@ export async function loadSnapshotFiles(
   snapshotId: string,
   explicitProjectId?: string | null,
 ): Promise<FileItem[] | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
   const projectId = explicitProjectId?.trim() || (await ensureProjectId());
   if (!projectId) return null;
@@ -545,7 +529,7 @@ export async function loadSnapshotFiles(
 }
 
 export async function deleteSnapshot(snapshotId: string): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const { error } = await sb.from("project_snapshots").delete().eq("id", snapshotId);
   if (error) {
@@ -564,7 +548,7 @@ export type SecretRow = {
 };
 
 export async function listSecrets(): Promise<SecretRow[]> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return [];
   const projectId = await ensureProjectId();
   if (!projectId) return [];
@@ -585,7 +569,7 @@ export async function upsertSecret(
   value: string,
   description?: string,
 ): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const projectId = await ensureProjectId();
   if (!projectId) return false;
@@ -615,7 +599,7 @@ export async function upsertSecret(
 }
 
 export async function deleteSecret(id: string): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const { error } = await sb.from("project_secrets").delete().eq("id", id);
   if (error) {
@@ -637,7 +621,7 @@ export type McpConnectionRow = {
 };
 
 export async function listMcpConnections(): Promise<McpConnectionRow[]> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return [];
   const projectId = await ensureProjectId();
   if (!projectId) return [];
@@ -659,7 +643,7 @@ export async function upsertMcpConnection(
   kind: "standard" | "mcp" = "standard",
   config: Record<string, unknown> = {},
 ): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const projectId = await ensureProjectId();
   if (!projectId) return false;
@@ -686,7 +670,7 @@ export async function upsertMcpConnection(
 }
 
 export async function deleteMcpConnection(id: string): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const { error } = await sb.from("mcp_connections").delete().eq("id", id);
   if (error) {
@@ -720,7 +704,7 @@ export async function recordPublish(input: {
   error?: string;
   metadata?: Record<string, unknown>;
 }): Promise<string | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
   const projectId = input.projectId ?? (await ensureProjectId());
   if (!projectId) return null;
@@ -760,7 +744,7 @@ export async function updatePublishRecord(
     metadata: Record<string, unknown>;
   }>,
 ): Promise<boolean> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return false;
   const { error } = await sb
     .from("project_publishes")
@@ -774,7 +758,7 @@ export async function updatePublishRecord(
 }
 
 export async function listPublishes(limit = 20, explicitProjectId?: string): Promise<PublishRow[]> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return [];
   const projectId = explicitProjectId ?? (await ensureProjectId());
   if (!projectId) return [];
@@ -793,7 +777,7 @@ export async function listPublishes(limit = 20, explicitProjectId?: string): Pro
 
 // Reveal a secret by RPC (decrypts server-side, RLS enforced)
 export async function revealSecret(secretId: string): Promise<string | null> {
-  const sb = getUserSupabase();
+  const sb = await getUserSupabaseAsync();
   if (!sb) return null;
   const { data, error } = await sb.rpc("decrypt_project_secret", { _secret_id: secretId });
   if (error) {
