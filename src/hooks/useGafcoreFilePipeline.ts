@@ -52,14 +52,12 @@ export async function persistProjectWorkspaceFiles(
     return { ok: false, detail: "no_project" };
   }
   const { saveProjectFilesDetailed } = await import("@/lib/userSupabase");
-  const result = await saveProjectFilesDetailed(
-    mergedFiles.map((f) => ({
-      name: f.name,
-      language: f.language ?? "typescript",
-      content: f.content,
-    })),
-    projectId,
-  );
+  const payload = mergedFiles.map((f) => ({
+    name: f.name,
+    language: f.language ?? "typescript",
+    content: f.content,
+  }));
+  const result = await saveProjectFilesDetailed(payload, projectId);
   if (!result.ok) {
     logClientWarn("gafcore-persist-merged", {
       reason: result.reason,

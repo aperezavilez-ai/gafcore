@@ -439,23 +439,78 @@ async function writeProjectFilesToDb(
   return { ok: true };
 }
 
+async function writeProjectFilesViaServer(
+  files: FileItem[],
+  projectId: string,
+  generation: number,
+): Promise<SaveProjectFilesResult | null> {
+  if (isProjectSaveGenerationStale(projectId, generation)) {
+    return { ok: true };
+  }
+
+  const { saveProjectFilesViaServer } = await import("@/lib/projects/project-save-client");
+  const payload = files.map((f) => ({
+    name: f.name,
+    language: f.language ?? "plaintext",
+    content: f.content,
+  }));
+
+  const result = await saveProjectFilesViaServer(projectId, payload, "ide");
+  if (result.ok) {
+    logPipelineEvent("info", "persist.server_ok", {
+      projectId,
+      generation,
+      fileCount: files.length,
+      requestId: result.requestId,
+      phase: "persist",
+    });
+    return { ok: true };
+  }
+
+  if (
+    result.code === "FORBIDDEN" ||
+    result.code === "NOT_FOUND" ||
+    result.code === "INVALID_INPUT"
+  ) {
+    return {
+      ok: false,
+      reason: result.code === "NOT_FOUND" ? "no_project" : "insert_failed",
+      detail: result.error,
+    };
+  }
+
+  console.warn("[Supabase] server save fallback to client RLS:", result.error);
+  return null;
+}
+
 export async function saveProjectFilesDetailed(
   files: FileItem[],
   explicitProjectId?: string | null,
 ): Promise<SaveProjectFilesResult> {
-  const sb = await getUserSupabaseAsync();
-  if (!sb) return { ok: false, reason: "no_client" };
-  if (projectSaveSuppressed || !(await hasActiveAuthSession(sb))) return { ok: true };
+  if (projectSaveSuppressed) return { ok: true };
 
   let projectId = explicitProjectId?.trim() || null;
-  if (!projectId) projectId = await ensureProjectId();
+  if (!projectId) {
+    const sb = await getUserSupabaseAsync();
+    if (!sb) return { ok: false, reason: "no_client" };
+    if (!(await hasActiveAuthSession(sb))) return { ok: true };
+    projectId = await ensureProjectId();
+  }
   if (!projectId) return { ok: false, reason: "no_project" };
 
   const generation = allocateProjectSaveGeneration(projectId);
   const snapshot = files.map((f) => ({ ...f }));
 
-  return runSerializedProjectSave(projectId, () => {
-    if (isProjectSaveGenerationStale(projectId, generation)) return Promise.resolve({ ok: true });
+  return runSerializedProjectSave(projectId, async () => {
+    if (isProjectSaveGenerationStale(projectId, generation)) return { ok: true };
+
+    const serverResult = await writeProjectFilesViaServer(snapshot, projectId, generation);
+    if (serverResult) return serverResult;
+
+    const sb = await getUserSupabaseAsync();
+    if (!sb) return { ok: false, reason: "no_client" };
+    if (!(await hasActiveAuthSession(sb))) return { ok: true };
+
     return writeProjectFilesToDb(sb, snapshot, projectId, generation);
   });
 }

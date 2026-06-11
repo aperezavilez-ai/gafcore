@@ -8,13 +8,11 @@ import {
   deleteProjectForUser,
   listProjectTemplatesForUser,
   listProjectsForUser,
-  saveProjectFilesForUser,
 } from "@/lib/gafcore-projects-api.server";
-import {
-  CreateProjectFileSchema,
-  CreateProjectInputSchema,
-} from "@/lib/projects/project-create.shared";
+import { CreateProjectInputSchema } from "@/lib/projects/project-create.shared";
 import { executeCreateProject } from "@/lib/projects/project-create.service.server";
+import { SaveProjectFilesInputSchema } from "@/lib/projects/project-save.shared";
+import { executeSaveProjectFiles } from "@/lib/projects/project-save.service.server";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -25,11 +23,6 @@ function json(data: unknown, status = 200): Response {
 const DeleteBodySchema = z.object({
   projectId: z.string().uuid(),
   approvalId: z.string().min(1).max(128).optional(),
-});
-
-const SaveFilesBodySchema = z.object({
-  projectId: z.string().uuid(),
-  files: z.array(CreateProjectFileSchema).max(500),
 });
 
 /** GET /api/gafcore/projects-list */
@@ -132,21 +125,20 @@ export async function handleGafcoreProjectsFilesSavePost(request: Request): Prom
     return json({ ok: false, error: "invalid_json" }, 400);
   }
 
-  const parsed = SaveFilesBodySchema.safeParse(body);
+  const parsed = SaveProjectFilesInputSchema.safeParse(body);
   if (!parsed.success) {
     return json({ ok: false, error: "invalid_body" }, 400);
   }
 
-  const result = await saveProjectFilesForUser(
-    userId,
-    parsed.data.projectId,
-    parsed.data.files,
-  );
+  const result = await executeSaveProjectFiles(userId, parsed.data);
   if (!result.ok) {
-    return json({ ok: false, error: result.error }, 400);
+    return json(
+      { ok: false, error: result.error, code: result.code, requestId: result.requestId },
+      result.code === "SERVER_MISCONFIGURED" ? 503 : 400,
+    );
   }
 
-  return json({ ok: true });
+  return json({ ok: true, requestId: result.requestId });
 }
 
 /** POST /api/gafcore/project-templates */
