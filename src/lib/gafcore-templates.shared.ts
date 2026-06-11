@@ -17,18 +17,19 @@ export type GafcoreProjectTemplateDef = {
 
 export const GAFCORE_DEFAULT_TEMPLATE_SLUG = "blank-vite";
 
-const STORE_LIB = `/** Persistencia local (FUNCTIONAL-FIRST). */
-export function loadJson<T>(key: string, fallback: T): T {
+/** Plantilla canónica lib/store.ts — sin genéricos <T> (rompen parsers JSX/heal). */
+export const GAFCORE_LIB_STORE_TS = `/** Persistencia local (FUNCTIONAL-FIRST). */
+export function loadJson(key: string, fallback: unknown): unknown {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    return JSON.parse(raw) as T;
+    return JSON.parse(raw);
   } catch {
     return fallback;
   }
 }
 
-export function saveJson<T>(key: string, value: T): void {
+export function saveJson(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -36,6 +37,8 @@ export function saveJson<T>(key: string, value: T): void {
   }
 }
 `;
+
+const STORE_LIB = GAFCORE_LIB_STORE_TS;
 
 const MAIN_TSX = `import React from "react";
 import { createRoot } from "react-dom/client";

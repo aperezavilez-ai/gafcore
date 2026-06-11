@@ -12,6 +12,7 @@ import {
   type ProjFile,
 } from "@/lib/gafcore-incremental-edit.shared";
 import { isReplacingWelcomeApp } from "@/lib/gafcore-project-stale.shared";
+import { GAFCORE_LIB_STORE_TS } from "@/lib/gafcore-templates.shared";
 
 export const GAFCORE_INTEGRITY_SHIELD_RULE = `
 [ESCUDO DE INTEGRIDAD — REGLAS DE HIERRO]
@@ -21,8 +22,9 @@ export const GAFCORE_INTEGRITY_SHIELD_RULE = `
 4) CIERRE OBLIGATORIO: Antes de responder, cuenta manualmente: por cada \`{\` debe haber un \`}\`. Por cada tag JSX abierto \`<Tag\` debe haber \`</Tag>\` o \`/>\`. Si no coinciden, corrige ANTES de responder. NO es aceptable enviar código con desbalances. Aplica a TODOS los archivos (App.tsx, lib/*, components/*). UN SOLO desbalance en CUALQUIER archivo rompe toda la app.
 5) LAYOUT RAÍZ: Si el cambio es en un componente hijo (components/*), NO reescribas App.tsx/layout padre salvo que el usuario lo pida. Mantén la estructura del padre intacta.
 6) ANTI-CRASH: No devuelvas componentes que retornen \`undefined\`; usa \`null\` o JSX vacío con mensaje. Accede a props con optional chaining cuando duden.
-7) ARCHIVOS SECUNDARIOS: lib/store.tsx, lib/utils.ts, components/*.tsx y cualquier archivo auxiliar deben tener la misma precisión sintáctica que App.tsx. No son menos importantes.
-8) GENERACIÓN DESDE CERO: Cuando generes archivos nuevos, usa estructuras simples y directas. Evita ternarios anidados dentro de JSX return(). Prefiere variables auxiliares antes del return para lógica compleja.
+7) ARCHIVOS SECUNDARIOS: lib/store.ts, lib/utils.ts, components/*.tsx y cualquier archivo auxiliar deben tener la misma precisión sintáctica que App.tsx. No son menos importantes.
+8) lib/store.ts: PROHIBIDO genéricos \`<T>\` en strings o cuerpo de funciones. \`saveJson\` = \`localStorage.setItem(key, JSON.stringify(value))\` sin \`</T>\` ni \`<T>\` en esa línea.
+9) GENERACIÓN DESDE CERO: Cuando generes archivos nuevos, usa estructuras simples y directas. Evita ternarios anidados dentro de JSX return(). Prefiere variables auxiliares antes del return para lógica compleja.
 `.trim();
 
 export type SyntaxClosureAudit = {
@@ -225,6 +227,40 @@ export function autoFixSyntaxClosure(content: string): { content: string; fixes:
   return { content: out, fixes };
 }
 
+const CANONICAL_SAVE_JSON_FN = `export function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* quota */
+  }
+}`;
+
+/** Corrige lib/store.ts cuando la IA inserta </T> o genéricos rotos en saveJson. */
+export function healLibStoreTs(content: string): { content: string; fixes: string[] } {
+  const fixes: string[] = [];
+  let out = content;
+
+  if (/JSON\.stringify\([^)]+\)\s*<\/T>/i.test(out)) {
+    out = out.replace(/JSON\.stringify\(([^)]+)\)\s*<\/T>/gi, "JSON.stringify($1)");
+    fixes.push("eliminado </T> erróneo tras JSON.stringify");
+  }
+
+  if (/export function saveJson\s*<[^>]+>/.test(out)) {
+    out = out.replace(/export function saveJson[\s\S]*?\n\}/, CANONICAL_SAVE_JSON_FN);
+    fixes.push("saveJson normalizado sin genéricos en el cuerpo");
+  }
+
+  if (/export function loadJson\s*</.test(out)) {
+    const loadFn = GAFCORE_LIB_STORE_TS.match(/export function loadJson[\s\S]*?\n\}/)?.[0];
+    if (loadFn) {
+      out = out.replace(/export function loadJson[\s\S]*?\n\}/, loadFn);
+      fixes.push("loadJson normalizado sin genéricos");
+    }
+  }
+
+  return { content: out, fixes };
+}
+
 /** Grafo de dependencias antes de aplicar un delta. */
 export function analyzeEditImpact(
   files: ProjFile[],
@@ -409,6 +445,16 @@ export function runIntegrityShield(
 
   files = files.map((f) => {
     if (!/\.(tsx|jsx|ts)$/i.test(f.name)) return f;
+
+    if (/^lib\/store\.ts$/i.test(normalizePath(f.name))) {
+      const storeHeal = healLibStoreTs(f.content);
+      if (storeHeal.fixes.length > 0) {
+        healed = true;
+        notes.push(`lib/store.ts: ${storeHeal.fixes.join("; ")}`);
+        f = { ...f, content: storeHeal.content };
+      }
+    }
+
     const base = baselineMap.get(normalizePath(f.name));
     if (!base) {
       const syntax = auditSyntaxClosure(f.content);

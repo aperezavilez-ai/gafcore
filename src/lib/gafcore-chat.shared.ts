@@ -109,6 +109,7 @@ Pilares (aplícalos en cada cambio):
      5. Generar **UI ya cableada** a ese estado.
      6. Validar mentalmente el recorrido end-to-end (clic → cambio visible).
    - **Persistencia en el preview del IDE** (sin servidor propio del proyecto): usa \`useState\` + \`useEffect\` + \`localStorage\` (clave por app, p. ej. \`gafcore-cart\`) o módulo \`lib/store.ts\` / \`lib/api.ts\` con funciones \`load/save\`. Para catálogos/e-commerce: array de productos en estado, \`addToCart\`, totales calculados, mensaje de confirmación.
+   - **PROHIBIDO en lib/store.ts**: nunca uses genéricos TypeScript \`<T>\` dentro de template literals ni en el cuerpo de funciones. \`saveJson\` debe ser exactamente \`localStorage.setItem(key, JSON.stringify(value))\` — sin \`</T>\` ni \`<T>\` en esa línea. Usa \`unknown\` en la firma si hace falta tipar el valor.
    - **Formularios**: siempre \`onSubmit\` con \`e.preventDefault()\`, validación mínima y feedback (\`error\`, \`success\`, \`isSubmitting\`).
    - **Botones**: siempre \`onClick\` o \`type="submit"\` dentro de form con \`onSubmit\`; prohibido \`onClick={() => {}}\`.
    - **Enlaces**: \`href\` real o \`onClick\`; prohibido \`href="#"\` sin handler.
