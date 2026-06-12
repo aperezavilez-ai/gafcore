@@ -9,6 +9,7 @@ import {
   repairCommonJsxSyntaxErrors,
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
+import { autoFixSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 import {
   PREVIEW_REACT_SHIM_NAME,
   buildPreviewReactShimCode,
@@ -206,13 +207,17 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
 
     // Encode each module as its source string; the iframe transpiles + blob-URLs them.
     const modulesPayload = jsFiles.map((f) => {
-      const source =
+      let source =
         f.name === PREVIEW_REACT_SHIM_NAME
           ? f.content
           : applyAllMediaRepairs(
               repairCommonJsxSyntaxErrors(repairHtmlMedia(f.content, assetMap)),
               mediaContextHint,
             );
+      if (f.name !== PREVIEW_REACT_SHIM_NAME && /\.(tsx|jsx)$/i.test(f.name)) {
+        const healed = autoFixSyntaxClosure(source);
+        if (healed.fixes.length > 0) source = healed.content;
+      }
       return {
         name: f.name,
         code: rewriteImports(source, f.name, jsFiles, cssNames),

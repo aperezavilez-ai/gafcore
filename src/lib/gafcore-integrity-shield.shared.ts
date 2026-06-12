@@ -98,10 +98,25 @@ function stripForJsxFix(source: string): string {
     .replace(/`(?:\\.|[^`\\])*`/g, "``");
 }
 
-/** Pila de tags JSX abiertos sin cerrar (orden de apertura). */
+/** Pila de tags JSX abiertos sin cerrar (orden de apertura). '' = fragmento <> */
 function collectUnclosedJsxTags(content: string): string[] {
   const code = stripForJsxFix(content);
   const stack: string[] = [];
+  let i = 0;
+  while (i < code.length) {
+    if (code.startsWith("<>", i)) {
+      stack.push("");
+      i += 2;
+      continue;
+    }
+    if (code.startsWith("</>", i)) {
+      const idx = stack.lastIndexOf("");
+      if (idx >= 0) stack.splice(idx, 1);
+      i += 3;
+      continue;
+    }
+    i++;
+  }
   const tagRe = /<\/?([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>]*)?\/?>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(code)) !== null) {
@@ -116,6 +131,10 @@ function collectUnclosedJsxTags(content: string): string[] {
     stack.push(name);
   }
   return stack;
+}
+
+function jsxClosersForStack(unclosed: string[]): string {
+  return [...unclosed].reverse().map((t) => (t === "" ? "</>" : `</${t}>`)).join("");
 }
 
 function fixBraceBalance(content: string, delta: number): string {
@@ -148,16 +167,67 @@ function fixParenBalance(content: string, delta: number): string {
   return out.endsWith("\n") ? out : `${out}\n`;
 }
 
-function insertBeforeReturnClose(content: string, insertion: string): string {
+/** Inserta cierres JSX pendientes justo antes del `)` que cierra `return (...)`. */
+export function fixReturnJsxClosure(content: string): { content: string; fixes: string[] } {
+  const unclosed = collectUnclosedJsxTags(content);
+  if (unclosed.length === 0) return { content, fixes: [] };
+
+  const closers = jsxClosersForStack(unclosed);
+
+  const returnCloseMatch = content.match(/\n(\s*)\)(\s*\n\s*\);)/);
+  if (returnCloseMatch && returnCloseMatch.index !== undefined) {
+    const insertAt = returnCloseMatch.index;
+    return {
+      content: `${content.slice(0, insertAt)}${closers}${content.slice(insertAt)}`,
+      fixes: [`cerrados ${unclosed.length} tag(s) JSX antes del cierre del return`],
+    };
+  }
+
+  const parenBeforeSemi = content.match(/\n(\s*)\)(\s*;)\s*$/);
+  if (parenBeforeSemi && parenBeforeSemi.index !== undefined) {
+    const insertAt = parenBeforeSemi.index;
+    return {
+      content: `${content.slice(0, insertAt)}${closers}${content.slice(insertAt)}`,
+      fixes: [`cerrados ${unclosed.length} tag(s) JSX (cierre return)`],
+    };
+  }
+
+  return insertBeforeReturnClose(content, closers);
+}
+
+function insertBeforeReturnClose(content: string, insertion: string): { content: string; fixes: string[] } {
   const returnClose = content.lastIndexOf(");");
   if (returnClose > 0) {
-    return `${content.slice(0, returnClose)}${insertion}${content.slice(returnClose)}`;
+    let pos = returnClose;
+    while (pos > 0 && /\s/.test(content[pos - 1] ?? "")) pos--;
+    if (content[pos - 1] === ")") {
+      pos--;
+      while (pos > 0 && /\s/.test(content[pos - 1] ?? "")) pos--;
+      return {
+        content: `${content.slice(0, pos)}${insertion}${content.slice(pos)}`,
+        fixes: [`insertados cierres JSX antes de );`],
+      };
+    }
+    return {
+      content: `${content.slice(0, returnClose)}${insertion}${content.slice(returnClose)}`,
+      fixes: [`insertados cierres JSX antes de );`],
+    };
   }
   const lastBrace = content.lastIndexOf("}");
   if (lastBrace > 0) {
-    return `${content.slice(0, lastBrace)}${insertion}${content.slice(lastBrace)}`;
+    return {
+      content: `${content.slice(0, lastBrace)}${insertion}${content.slice(lastBrace)}`,
+      fixes: [`insertados cierres JSX antes de }`],
+    };
   }
-  return `${content.trimEnd()}${insertion}\n`;
+  return {
+    content: `${content.trimEnd()}${insertion}\n`,
+    fixes: [`añadidos cierres JSX al final`],
+  };
+}
+
+function insertClosersBeforeReturnClose(content: string, insertion: string): string {
+  return insertBeforeReturnClose(content, insertion).content;
 }
 
 function fixJsxTagBalance(content: string, delta: number): string {
@@ -169,8 +239,8 @@ function fixJsxTagBalance(content: string, delta: number): string {
     if (tagsToClose.length === 0) {
       return `${content.trimEnd()}\n${"</div>".repeat(delta)}\n`;
     }
-    const closers = [...tagsToClose].reverse().map((t) => `</${t}>`).join("");
-    return insertBeforeReturnClose(content, closers);
+    const closers = jsxClosersForStack(tagsToClose);
+    return insertClosersBeforeReturnClose(content, closers);
   }
   let out = fixJsxSurplusClosers(content).content;
   let remaining = -delta;
@@ -255,6 +325,15 @@ export function autoFixSyntaxClosure(content: string): { content: string; fixes:
     }
     if (out === prev) break;
     audit = auditSyntaxClosure(out);
+  }
+
+  const stillOpen = collectUnclosedJsxTags(out);
+  if (stillOpen.length > 0) {
+    const returnFix = fixReturnJsxClosure(out);
+    if (returnFix.fixes.length > 0) {
+      out = returnFix.content;
+      fixes.push(...returnFix.fixes);
+    }
   }
 
   return { content: out, fixes };

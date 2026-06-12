@@ -10,6 +10,7 @@ import type { FileItem } from "@/components/ide/CodeEditor";
 import { prepareWorkspaceForPreview } from "@/core/pipeline/apply-build.shared";
 import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 import { repairCommonJsxSyntaxErrors } from "@/lib/gafcore-media.shared";
+import { autoFixSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace } from "@/core/pipeline/file-merge.shared";
 import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import { validateGafcoreSources } from "@/lib/gafcore-validate.functions";
@@ -238,6 +239,12 @@ export function useGafcoreFilePipeline({
         content: f.content,
         language: f.language ?? "typescript",
       }));
+
+      merged = merged.map((f) => {
+        if (!/\.(tsx|jsx)$/i.test(f.name)) return f;
+        const fixed = autoFixSyntaxClosure(f.content);
+        return fixed.fixes.length > 0 ? { ...f, content: fixed.content } : f;
+      });
 
       let transpile = await transpileValidate(merged);
       if (!transpile.ok) {
