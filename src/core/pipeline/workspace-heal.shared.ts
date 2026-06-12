@@ -10,12 +10,20 @@ import {
 } from "@/lib/gafcore-incremental-edit.shared";
 import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace, type PipelineFile } from "@/core/pipeline/file-merge.shared";
-import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
+import { healUntilStable, healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
 export type WorkspaceBuildResult = {
   merged: PipelineFile[];
   deltaFiles: PipelineFile[];
 };
+
+/** Sanea + autocorrige JSX al cargar proyecto desde Supabase (refresh del IDE). */
+export function prepareLoadedProjectFiles<T extends { name: string; content: string; language?: string }>(
+  files: T[],
+): T[] {
+  const healed = healUntilStable(sanitizeProjectJsxFiles(files));
+  return ensureReactPackageJson(healed.files);
+}
 
 /** Repara el delta IA (media + sintaxis) sin fusionar aún. */
 export function repairGenerationDelta(

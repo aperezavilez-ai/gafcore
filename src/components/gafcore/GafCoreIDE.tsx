@@ -42,8 +42,11 @@ import {
   prepareFilesForEditorRestore,
 } from "@/lib/gafcore-snapshot-restore.shared";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
-import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
-import { isRemoteProjectStale } from "@/lib/gafcore-project-stale.shared";
+import { prepareLoadedProjectFiles } from "@/core/pipeline/workspace-heal.shared";
+import {
+  hasSubstantialRemoteProject,
+  isRemoteProjectStale,
+} from "@/lib/gafcore-project-stale.shared";
 import {
   clearPendingMarketplaceTemplate,
   isTruthyNewProjectSearchParam,
@@ -390,6 +393,8 @@ export function GafCoreIDE() {
   });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveErrToastAt = useRef(0);
+  /** Evita autosave con plantilla welcome antes de cargar archivos remotos. */
+  const workspaceHydratedRef = useRef(false);
   const filesRef = useRef(files);
   filesRef.current = files;
   const currentProjectIdRef = useRef(currentProjectId);
@@ -573,15 +578,27 @@ export function GafCoreIDE() {
   }, [projectMenuOpen, showProjectSearch]);
 
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
-    if (!isRemoteProjectStale(remote) && remote?.length) {
-      const sanitized = ensureReactPackageJson(sanitizeProjectJsxFiles(remote));
+    if (remote === null) {
+      toast.error("No se pudieron cargar los archivos del proyecto", {
+        description: "Comprueba la conexión y recarga la página. No se sobrescribió tu código.",
+        duration: 12_000,
+      });
+      return;
+    }
+
+    const shouldLoadRemote =
+      remote.length > 0 &&
+      (hasSubstantialRemoteProject(remote) || !isRemoteProjectStale(remote));
+
+    if (shouldLoadRemote) {
+      const prepared = prepareLoadedProjectFiles(remote);
       const jsxFixed =
-        sanitized.length !== remote.length ||
-        sanitized.some((f, i) => f.content !== remote[i]?.content);
-      setFiles(sanitized);
-      setOpenTabs([sanitized[0]?.name ?? remote[0].name]);
+        prepared.length !== remote.length ||
+        prepared.some((f, i) => f.content !== remote[i]?.content);
+      setFiles(prepared);
+      setOpenTabs([prepared[0]?.name ?? remote[0].name]);
       setActiveIndex(0);
-      if (jsxFixed) void saveProjectFiles(sanitized, projectId);
+      if (jsxFixed) void saveProjectFiles(prepared, projectId);
       return;
     }
 
@@ -592,11 +609,9 @@ export function GafCoreIDE() {
         duration: 12_000,
       },
     );
-    const ok = await saveProjectFiles(initialFiles, projectId);
     setFiles(initialFiles);
     setOpenTabs([initialFiles[0].name]);
     setActiveIndex(0);
-    if (!ok) toast.error("No se pudo guardar la plantilla inicial");
   };
 
   const switchToProject = async (p: ProjectRow) => {
@@ -611,6 +626,7 @@ export function GafCoreIDE() {
       setProjectName(active.name);
       const remote = await loadProjectFiles(p.id);
       await hydrateEditorFromRemote(remote, p.id);
+      workspaceHydratedRef.current = true;
       setPreviewKey((k) => k + 1);
       const deploy = await loadDeploySummaryForProject(p.id);
       setDeploySiteHost(deploy.siteHost);
@@ -639,6 +655,7 @@ export function GafCoreIDE() {
     setFiles(filesOut);
     setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
     setActiveIndex(0);
+    workspaceHydratedRef.current = true;
     setLoaded(true);
     setPreviewKey((k) => k + 1);
     void refreshProjects(created.id);
@@ -659,6 +676,7 @@ export function GafCoreIDE() {
     setFiles(filesOut);
     setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
     setActiveIndex(0);
+    workspaceHydratedRef.current = true;
     setLoaded(true);
     setPreviewKey((k) => k + 1);
     toast.success(`Proyecto «${created.name}» creado.`);
@@ -848,16 +866,30 @@ export function GafCoreIDE() {
 
   useEffect(() => {
     let cancelled = false;
+    workspaceHydratedRef.current = false;
     void (async () => {
       const ws = await bootstrapWorkspace();
       if (cancelled) return;
 
       if (!ws.hasSupabase) {
+        workspaceHydratedRef.current = true;
         setLoaded(true);
         return;
       }
 
       const cachedId = getCurrentProjectId();
+
+      const finishProjectHydration = async (activeId: string) => {
+        const remote = await loadProjectFiles(activeId);
+        if (cancelled) return;
+        await hydrateEditorFromRemote(remote, activeId);
+        if (cancelled) return;
+        workspaceHydratedRef.current = true;
+        const deploy = await loadDeploySummaryForProject(activeId);
+        if (cancelled) return;
+        setDeploySiteHost(deploy.siteHost);
+        setDeployGithubRepo(deploy.githubRepo);
+      };
 
       if (ws.projects.length === 0) {
         if (cachedId) {
@@ -867,6 +899,8 @@ export function GafCoreIDE() {
             if (prev.some((p) => p.id === cachedId)) return prev;
             return [{ id: cachedId, name: readCachedProjectName() }, ...prev];
           });
+          await finishProjectHydration(cachedId);
+          if (cancelled) return;
           setLoaded(true);
           return;
         }
@@ -877,6 +911,7 @@ export function GafCoreIDE() {
         });
         setFiles(initialFiles);
         setOpenTabs([initialFiles[0].name]);
+        workspaceHydratedRef.current = true;
         setLoaded(true);
         return;
       }
@@ -885,13 +920,8 @@ export function GafCoreIDE() {
       setProjectName(ws.active.name);
       setUserProjects(ws.projects);
       const activeId = ws.active.id!;
-      const remote = await loadProjectFiles(activeId);
+      await finishProjectHydration(activeId);
       if (cancelled) return;
-      await hydrateEditorFromRemote(remote, activeId);
-      const deploy = await loadDeploySummaryForProject(activeId);
-      if (cancelled) return;
-      setDeploySiteHost(deploy.siteHost);
-      setDeployGithubRepo(deploy.githubRepo);
       setLoaded(true);
     })();
     return () => {
@@ -905,7 +935,7 @@ export function GafCoreIDE() {
   }, [loaded]);
 
   useEffect(() => {
-    if (!loaded || !currentProjectId || !user?.id) return;
+    if (!loaded || !currentProjectId || !user?.id || !workspaceHydratedRef.current) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const pid = currentProjectIdRef.current;

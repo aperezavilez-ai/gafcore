@@ -29,10 +29,28 @@ export function isReplacingWelcomeApp(
   );
 }
 
+/** Proyecto con código real en DB — nunca resetear a plantilla welcome al recargar. */
+export function hasSubstantialRemoteProject(
+  remote: Array<{ name: string; content: string }> | null | undefined,
+): boolean {
+  if (!remote?.length) return false;
+
+  const appFile = remote.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
+  if (appFile?.content?.trim()) {
+    if (!isGafcoreDefaultTemplateApp(appFile.content) && appFile.content.length > 180) {
+      return true;
+    }
+  }
+
+  const totalChars = remote.reduce((n, f) => n + (f.content?.length ?? 0), 0);
+  return totalChars > 900;
+}
+
 export function isRemoteProjectStale(
   remote: Array<{ name: string; content: string }> | null | undefined,
 ): boolean {
   if (!remote?.length) return true;
+  if (hasSubstantialRemoteProject(remote)) return false;
 
   const totalChars = remote.reduce((n, f) => n + (f.content?.length ?? 0), 0);
   const appFile = remote.find((f) => /^app\.(jsx?|tsx?)$/i.test(f.name));
