@@ -46,7 +46,7 @@ import {
 } from "@/lib/userSupabase";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
 import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
-import { activateProjectRow, readCachedProjectId, readCachedProjectName } from "@/core/project";
+import { activateProjectRow, readCachedProjectId, readCachedProjectName, invalidateProjectFromClientCaches } from "@/core/project";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
 import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
@@ -64,12 +64,18 @@ export const Route = createFileRoute("/gafcore_/projects")({
   }),
 });
 
-/** Si hay proyecto activo en caché y no viene en la lista, incluirlo (como el IDE). */
+/** Si hay proyecto activo en caché y no viene en la lista, incluirlo solo si sigue en caché coherente. */
 function mergeActiveProject(list: ProjectRow[]): ProjectRow[] {
   const activeId = getCurrentProjectId() ?? readCachedProjectId();
   if (!activeId || list.some((p) => p.id === activeId)) return list;
-  const name = readCachedProjectName();
-  return [{ id: activeId, name: name === "GafCore" ? "Mi proyecto" : name }, ...list];
+  // Sin filas en servidor: puede ser lag tras crear — conservar caché.
+  if (list.length === 0) {
+    const name = readCachedProjectName();
+    return [{ id: activeId, name: name === "GafCore" ? "Mi proyecto" : name }];
+  }
+  // Hay otros proyectos pero el activo ya no existe → caché obsoleta (p. ej. eliminado).
+  invalidateProjectFromClientCaches(activeId);
+  return list;
 }
 
 function GafcoreProjectsPage() {
@@ -258,14 +264,23 @@ function GafcoreProjectsPage() {
         { projectId: deleteTarget.id, approvalId: deletePendingApproval.approvalId },
       );
       if (!res.ok) {
-        toast.error(res.error ?? "No se pudo eliminar");
-        return;
+        const alreadyGone =
+          res.error === "Proyecto no encontrado." ||
+          res.error === "project_not_found";
+        if (!alreadyGone) {
+          toast.error(res.error ?? "No se pudo eliminar");
+          return;
+        }
       }
-      if (getCurrentProjectId() === deleteTarget.id) clearCurrentProjectId();
+      const deletedId = deleteTarget.id;
+      const deletedName = deleteTarget.name;
+      invalidateProjectFromClientCaches(deletedId);
+      if (getCurrentProjectId() === deletedId) clearCurrentProjectId();
+      setProjects((prev) => prev.filter((p) => p.id !== deletedId));
       setDeleteConfirmOpen(false);
       setDeleteTarget(null);
       setDeletePendingApproval(null);
-      toast.success(`Proyecto «${deleteTarget.name}» eliminado`);
+      toast.success(`Proyecto «${deletedName}» eliminado`);
       await refresh();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "No se pudo eliminar");

@@ -25,6 +25,7 @@ import {
   autoPublishProject,
   clearCurrentProjectId,
   getCurrentProjectId,
+  invalidateProjectFromClientCaches,
   type ProjectRow,
 } from "@/core/project";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
@@ -737,15 +738,22 @@ export function GafCoreIDE() {
         { projectId: cur, approvalId: deletePendingApproval.approvalId },
       );
       if (!res.ok) {
-        toast.error(res.error ?? "No se pudo eliminar el proyecto");
-        return;
+        const alreadyGone =
+          res.error === "Proyecto no encontrado." ||
+          res.error === "project_not_found";
+        if (!alreadyGone) {
+          toast.error(res.error ?? "No se pudo eliminar el proyecto");
+          return;
+        }
       }
       setDeleteConfirmOpen(false);
+      invalidateProjectFromClientCaches(cur);
       clearCurrentProjectId();
       toast.success(`Proyecto «${projectName}» eliminado`);
       const list = await listProjects();
-      setUserProjects(list);
-      if (list.length === 0) {
+      const remaining = list.filter((p) => p.id !== cur);
+      setUserProjects(remaining);
+      if (remaining.length === 0) {
         setCurrentProjectIdState(null);
         setProjectName("Sin proyecto");
         setFiles(initialFiles);
@@ -754,7 +762,7 @@ export function GafCoreIDE() {
         setLoaded(true);
         return;
       }
-      await switchToProject(list[0]);
+      await switchToProject(remaining[0]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo eliminar");
     } finally {
