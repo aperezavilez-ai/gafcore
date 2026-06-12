@@ -1,10 +1,18 @@
 import Editor from "@monaco-editor/react";
-import { GAFCORE_DEFAULT_TEMPLATE_FILES } from "@/lib/gafcore-templates.shared";
+import {
+  GAFCORE_DEFAULT_TEMPLATE_FILES,
+  getFreshDefaultProjectFiles,
+} from "@/lib/gafcore-templates.shared";
 
 export type FileItem = { name: string; language: string; content: string };
 
-/** Plantilla por defecto del IDE (ver también plantillas en BD). */
+/** Plantilla por defecto del IDE (referencia readonly — no usar en setState). */
 export const initialFiles = GAFCORE_DEFAULT_TEMPLATE_FILES;
+
+/** Plantilla welcome limpia para estado del editor. */
+export function createDefaultProjectFiles(): FileItem[] {
+  return getFreshDefaultProjectFiles();
+}
 
 export function CodeEditor({
   files,

@@ -28,6 +28,8 @@ import {
   invalidateProjectFromClientCaches,
   bumpIdeSessionAndNotify,
   consumePendingProjectFiles,
+  clearActiveProjectCache,
+  stashPendingProjectFiles,
   type ProjectRow,
 } from "@/core/project";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
@@ -123,7 +125,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChatPanel, type ChatWorkflowStripPayload } from "@/components/ide/ChatPanel";
 import { WorkflowTaskStrip } from "@/components/ide/WorkflowTaskStrip";
-import { CodeEditor, initialFiles, type FileItem } from "@/components/ide/CodeEditor";
+import { CodeEditor, createDefaultProjectFiles, type FileItem } from "@/components/ide/CodeEditor";
 import { LivePreview, type PreviewDevice } from "@/components/ide/LivePreview";
 import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
 import { SettingsDialog } from "@/components/ide/SettingsDialog";
@@ -220,9 +222,9 @@ export function GafCoreIDE() {
   const callDeployStatus = useServerFn(getProjectDeployStatus);
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
-  const [files, setFiles] = useState<FileItem[]>(initialFiles);
+  const [files, setFiles] = useState<FileItem[]>(() => createDefaultProjectFiles());
   const [activeIndex, setActiveIndex] = useState(0);
-  const [openTabs, setOpenTabs] = useState<string[]>([initialFiles[0].name]);
+  const [openTabs, setOpenTabs] = useState<string[]>(() => [createDefaultProjectFiles()[0].name]);
   const [loaded, setLoaded] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -234,6 +236,8 @@ export function GafCoreIDE() {
   } | null>(null);
   const [view, setView] = useState<View>("preview");
   const [previewKey, setPreviewKey] = useState(0);
+  /** Fuerza remount del chat al resetear workspace (p. ej. tras eliminar proyecto). */
+  const [chatPanelKey, setChatPanelKey] = useState(0);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>("desktop");
   const previewRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [projectName, setProjectName] = useState(readCachedProjectName);
@@ -422,11 +426,25 @@ export function GafCoreIDE() {
     if (user?.id) setProjectSaveSuppressed(false);
   }, [user?.id]);
 
+  const resetIdeWorkspaceToDefault = useCallback(() => {
+    const fresh = prepareLoadedProjectFiles(createDefaultProjectFiles());
+    setFiles(fresh);
+    filesRef.current = fresh;
+    setOpenTabs([fresh[0]?.name ?? "App.tsx"]);
+    setActiveIndex(0);
+    setPreviewKey((k) => k + 1);
+    setChatPanelKey((k) => k + 1);
+    workspaceHydratedRef.current = true;
+  }, []);
+
   const openNewProjectDialog = useCallback(() => {
     setProjectMenuOpen(false);
     setImportProjectDialogOpen(false);
+    if (!currentProjectIdRef.current) {
+      resetIdeWorkspaceToDefault();
+    }
     window.setTimeout(() => setNewProjectDialogOpen(true), 0);
-  }, []);
+  }, [resetIdeWorkspaceToDefault]);
 
   const openImportProjectDialog = useCallback(() => {
     setProjectMenuOpen(false);
@@ -621,8 +639,8 @@ export function GafCoreIDE() {
         duration: 12_000,
       },
     );
-    setFiles(prepareLoadedProjectFiles(initialFiles));
-    setOpenTabs([initialFiles[0].name]);
+    setFiles(prepareLoadedProjectFiles(createDefaultProjectFiles()));
+    setOpenTabs([createDefaultProjectFiles()[0].name]);
     setActiveIndex(0);
   };
 
@@ -663,13 +681,14 @@ export function GafCoreIDE() {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
-    const filesOut = prepareLoadedProjectFiles(nextFiles.length ? nextFiles : initialFiles);
-    setFiles(filesOut);
-    setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
-    setActiveIndex(0);
-    workspaceHydratedRef.current = true;
+    const source = nextFiles.length ? nextFiles : createDefaultProjectFiles();
+    const filesOut = applyProjectWorkspace(source);
+    stashPendingProjectFiles(
+      created.id,
+      filesOut.map((f) => ({ name: f.name, language: f.language, content: f.content })),
+    );
     setLoaded(true);
-    setPreviewKey((k) => k + 1);
+    void saveProjectFiles(filesOut, created.id);
     void refreshProjects(created.id);
   };
 
@@ -684,13 +703,14 @@ export function GafCoreIDE() {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
-    const filesOut = prepareLoadedProjectFiles(nextFiles.length ? nextFiles : initialFiles);
-    setFiles(filesOut);
-    setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
-    setActiveIndex(0);
-    workspaceHydratedRef.current = true;
+    const source = nextFiles.length ? nextFiles : createDefaultProjectFiles();
+    const filesOut = applyProjectWorkspace(source);
+    stashPendingProjectFiles(
+      created.id,
+      filesOut.map((f) => ({ name: f.name, language: f.language, content: f.content })),
+    );
     setLoaded(true);
-    setPreviewKey((k) => k + 1);
+    void saveProjectFiles(filesOut, created.id);
     toast.success(`Proyecto «${created.name}» creado.`);
     void refreshProjects(created.id);
     // Si hay prompt del onboarding, aplicarlo al chat
@@ -779,6 +799,7 @@ export function GafCoreIDE() {
       setDeleteConfirmOpen(false);
       invalidateProjectFromClientCaches(cur);
       clearCurrentProjectId();
+      clearActiveProjectCache();
       toast.success(`Proyecto «${projectName}» eliminado`);
       const list = await listProjects();
       const remaining = list.filter((p) => p.id !== cur);
@@ -786,11 +807,9 @@ export function GafCoreIDE() {
       if (remaining.length === 0) {
         setCurrentProjectIdState(null);
         setProjectName("Sin proyecto");
-        setFiles(prepareLoadedProjectFiles(initialFiles));
-        setOpenTabs([initialFiles[0].name]);
-        setActiveIndex(0);
-        setPreviewKey((k) => k + 1);
+        resetIdeWorkspaceToDefault();
         setLoaded(true);
+        bumpIdeSessionAndNotify();
         return;
       }
       await switchToProject(remaining[0]);
@@ -922,8 +941,9 @@ export function GafCoreIDE() {
         toast.message("No hay proyectos en tu cuenta", {
           description: "Menú del logo → «+ Nuevo» para crear uno.",
         });
-        setFiles(initialFiles);
-        setOpenTabs([initialFiles[0].name]);
+        const blank = prepareLoadedProjectFiles(createDefaultProjectFiles());
+        setFiles(blank);
+        setOpenTabs([blank[0]?.name ?? "App.tsx"]);
         workspaceHydratedRef.current = true;
         setLoaded(true);
         return;
@@ -1886,6 +1906,7 @@ export function GafCoreIDE() {
             <ResizablePanel id="chat" defaultSize="34%" minSize="28%" maxSize="55%" className="min-h-0">
               <div className="h-full min-h-0">
               <ChatPanel
+                key={chatPanelKey}
                 files={files}
                 setFiles={setFiles}
                 projectId={currentProjectId}
@@ -2025,6 +2046,7 @@ export function GafCoreIDE() {
                 {/* Pane 1: Chat */}
                 <div className="relative h-full w-full min-w-0 max-w-full shrink-0 grow-0 basis-full snap-start snap-always overflow-hidden [scroll-snap-stop:always]">
                   <ChatPanel
+                    key={chatPanelKey}
                     files={files}
                     setFiles={setFiles}
                     projectId={currentProjectId}

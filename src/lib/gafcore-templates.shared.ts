@@ -788,8 +788,30 @@ export const BUILTIN_PROJECT_TEMPLATES: GafcoreProjectTemplateDef[] = [
   },
 ];
 
-/** Compatibilidad con CodeEditor / IDE. */
+/** Compatibilidad con CodeEditor / IDE. No mutar — usar `getFreshDefaultProjectFiles()`. */
 export const initialFiles = GAFCORE_DEFAULT_TEMPLATE_FILES;
+
+/** Snapshot al cargar el módulo: inmune a mutaciones del array `initialFiles` en runtime. */
+const PRISTINE_GAFCORE_DEFAULT_TEMPLATE_FILES: GafcoreTemplateFile[] =
+  GAFCORE_DEFAULT_TEMPLATE_FILES.map((f) => ({
+    name: f.name,
+    language: f.language,
+    content: f.content,
+  }));
+
+/** Plantilla welcome limpia (siempre desde snapshot, nunca desde estado mutado). */
+export function getFreshDefaultProjectFiles(): GafcoreTemplateFile[] {
+  return PRISTINE_GAFCORE_DEFAULT_TEMPLATE_FILES.map((f) => ({
+    name: f.name,
+    language: f.language,
+    content: f.content,
+  }));
+}
+
+/** @deprecated Usar `getFreshDefaultProjectFiles`. */
+export function cloneGafcoreDefaultTemplateFiles(): GafcoreTemplateFile[] {
+  return getFreshDefaultProjectFiles();
+}
 
 export function validateTemplateFiles(files: unknown): GafcoreTemplateFile[] {
   if (!Array.isArray(files)) return [];
@@ -807,5 +829,5 @@ export function validateTemplateFiles(files: unknown): GafcoreTemplateFile[] {
       language: typeof language === "string" ? language : "typescript",
     });
   }
-  return out.length > 0 ? out : GAFCORE_DEFAULT_TEMPLATE_FILES;
+  return out.length > 0 ? out : getFreshDefaultProjectFiles();
 }
