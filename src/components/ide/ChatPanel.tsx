@@ -666,6 +666,7 @@ export function ChatPanel({
 
   useEffect(() => {
     setPendingComposerImages([]);
+    setLastError(null);
   }, [projectId]);
 
   // Realtime: sync new chat messages across tabs/devices for this project

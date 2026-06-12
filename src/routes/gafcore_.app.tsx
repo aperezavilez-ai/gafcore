@@ -12,6 +12,7 @@ import { DevPortBanner } from "@/components/gafcore/DevPortBanner";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { buildGafcoreSeoMeta } from "@/lib/gafcore-seo.shared";
 import { GafCoreBuilderShell } from "@/components/GafCoreBuilderShell";
+import { readIdeMountKey } from "@/core/project/project-cache";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
   GAFCORE_ADMIN_VIEW_CHANGE_EVENT,
@@ -262,6 +263,7 @@ function GafCoreIDEWithShell({
     user_metadata?: Record<string, unknown>;
   } | null | undefined;
 }) {
+  const ideMountKey = useIdeMountKey();
   const { user: authUser } = useAuth();
   const userId = user?.id ?? authUser?.id;
   const { isAdmin, loading: subLoading } = useSubscription(userId);
@@ -309,5 +311,21 @@ function GafCoreIDEWithShell({
     );
   }
 
-  return <GafCoreIDE />;
+  return <GafCoreIDE key={ideMountKey} />;
+}
+
+function useIdeMountKey(): string {
+  const [ideMountKey, setIdeMountKey] = useState(readIdeMountKey);
+
+  useEffect(() => {
+    const sync = () => setIdeMountKey(readIdeMountKey());
+    window.addEventListener("gafcore:ide-session-changed", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("gafcore:ide-session-changed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  return ideMountKey;
 }

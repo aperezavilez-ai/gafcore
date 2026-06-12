@@ -46,7 +46,7 @@ import {
 } from "@/lib/userSupabase";
 import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
 import { CriticalActionConfirmDialog } from "@/components/ide/CriticalActionConfirmDialog";
-import { activateProjectRow, readCachedProjectId, readCachedProjectName, invalidateProjectFromClientCaches } from "@/core/project";
+import { activateProjectRow, readCachedProjectId, readCachedProjectName, invalidateProjectFromClientCaches, bumpIdeSessionAndNotify, stashPendingProjectFiles, clearActiveProjectCache } from "@/core/project";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { requestGafcoreCriticalApproval } from "@/lib/gafcore-governance.functions";
 import type { GafcoreRiskAssessment } from "@/lib/gafcore-governance.shared";
@@ -184,13 +184,24 @@ function GafcoreProjectsPage() {
 
   const onProjectCreated = async (
     project: { id: string; name: string; created_at: string },
-    _files: FileItem[],
+    files: FileItem[],
   ) => {
     activateProjectRow({
       id: project.id,
       name: project.name,
       created_at: project.created_at,
     });
+    if (files.length > 0) {
+      stashPendingProjectFiles(
+        project.id,
+        files.map((f) => ({
+          name: f.name,
+          language: f.language,
+          content: f.content,
+        })),
+      );
+    }
+    bumpIdeSessionAndNotify();
     setNewProjectOpen(false);
     await refresh();
     void navigate({ to: "/gafcore/app" });
@@ -204,7 +215,8 @@ function GafcoreProjectsPage() {
   }, [projects, query]);
 
   const openInEditor = (p: ProjectRow) => {
-    setCurrentProjectId(p.id);
+    activateProjectRow(p);
+    bumpIdeSessionAndNotify();
     void navigate({ to: "/gafcore/app" });
     toast.success(`Proyecto «${p.name}» seleccionado`);
   };
@@ -276,10 +288,15 @@ function GafcoreProjectsPage() {
       const deletedName = deleteTarget.name;
       invalidateProjectFromClientCaches(deletedId);
       if (getCurrentProjectId() === deletedId) clearCurrentProjectId();
-      setProjects((prev) => prev.filter((p) => p.id !== deletedId));
+      setProjects((prev) => {
+        const next = prev.filter((p) => p.id !== deletedId);
+        if (next.length === 0) clearActiveProjectCache();
+        return next;
+      });
       setDeleteConfirmOpen(false);
       setDeleteTarget(null);
       setDeletePendingApproval(null);
+      bumpIdeSessionAndNotify();
       toast.success(`Proyecto «${deletedName}» eliminado`);
       await refresh();
     } catch (e: unknown) {

@@ -26,6 +26,8 @@ import {
   clearCurrentProjectId,
   getCurrentProjectId,
   invalidateProjectFromClientCaches,
+  bumpIdeSessionAndNotify,
+  consumePendingProjectFiles,
   type ProjectRow,
 } from "@/core/project";
 import { gafcoreAuthJsonFetch } from "@/lib/gafcore-client-auth-fetch";
@@ -578,6 +580,16 @@ export function GafCoreIDE() {
   }, [projectMenuOpen, showProjectSearch]);
 
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
+    const pending = consumePendingProjectFiles(projectId);
+    if (pending?.length) {
+      const prepared = prepareLoadedProjectFiles(pending);
+      setFiles(prepared);
+      setOpenTabs([prepared[0]?.name ?? pending[0].name]);
+      setActiveIndex(0);
+      void saveProjectFiles(prepared, projectId);
+      return;
+    }
+
     if (remote === null) {
       toast.error("No se pudieron cargar los archivos del proyecto", {
         description: "Comprueba la conexión y recarga la página. No se sobrescribió tu código.",
@@ -609,7 +621,7 @@ export function GafCoreIDE() {
         duration: 12_000,
       },
     );
-    setFiles(initialFiles);
+    setFiles(prepareLoadedProjectFiles(initialFiles));
     setOpenTabs([initialFiles[0].name]);
     setActiveIndex(0);
   };
@@ -651,7 +663,7 @@ export function GafCoreIDE() {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
-    const filesOut = nextFiles.length ? nextFiles : initialFiles;
+    const filesOut = prepareLoadedProjectFiles(nextFiles.length ? nextFiles : initialFiles);
     setFiles(filesOut);
     setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
     setActiveIndex(0);
@@ -672,7 +684,7 @@ export function GafCoreIDE() {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
-    const filesOut = nextFiles.length ? nextFiles : initialFiles;
+    const filesOut = prepareLoadedProjectFiles(nextFiles.length ? nextFiles : initialFiles);
     setFiles(filesOut);
     setOpenTabs([filesOut[0]?.name ?? "App.tsx"]);
     setActiveIndex(0);
@@ -774,9 +786,10 @@ export function GafCoreIDE() {
       if (remaining.length === 0) {
         setCurrentProjectIdState(null);
         setProjectName("Sin proyecto");
-        setFiles(initialFiles);
+        setFiles(prepareLoadedProjectFiles(initialFiles));
         setOpenTabs([initialFiles[0].name]);
         setActiveIndex(0);
+        setPreviewKey((k) => k + 1);
         setLoaded(true);
         return;
       }
