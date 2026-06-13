@@ -4,6 +4,7 @@ import {
   auditSyntaxClosure,
   autoFixSyntaxClosure,
 } from "@/lib/gafcore-integrity-shield.shared";
+import { isJsxBootstrapEntry } from "@/lib/gafcore-jsx-bootstrap.shared";
 
 export type SyntaxHealableFile = { name: string; content: string; language?: string };
 
@@ -46,6 +47,7 @@ export function healWorkspaceSyntax<T extends SyntaxHealableFile>(
 
   const out = files.map((f) => {
     if (!/\.(tsx|jsx|ts)$/i.test(f.name)) return f;
+    if (isJsxBootstrapEntry(f.name)) return f;
     const { content, notes: fileNotes } = healFileContent(f.content);
     if (content === f.content) return f;
     healed = true;

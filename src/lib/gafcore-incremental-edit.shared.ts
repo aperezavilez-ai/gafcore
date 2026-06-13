@@ -97,13 +97,40 @@ function stripForJsxAudit(source: string): string {
     .replace(/`(?:\\.|[^`\\])*`/g, "``");
 }
 
-/** Balance aproximado de tags JSX (0 = equilibrado). */
+/** Balance aproximado de tags JSX (0 = equilibrado). Respeta tags autocerrados `/>`. */
 export function auditJsxTagBalance(content: string): number {
   const code = stripForJsxAudit(content);
-  const openTags = code.match(/<([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>]*)?>(?!\s*\/)/g) ?? [];
-  const closeTags = code.match(/<\/([A-Za-z][A-Za-z0-9.-]*)>/g) ?? [];
-  const voidTags = code.match(/<(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b[^>]*>/gi) ?? [];
-  return openTags.length - closeTags.length - voidTags.length;
+  const voidTags = new Set([
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+  ]);
+  let open = 0;
+  let close = 0;
+  const tagRe = /<\/?([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>]*)?\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(code)) !== null) {
+    const full = m[0];
+    const name = m[1];
+    if (full.startsWith("</")) {
+      close++;
+      continue;
+    }
+    if (full.endsWith("/>") || voidTags.has(name.toLowerCase())) continue;
+    open++;
+  }
+  return open - close;
 }
 
 type ParsedImport = { line: string; names: string[]; from: string };

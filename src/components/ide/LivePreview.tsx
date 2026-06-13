@@ -11,6 +11,7 @@ import {
 } from "@/lib/gafcore-media.shared";
 import { autoFixSyntaxClosure, auditSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 import { auditJsxTagBalance } from "@/lib/gafcore-incremental-edit.shared";
+import { isJsxBootstrapEntry } from "@/lib/gafcore-jsx-bootstrap.shared";
 import {
   PREVIEW_REACT_SHIM_NAME,
   buildPreviewReactShimCode,
@@ -215,7 +216,11 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
               repairCommonJsxSyntaxErrors(repairHtmlMedia(f.content, assetMap)),
               mediaContextHint,
             );
-      if (f.name !== PREVIEW_REACT_SHIM_NAME && /\.(tsx|jsx)$/i.test(f.name)) {
+      if (
+        f.name !== PREVIEW_REACT_SHIM_NAME &&
+        /\.(tsx|jsx)$/i.test(f.name) &&
+        !isJsxBootstrapEntry(f.name)
+      ) {
         const closure = auditSyntaxClosure(source);
         const needsHeal =
           !closure.ok ||

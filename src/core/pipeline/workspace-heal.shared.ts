@@ -5,6 +5,10 @@ import {
 } from "@/lib/gafcore-media.shared";
 import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
 import {
+  cleanJsxBootstrapEntryFile,
+  isJsxBootstrapEntry,
+} from "@/lib/gafcore-jsx-bootstrap.shared";
+import {
   createCodeSnapshot,
   validateAndHealBeforePreview,
 } from "@/lib/gafcore-incremental-edit.shared";
@@ -29,8 +33,9 @@ export function prepareLoadedProjectFiles<T extends { name: string; content: str
 export function prepareFreshProjectFiles<T extends { name: string; content: string; language?: string }>(
   files: T[],
 ): T[] {
+  const cleaned = files.map((f) => cleanJsxBootstrapEntryFile(f));
   return ensureReactPackageJson(
-    files.map((f) => ({ ...f, content: f.content })),
+    cleaned.map((f) => ({ ...f, content: f.content })),
   );
 }
 

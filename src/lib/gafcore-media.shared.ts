@@ -7,6 +7,7 @@ import {
   LISTA_PROCESADA_MAP_SNIPPET,
   RESOLVE_TASK_TEXTO_HELPER_SNIPPET,
 } from "@/lib/gafcore-task-text-resolve.shared";
+import { cleanJsxBootstrapEntryFile } from "@/lib/gafcore-jsx-bootstrap.shared";
 
 /** Mapa nombre de archivo → data URL o https para resolver rutas en preview. */
 export function buildAssetUrlMap(files: ProjFile[]): Record<string, string> {
@@ -910,7 +911,8 @@ export function sanitizeProjectJsxFiles<T extends { name: string; content: strin
 ): T[] {
   return files.map((f) => {
     if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
-    const content = repairCommonJsxSyntaxErrors(f.content);
+    let content = repairCommonJsxSyntaxErrors(f.content);
+    content = cleanJsxBootstrapEntryFile({ name: f.name, content }).content;
     return content !== f.content ? { ...f, content } : f;
   });
 }
