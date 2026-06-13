@@ -164,8 +164,10 @@ import {
   buildConversationalInstructionPrefix,
   buildCreativeBuildPrefix,
   buildHeroBackgroundInstructionPrefix,
+  buildReviewInstructionPrefix,
   aiReplyLooksLikePlanOnly,
   isConversationalOnly,
+  isReviewOrAnalysisRequest,
   isSubstantiveBuildRequest,
   isVisualOnlyTweak,
   softenRoboticReply,
@@ -2797,7 +2799,8 @@ export function ChatPanel({
       return;
     }
     const conversational = isConversationalOnly(raw) && pendingSnapshot.length === 0;
-    const effectiveBuild = mode === "build" && !conversational;
+    const reviewOnly = isReviewOrAnalysisRequest(raw) && pendingSnapshot.length === 0;
+    const effectiveBuild = mode === "build" && !conversational && !reviewOnly;
     let scheduleGuideAfterBuild = false;
 
     const userFacingRaw = raw;
@@ -2870,6 +2873,7 @@ export function ChatPanel({
         : "";
     const freshProjectPrefix = isFreshProject ? buildFreshProjectInstructionPrefix() : "";
     const conversationalPrefix = conversational ? buildConversationalInstructionPrefix(raw) : "";
+    const reviewPrefix = reviewOnly ? buildReviewInstructionPrefix(raw) : "";
     const fastWelcomePrefix = fastWelcomeBuild
       ? buildFastWelcomeBuildPrefix(userFacingRaw || coreText)
       : "";
@@ -2881,7 +2885,7 @@ export function ChatPanel({
         ? "[modo profundo] Prioriza análisis cuidadoso, UI cuidada y código robusto; la salida sigue siendo solo el JSON del contrato. "
         : "";
     const chatPrefix =
-      mode === "chat" || conversational
+      mode === "chat" || conversational || reviewOnly
         ? "[Modo chat] Responde sin generar código a menos que se solicite explícitamente. "
         : "";
     const visualPrefix = visualEditOn
@@ -2902,6 +2906,7 @@ export function ChatPanel({
       freshProjectPrefix +
       fastWelcomePrefix +
       conversationalPrefix +
+      reviewPrefix +
       forceBuildPrefix +
       creativePrefix +
       functionalPrefix +
@@ -2999,6 +3004,7 @@ export function ChatPanel({
         { duration: 8000 },
       );
     }, requestTimeoutMs);
+    let chatReplyDelivered = false;
     try {
       const history: ChatMsg[] = isFreshProject
         ? [{ role: "user", content: conversational ? userBubble : instruction }]
@@ -3102,6 +3108,8 @@ export function ChatPanel({
       // Mostrar respuesta en cuanto la IA responde (no esperar personalización/reintentos).
       appendMessageDeduped("ai", replyText);
       scrollChatToBottomSoon("auto");
+      void persistMessage("assistant", replyText);
+      chatReplyDelivered = true;
       setLoading(false);
       setStreamChars(null);
 
@@ -3142,15 +3150,8 @@ export function ChatPanel({
             );
           }
         }
-      } else if (Array.isArray(result.files) && result.files.length > 0) {
+      } else if (Array.isArray(result.files) && result.files.length > 0 && !reviewOnly) {
         filesToApply = result.files;
-      }
-
-      if (replyText.trim()) {
-        appendMessageDeduped("ai", replyText);
-        forceScrollToBottom();
-        scrollChatToBottomSoon("auto");
-        void persistMessage("assistant", replyText);
       }
 
       if (filesToApply.length > 0 && effectiveBuild) {
@@ -3385,22 +3386,29 @@ export function ChatPanel({
         scrollChatToBottomSoon("auto");
       } else {
         const errMsg = String(error?.message ?? "");
-        const aiCfg =
-          errMsg === "AI_NO_CONFIGURADA" ||
-          errMsg.includes("ai_not_configured") ||
-          /AI.*no.*configurad/i.test(errMsg);
-        const streamHint = describeGafcoreStreamFailure(msg);
-        // Mensaje al usuario SIEMPRE genérico: no exponemos nombres de proveedores ni de variables.
-        const friendly = aiCfg
-          ? "El asistente IA de GafCore no está disponible un momento. Estamos al tanto, inténtalo de nuevo en unos minutos."
-          : (streamHint ?? "No pude responder en este momento. Inténtalo de nuevo.");
-        if (aiCfg) {
-          // Loguear detalle para devs sin mostrarlo al usuario.
-          logClientWarn("gafcore-chat ai_not_configured", errMsg);
-          toast.error("Asistente IA no disponible", { duration: 8_000 });
+        if (chatReplyDelivered) {
+          logClientWarn("gafcore-chat post-reply failure", errMsg);
+          toast.message("Respuesta lista, pero hubo un problema al aplicar cambios.", {
+            duration: 8000,
+          });
+        } else {
+          const aiCfg =
+            errMsg === "AI_NO_CONFIGURADA" ||
+            errMsg.includes("ai_not_configured") ||
+            /AI.*no.*configurad/i.test(errMsg);
+          const streamHint = describeGafcoreStreamFailure(msg);
+          // Mensaje al usuario SIEMPRE genérico: no exponemos nombres de proveedores ni de variables.
+          const friendly = aiCfg
+            ? "El asistente IA de GafCore no está disponible un momento. Estamos al tanto, inténtalo de nuevo en unos minutos."
+            : (streamHint ?? "No pude responder en este momento. Inténtalo de nuevo.");
+          if (aiCfg) {
+            // Loguear detalle para devs sin mostrarlo al usuario.
+            logClientWarn("gafcore-chat ai_not_configured", errMsg);
+            toast.error("Asistente IA no disponible", { duration: 8_000 });
+          }
+          appendMessageDeduped("ai", sanitizeUserFacingAiText(friendly));
+          scrollChatToBottomSoon("auto");
         }
-        appendMessageDeduped("ai", sanitizeUserFacingAiText(friendly));
-        scrollChatToBottomSoon("auto");
       }
     } finally {
       window.clearTimeout(chatTimeoutId);

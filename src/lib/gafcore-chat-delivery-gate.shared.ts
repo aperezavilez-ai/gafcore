@@ -11,6 +11,7 @@ import {
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { mergeContextWithDelta } from "@/lib/gafcore-brain-agent.shared";
 import type { GafcoreDeliveredFile } from "@/lib/gafcore-chat-delivery.shared";
+import { detectCorruptJsxInFiles } from "@/lib/gafcore-jsx-corrupt.shared";
 import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 
 export type DeliveryGateResult = {
@@ -33,6 +34,23 @@ export function gateDeliveredFiles(
   const healedDelta = healUntilStable(deltaFiles);
   const merged = mergeContextWithDelta(contextFiles, healedDelta.files);
   const healedMerged = healUntilStable(merged);
+  const corrupt = detectCorruptJsxInFiles(healedMerged.files);
+  if (corrupt.length > 0) {
+    const blocking = corrupt.map((c) => ({
+      severity: "error" as const,
+      category: "syntax" as const,
+      file: c.file,
+      message: c.message,
+    }));
+    return {
+      ok: false,
+      files: [],
+      issues: blocking,
+      userMessage: formatValidationForUser(blocking),
+      fixInstruction: buildValidationFixInstruction(blocking, originalInstruction),
+    };
+  }
+
   const audit = auditProjectLocally(healedMerged.files);
   const blocking = audit.issues.filter((i) => i.severity === "error");
   const deliverFiles = healedDelta.files.map((d) => {
@@ -51,16 +69,6 @@ export function gateDeliveredFiles(
   }
 
   const fixInstruction = buildValidationFixInstruction(blocking, originalInstruction);
-
-  if (deliverFiles.length > 0) {
-    return {
-      ok: true,
-      files: deliverFiles,
-      issues: audit.issues,
-      userMessage: "",
-      fixInstruction,
-    };
-  }
 
   return {
     ok: false,

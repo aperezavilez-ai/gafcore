@@ -24,8 +24,43 @@ export function isConversationalOnly(text: string): boolean {
   return false;
 }
 
+/** Revisión, análisis u opinión sin pedido explícito de implementar código. */
+export function isReviewOrAnalysisRequest(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 6) return false;
+  const wantsReview =
+    /\b(analiza|analizar|comenta|comentario|opina|opini[oó]n|revisa|review|eval[uú]a|critica|cr[ií]tica|feedback|qu[eé]\s+te\s+parece|dame\s+tu\s+(comentario|opini[oó]n|visi[oó]n)|solo\s+(analiza|comenta)|sin\s+c[oó]digo|sin\s+cambios)\b/i.test(
+      t,
+    );
+  if (!wantsReview) return false;
+  if (
+    /\b(crea|genera|haz|hazme|implementa|construye|construir|modifica|cambia|aplica|build|desarrolla|añade|agrega)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function buildReviewInstructionPrefix(userText: string): string {
+  return (
+    "[MODO ANÁLISIS GafCore] El usuario pide revisión o comentario sobre: \"" +
+    userText.slice(0, 160) +
+    "\". Responde en español con análisis claro y accionable (2–6 párrafos o bullets). " +
+    "Incluye qué está bien, qué mejorar y próximos pasos concretos si aplica. " +
+    "Devuelve SIEMPRE files: [] — PROHIBIDO modificar App.tsx ni ningún archivo. " +
+    "No respondas solo con arquitectura vacía: da feedback útil como un revisor senior. "
+  );
+}
+
+export function isReviewAnalysisInstruction(instruction: string): boolean {
+  return /\[MODO ANÁLISIS GafCore\]/i.test(instruction.trim());
+}
+
 /** Pedido sustantivo de producto / UI (no solo saludo). */
 export function isSubstantiveBuildRequest(text: string): boolean {
+  if (isReviewOrAnalysisRequest(text)) return false;
   const t = text.trim();
   if (t.length < 8) return false;
   return /crea|genera|haz|hazme|monta|levanta|añade|agrega|modifica|cambia|construye|construir|desarrolla|implementa|landing|tienda|app|aplicaci[oó]n|p[aá]gina|pagina|sitio|web|dise[ñn]|imagen|vuelo|viaje|formulario|registro|proyecto|estudio|tatu|m[oó]dulo|sistema|dashboard|saas|negocio|empresa|marca|restaurante|hotel|cl[ií]nica|profesional/i.test(
@@ -154,6 +189,7 @@ export function shouldBypassGafcoreChatCache(instruction: string): boolean {
   if (/^\[GAFCORE BUILD OBLIGATORIO\]/i.test(t)) return true;
   if (isSubstantiveBuildRequest(t)) return true;
   if (/^\[CONVERSACIÓN GafCore\]/i.test(t)) return true;
+  if (/^\[MODO ANÁLISIS GafCore\]/i.test(t)) return true;
   if (/^\[Modo chat\]/i.test(t) && !/\[FUNCTIONAL-FIRST\]/i.test(t)) return true;
   if (userWantsHeroBackgroundChange(t) || (isVisualOnlyTweak(t) && /cambia|modifica|aplica|hero|fondo/i.test(t))) {
     return true;

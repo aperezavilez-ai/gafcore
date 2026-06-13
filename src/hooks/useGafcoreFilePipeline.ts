@@ -146,7 +146,7 @@ export function useGafcoreFilePipeline({
         };
       } catch (err) {
         logClientWarn("gafcore-validate-sources", err);
-        return { ok: true, errors: [] };
+        return { ok: false, errors: [{ name: "validate", message: String((err as Error)?.message || "validate_failed") }] };
       }
     },
     [callValidateSources],

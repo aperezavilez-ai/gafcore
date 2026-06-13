@@ -6,10 +6,12 @@ import { completeChatMessage } from "@/lib/gafcore-ai-gateway.server";
 import { finalizeGafcoreBuildDelivery } from "@/lib/gafcore-chat-delivery.shared";
 import { gateDeliveredFiles } from "@/lib/gafcore-chat-delivery-gate.shared";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
-import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
+import { buildValidationFixInstruction } from "@/lib/gafcore-ai-validation.shared";
+import { mergeContextWithDelta } from "@/lib/gafcore-brain-agent.shared";
+import { isSubstantiveBuildRequest, isReviewAnalysisInstruction } from "@/lib/gafcore-chat-intent.shared";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { logDev } from "@/lib/gafcore-logger.server";
-import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
+import { validateGafcoreProjectCore } from "@/lib/gafcore-validate.server";
 
 const MAX_ATTEMPTS = 3;
 
@@ -79,6 +81,15 @@ export async function runGafcoreAgentChatCompletion(input: {
     }
 
     if (safeFiles.length === 0) {
+      if (isReviewAnalysisInstruction(input.instruction)) {
+        return {
+          reply: replyRaw,
+          files: [],
+          attempts: attempt,
+          validationBlocked: false,
+        };
+      }
+
       const buildRequest = isSubstantiveBuildRequest(input.instruction);
       const expectedFiles =
         buildRequest && (parseFailed || rawFilesCount > 0 || /"files"\s*:/.test(content));
@@ -130,7 +141,43 @@ export async function runGafcoreAgentChatCompletion(input: {
 
     const gate = gateDeliveredFiles(input.contextFiles, safeFiles, input.instruction);
     if (gate.ok) {
+      const mergedForTranspile = mergeContextWithDelta(input.contextFiles, gate.files);
+      const transpile = await validateGafcoreProjectCore(
+        mergedForTranspile.map((f) => ({ name: f.name, content: f.content })),
+      );
+      if (!transpile.ok) {
+        const syntaxBlocking = transpile.issues.filter((i) => i.severity === "error");
+        logDev("gafcore_agent_transpile_fail", {
+          attempt,
+          errors: syntaxBlocking.length,
+        });
+        if (attempt >= MAX_ATTEMPTS) {
+          return {
+            reply: `${replyRaw}\n\nNo se aplicaron cambios: el código no compila.`,
+            files: [],
+            attempts: attempt,
+            validationBlocked: true,
+          };
+        }
+        workingMessages.push(
+          { role: "assistant", content: content.slice(0, 12000) },
+          {
+            role: "user",
+            content: buildValidationFixInstruction(syntaxBlocking, input.instruction),
+          },
+        );
+        continue;
+      }
+
       logDev("gafcore_agent_chat_ok", { attempt, files: gate.files.length });
+      if (isReviewAnalysisInstruction(input.instruction)) {
+        return {
+          reply: replyRaw,
+          files: [],
+          attempts: attempt,
+          validationBlocked: false,
+        };
+      }
       return {
         reply: replyRaw,
         files: gate.files,
@@ -145,21 +192,6 @@ export async function runGafcoreAgentChatCompletion(input: {
     });
 
     if (attempt >= MAX_ATTEMPTS) {
-      if (safeFiles.length > 0) {
-        const healed = healWorkspaceSyntax(safeFiles);
-        logDev("gafcore_agent_chat_best_effort", {
-          attempt,
-          files: healed.files.length,
-          issues: gate.issues.length,
-          syntaxHealed: healed.healed,
-        });
-        return {
-          reply: replyRaw,
-          files: healed.files,
-          attempts: attempt,
-          validationBlocked: false,
-        };
-      }
       return {
         reply: `${replyRaw}\n\nNo se aplicaron cambios: ${gate.userMessage}`,
         files: [],
