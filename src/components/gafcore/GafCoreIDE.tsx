@@ -48,6 +48,11 @@ import {
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
 import { prepareFreshProjectFiles, prepareLoadedProjectFiles } from "@/core/pipeline/workspace-heal.shared";
 import {
+  createWelcomeProjectFiles,
+  isWelcomeWorkspace,
+  resolveWelcomeWorkspaceFiles,
+} from "@/lib/gafcore-welcome-preview.shared";
+import {
   hasSubstantialRemoteProject,
   isRemoteProjectStale,
 } from "@/lib/gafcore-project-stale.shared";
@@ -125,7 +130,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChatPanel, type ChatWorkflowStripPayload } from "@/components/ide/ChatPanel";
 import { WorkflowTaskStrip } from "@/components/ide/WorkflowTaskStrip";
-import { CodeEditor, createDefaultProjectFiles, type FileItem } from "@/components/ide/CodeEditor";
+import { CodeEditor, type FileItem } from "@/components/ide/CodeEditor";
 import { LivePreview, type PreviewDevice } from "@/components/ide/LivePreview";
 import { DesignCritiqueDialog } from "@/components/ide/DesignCritiqueDialog";
 import { SettingsDialog } from "@/components/ide/SettingsDialog";
@@ -222,9 +227,9 @@ export function GafCoreIDE() {
   const callDeployStatus = useServerFn(getProjectDeployStatus);
   const requestCriticalApproval = useServerFn(requestGafcoreCriticalApproval);
 
-  const [files, setFiles] = useState<FileItem[]>(() => createDefaultProjectFiles());
+  const [files, setFiles] = useState<FileItem[]>(() => createWelcomeProjectFiles());
   const [activeIndex, setActiveIndex] = useState(0);
-  const [openTabs, setOpenTabs] = useState<string[]>(() => [createDefaultProjectFiles()[0].name]);
+  const [openTabs, setOpenTabs] = useState<string[]>(() => [createWelcomeProjectFiles()[0].name]);
   const [loaded, setLoaded] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -428,9 +433,15 @@ export function GafCoreIDE() {
 
   const applyProjectWorkspace = useCallback(
     (workspaceFiles: FileItem[], opts?: { fresh?: boolean; resetChat?: boolean; resetPreview?: boolean }) => {
+      let input = workspaceFiles;
+      if (opts?.fresh || isWelcomeWorkspace(workspaceFiles)) {
+        input = resolveWelcomeWorkspaceFiles(
+          workspaceFiles.length ? workspaceFiles : createWelcomeProjectFiles(),
+        );
+      }
       const prepared = opts?.fresh
-        ? prepareFreshProjectFiles(workspaceFiles)
-        : prepareLoadedProjectFiles(workspaceFiles);
+        ? prepareFreshProjectFiles(input)
+        : prepareLoadedProjectFiles(input);
       filesRef.current = prepared;
       setFiles(prepared);
       setOpenTabs([prepared[0]?.name ?? "App.tsx"]);
@@ -444,7 +455,7 @@ export function GafCoreIDE() {
   );
 
   const resetIdeWorkspaceToDefault = useCallback(() => {
-    applyProjectWorkspace(createDefaultProjectFiles(), { fresh: true });
+    applyProjectWorkspace(createWelcomeProjectFiles(), { fresh: true });
   }, [applyProjectWorkspace]);
 
   const openNewProjectDialog = useCallback(() => {
@@ -610,7 +621,7 @@ export function GafCoreIDE() {
   const hydrateEditorFromRemote = async (remote: FileItem[] | null, projectId: string) => {
     const pending = consumePendingProjectFiles(projectId);
     if (pending?.length) {
-      const prepared = prepareLoadedProjectFiles(pending);
+      const prepared = prepareFreshProjectFiles(resolveWelcomeWorkspaceFiles(pending));
       setFiles(prepared);
       setOpenTabs([prepared[0]?.name ?? pending[0].name]);
       setActiveIndex(0);
@@ -631,7 +642,10 @@ export function GafCoreIDE() {
       (hasSubstantialRemoteProject(remote) || !isRemoteProjectStale(remote));
 
     if (shouldLoadRemote) {
-      const prepared = prepareLoadedProjectFiles(remote);
+      const normalized = resolveWelcomeWorkspaceFiles(remote);
+      const prepared = isWelcomeWorkspace(normalized)
+        ? prepareFreshProjectFiles(normalized)
+        : prepareLoadedProjectFiles(normalized);
       const jsxFixed =
         prepared.length !== remote.length ||
         prepared.some((f, i) => f.content !== remote[i]?.content);
@@ -649,8 +663,8 @@ export function GafCoreIDE() {
         duration: 12_000,
       },
     );
-    setFiles(prepareFreshProjectFiles(createDefaultProjectFiles()));
-    setOpenTabs([createDefaultProjectFiles()[0].name]);
+    setFiles(prepareFreshProjectFiles(createWelcomeProjectFiles()));
+    setOpenTabs([createWelcomeProjectFiles()[0].name]);
     setActiveIndex(0);
   };
 
@@ -691,7 +705,7 @@ export function GafCoreIDE() {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
-    const source = nextFiles.length ? nextFiles : createDefaultProjectFiles();
+    const source = nextFiles.length ? nextFiles : createWelcomeProjectFiles();
     const filesOut = applyProjectWorkspace(source, { fresh: true });
     stashPendingProjectFiles(
       created.id,
@@ -713,7 +727,7 @@ export function GafCoreIDE() {
       if (prev.some((p) => p.id === created.id)) return prev;
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
-    const source = nextFiles.length ? nextFiles : createDefaultProjectFiles();
+    const source = nextFiles.length ? nextFiles : createWelcomeProjectFiles();
     const filesOut = applyProjectWorkspace(source, { fresh: true });
     stashPendingProjectFiles(
       created.id,
@@ -880,6 +894,7 @@ export function GafCoreIDE() {
 
   useEffect(() => {
     if (!loaded) return;
+    if (isWelcomeWorkspace(filesRef.current)) return;
     setFiles((prev) => {
       const next = sanitizeProjectJsxFiles(prev);
       return next.some((f, i) => f.content !== prev[i]?.content) ? next : prev;
@@ -889,6 +904,11 @@ export function GafCoreIDE() {
   useEffect(() => {
     const onRepairJsx = () => {
       setFiles((prev) => {
+        if (isWelcomeWorkspace(prev)) {
+          const next = prepareFreshProjectFiles(resolveWelcomeWorkspaceFiles(prev));
+          if (currentProjectId) void saveProjectFiles(next, currentProjectId);
+          return next;
+        }
         const next = sanitizeProjectJsxFiles(prev);
         const changed = next.some((f, i) => f.content !== prev[i]?.content);
         if (changed && currentProjectId) {
@@ -951,7 +971,7 @@ export function GafCoreIDE() {
         toast.message("No hay proyectos en tu cuenta", {
           description: "Menú del logo → «+ Nuevo» para crear uno.",
         });
-        const blank = prepareFreshProjectFiles(createDefaultProjectFiles());
+        const blank = createWelcomeProjectFiles();
         setFiles(blank);
         setOpenTabs([blank[0]?.name ?? "App.tsx"]);
         workspaceHydratedRef.current = true;

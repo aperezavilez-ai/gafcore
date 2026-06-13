@@ -8,6 +8,7 @@ import {
   RESOLVE_TASK_TEXTO_HELPER_SNIPPET,
 } from "@/lib/gafcore-task-text-resolve.shared";
 import { cleanJsxBootstrapEntryFile } from "@/lib/gafcore-jsx-bootstrap.shared";
+import { resolveWelcomeWorkspaceFiles } from "@/lib/gafcore-welcome-preview.shared";
 
 /** Mapa nombre de archivo → data URL o https para resolver rutas en preview. */
 export function buildAssetUrlMap(files: ProjFile[]): Record<string, string> {
@@ -909,7 +910,8 @@ export function repairGeneratedSourceFiles<T extends { name: string; content: st
 export function sanitizeProjectJsxFiles<T extends { name: string; content: string }>(
   files: T[],
 ): T[] {
-  return files.map((f) => {
+  const welcomeSafe = resolveWelcomeWorkspaceFiles(files);
+  return welcomeSafe.map((f) => {
     if (!/\.(jsx|tsx|js|ts)$/i.test(f.name)) return f;
     let content = repairCommonJsxSyntaxErrors(f.content);
     content = cleanJsxBootstrapEntryFile({ name: f.name, content }).content;

@@ -13,6 +13,10 @@ import { autoFixSyntaxClosure, auditSyntaxClosure } from "@/lib/gafcore-integrit
 import { auditJsxTagBalance } from "@/lib/gafcore-incremental-edit.shared";
 import { isJsxBootstrapEntry } from "@/lib/gafcore-jsx-bootstrap.shared";
 import {
+  isWelcomeWorkspace,
+  resolveWelcomeWorkspaceFiles,
+} from "@/lib/gafcore-welcome-preview.shared";
+import {
   PREVIEW_REACT_SHIM_NAME,
   buildPreviewReactShimCode,
 } from "@/lib/preview-iframe-jsx-guard.snippet";
@@ -146,24 +150,31 @@ export type PreviewDevice = "desktop" | "mobile";
 export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; device?: PreviewDevice }) {
   /** Durante streaming de la IA, prioriza fluidez del IDE antes que cada frame del preview. */
   const deferredFiles = useDeferredValue(files);
+  const previewFiles = useMemo(
+    () => resolveWelcomeWorkspaceFiles(deferredFiles),
+    [deferredFiles],
+  );
+  const welcomePreview = isWelcomeWorkspace(previewFiles);
   const srcDoc = useMemo(() => {
-    const mediaContextHint = deferredFiles
+    const mediaContextHint = previewFiles
       .map((f) => f.content)
       .join("\n")
       .slice(0, 4000);
-    const sanitizedFiles = sanitizeProjectJsxFiles(
-      deferredFiles.map((f) => ({ name: f.name, content: f.content })),
-    );
+    const sanitizedFiles = welcomePreview
+      ? previewFiles
+      : sanitizeProjectJsxFiles(
+          previewFiles.map((f) => ({ name: f.name, content: f.content })),
+        );
     const userJsFiles = sanitizedFiles.filter((f) => isJsModule(f.name));
     const reactShim: FileItem = {
       name: PREVIEW_REACT_SHIM_NAME,
       content: buildPreviewReactShimCode(REACT_DEPS.react),
     };
     const jsFiles = [reactShim, ...userJsFiles];
-    const cssFiles = deferredFiles.filter((f) => isCss(f.name));
+    const cssFiles = previewFiles.filter((f) => isCss(f.name));
 
     // If no JS modules at all → fall back to plain HTML preview
-    const htmlFile = deferredFiles.find((f) => f.name.endsWith(".html"));
+    const htmlFile = previewFiles.find((f) => f.name.endsWith(".html"));
     const hasReactEntry = jsFiles.some((f) =>
       /(^|\/)(main|index|App)\.(jsx?|tsx?)$/i.test(f.name),
     );
@@ -204,19 +215,24 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
     // Build a virtual module map: app:filename -> blob URL of (Babel-transpiled at runtime) module
     const cssNames = cssFiles.map((f) => f.name);
     const assetMap = buildAssetUrlMap(
-      deferredFiles.map((f) => ({ name: f.name, content: f.content })),
+      previewFiles.map((f) => ({ name: f.name, content: f.content })),
     );
 
     // Encode each module as its source string; the iframe transpiles + blob-URLs them.
     const modulesPayload = jsFiles.map((f) => {
+      const isWelcomeApp =
+        welcomePreview && /^app\.(jsx?|tsx?)$/i.test(f.name);
       let source =
         f.name === PREVIEW_REACT_SHIM_NAME
           ? f.content
-          : applyAllMediaRepairs(
-              repairCommonJsxSyntaxErrors(repairHtmlMedia(f.content, assetMap)),
-              mediaContextHint,
-            );
+          : isWelcomeApp
+            ? f.content
+            : applyAllMediaRepairs(
+                repairCommonJsxSyntaxErrors(repairHtmlMedia(f.content, assetMap)),
+                mediaContextHint,
+              );
       if (
+        !welcomePreview &&
         f.name !== PREVIEW_REACT_SHIM_NAME &&
         /\.(tsx|jsx)$/i.test(f.name) &&
         !isJsxBootstrapEntry(f.name)
@@ -635,7 +651,7 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
 ${PREVIEW_IMG_FALLBACK_SCRIPT}
 </body>
 </html>`;
-  }, [deferredFiles]);
+  }, [previewFiles, welcomePreview]);
 
   const isMobile = device === "mobile";
 
