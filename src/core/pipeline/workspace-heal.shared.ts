@@ -25,6 +25,15 @@ export function prepareLoadedProjectFiles<T extends { name: string; content: str
   return ensureReactPackageJson(healed.files);
 }
 
+/** Plantilla nueva o recién creada: sin heal agresivo (evita romper welcome con Tailwind `/`). */
+export function prepareFreshProjectFiles<T extends { name: string; content: string; language?: string }>(
+  files: T[],
+): T[] {
+  return ensureReactPackageJson(
+    files.map((f) => ({ ...f, content: f.content })),
+  );
+}
+
 /** Repara el delta IA (media + sintaxis) sin fusionar aún. */
 export function repairGenerationDelta(
   baseFiles: PipelineFile[],

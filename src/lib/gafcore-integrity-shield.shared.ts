@@ -255,7 +255,8 @@ function fixJsxTagBalance(content: string, delta: number): string {
 
 /** Elimina cierres JSX huérfanos (p. ej. `</Carrito></header>` tras cerrar el return). */
 export function fixJsxSurplusClosers(content: string): { content: string; removed: number } {
-  const tagRe = /<\/?([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>/]*)?\/?>/g;
+  // Atributos Tailwind (`border-white/10`) contienen `/`; [^>/]* rompía el parser y borraba </span> válidos.
+  const tagRe = /<\/?([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>]*)?\/?>/g;
   const orphans: { start: number; end: number }[] = [];
   const stack: string[] = [];
   let m: RegExpExecArray | null;

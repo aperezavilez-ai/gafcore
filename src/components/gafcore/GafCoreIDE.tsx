@@ -46,7 +46,7 @@ import {
   prepareFilesForEditorRestore,
 } from "@/lib/gafcore-snapshot-restore.shared";
 import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
-import { prepareLoadedProjectFiles } from "@/core/pipeline/workspace-heal.shared";
+import { prepareFreshProjectFiles, prepareLoadedProjectFiles } from "@/core/pipeline/workspace-heal.shared";
 import {
   hasSubstantialRemoteProject,
   isRemoteProjectStale,
@@ -426,16 +426,26 @@ export function GafCoreIDE() {
     if (user?.id) setProjectSaveSuppressed(false);
   }, [user?.id]);
 
+  const applyProjectWorkspace = useCallback(
+    (workspaceFiles: FileItem[], opts?: { fresh?: boolean; resetChat?: boolean; resetPreview?: boolean }) => {
+      const prepared = opts?.fresh
+        ? prepareFreshProjectFiles(workspaceFiles)
+        : prepareLoadedProjectFiles(workspaceFiles);
+      filesRef.current = prepared;
+      setFiles(prepared);
+      setOpenTabs([prepared[0]?.name ?? "App.tsx"]);
+      setActiveIndex(0);
+      if (opts?.resetPreview !== false) setPreviewKey((k) => k + 1);
+      if (opts?.resetChat !== false) setChatPanelKey((k) => k + 1);
+      workspaceHydratedRef.current = true;
+      return prepared;
+    },
+    [],
+  );
+
   const resetIdeWorkspaceToDefault = useCallback(() => {
-    const fresh = prepareLoadedProjectFiles(createDefaultProjectFiles());
-    setFiles(fresh);
-    filesRef.current = fresh;
-    setOpenTabs([fresh[0]?.name ?? "App.tsx"]);
-    setActiveIndex(0);
-    setPreviewKey((k) => k + 1);
-    setChatPanelKey((k) => k + 1);
-    workspaceHydratedRef.current = true;
-  }, []);
+    applyProjectWorkspace(createDefaultProjectFiles(), { fresh: true });
+  }, [applyProjectWorkspace]);
 
   const openNewProjectDialog = useCallback(() => {
     setProjectMenuOpen(false);
@@ -639,7 +649,7 @@ export function GafCoreIDE() {
         duration: 12_000,
       },
     );
-    setFiles(prepareLoadedProjectFiles(createDefaultProjectFiles()));
+    setFiles(prepareFreshProjectFiles(createDefaultProjectFiles()));
     setOpenTabs([createDefaultProjectFiles()[0].name]);
     setActiveIndex(0);
   };
@@ -682,7 +692,7 @@ export function GafCoreIDE() {
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
     const source = nextFiles.length ? nextFiles : createDefaultProjectFiles();
-    const filesOut = applyProjectWorkspace(source);
+    const filesOut = applyProjectWorkspace(source, { fresh: true });
     stashPendingProjectFiles(
       created.id,
       filesOut.map((f) => ({ name: f.name, language: f.language, content: f.content })),
@@ -704,7 +714,7 @@ export function GafCoreIDE() {
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
     const source = nextFiles.length ? nextFiles : createDefaultProjectFiles();
-    const filesOut = applyProjectWorkspace(source);
+    const filesOut = applyProjectWorkspace(source, { fresh: true });
     stashPendingProjectFiles(
       created.id,
       filesOut.map((f) => ({ name: f.name, language: f.language, content: f.content })),
@@ -941,7 +951,7 @@ export function GafCoreIDE() {
         toast.message("No hay proyectos en tu cuenta", {
           description: "Menú del logo → «+ Nuevo» para crear uno.",
         });
-        const blank = prepareLoadedProjectFiles(createDefaultProjectFiles());
+        const blank = prepareFreshProjectFiles(createDefaultProjectFiles());
         setFiles(blank);
         setOpenTabs([blank[0]?.name ?? "App.tsx"]);
         workspaceHydratedRef.current = true;

@@ -9,7 +9,8 @@ import {
   repairCommonJsxSyntaxErrors,
   sanitizeProjectJsxFiles,
 } from "@/lib/gafcore-media.shared";
-import { autoFixSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
+import { autoFixSyntaxClosure, auditSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
+import { auditJsxTagBalance } from "@/lib/gafcore-incremental-edit.shared";
 import {
   PREVIEW_REACT_SHIM_NAME,
   buildPreviewReactShimCode,
@@ -215,8 +216,14 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
               mediaContextHint,
             );
       if (f.name !== PREVIEW_REACT_SHIM_NAME && /\.(tsx|jsx)$/i.test(f.name)) {
-        const healed = autoFixSyntaxClosure(source);
-        if (healed.fixes.length > 0) source = healed.content;
+        const closure = auditSyntaxClosure(source);
+        const needsHeal =
+          !closure.ok ||
+          auditJsxTagBalance(source) !== 0;
+        if (needsHeal) {
+          const healed = autoFixSyntaxClosure(source);
+          if (healed.fixes.length > 0) source = healed.content;
+        }
       }
       return {
         name: f.name,

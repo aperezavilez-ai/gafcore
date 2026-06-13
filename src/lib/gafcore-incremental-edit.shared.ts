@@ -100,7 +100,7 @@ function stripForJsxAudit(source: string): string {
 /** Balance aproximado de tags JSX (0 = equilibrado). */
 export function auditJsxTagBalance(content: string): number {
   const code = stripForJsxAudit(content);
-  const openTags = code.match(/<([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>/]*)?>(?!\s*\/)/g) ?? [];
+  const openTags = code.match(/<([A-Za-z][A-Za-z0-9.-]*)(?:\s[^>]*)?>(?!\s*\/)/g) ?? [];
   const closeTags = code.match(/<\/([A-Za-z][A-Za-z0-9.-]*)>/g) ?? [];
   const voidTags = code.match(/<(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b[^>]*>/gi) ?? [];
   return openTags.length - closeTags.length - voidTags.length;
