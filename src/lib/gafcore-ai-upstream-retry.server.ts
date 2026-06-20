@@ -1,7 +1,12 @@
 import { logDev } from "@/lib/gafcore-logger.server";
 
-/** Intentos totales (1 inicial + reintentos). */
-export const GAFCORE_AI_UPSTREAM_MAX_ATTEMPTS = 3;
+/**
+ * Intentos totales (1 inicial + reintentos).
+ * Limitado a 2: este número multiplica el peor caso de duración del endpoint
+ * (agente MAX_ATTEMPTS × este valor × timeout por llamada). Ver la nota de
+ * timeouts en `ai-chat-completions.server.ts` antes de subirlo.
+ */
+export const GAFCORE_AI_UPSTREAM_MAX_ATTEMPTS = 2;
 
 export const GAFCORE_AI_UPSTREAM_RETRY_DELAY_MS = 2000;
 
