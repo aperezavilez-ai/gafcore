@@ -24,6 +24,7 @@ import { Route as GafcorePublisherRouteImport } from './routes/gafcore_.publishe
 import { Route as GafcoreProjectsRouteImport } from './routes/gafcore_.projects'
 import { Route as GafcoreMarketplaceRouteImport } from './routes/gafcore_.marketplace'
 import { Route as GafcoreLoginRouteImport } from './routes/gafcore_.login'
+import { Route as GafcoreAppV2RouteImport } from './routes/gafcore_.app-v2'
 import { Route as GafcoreAppRouteImport } from './routes/gafcore_.app'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as GafcoreTemplatesMobilityRouteImport } from './routes/gafcore_.templates.mobility'
@@ -60,6 +61,9 @@ import { Route as ApiGafcoreWorkflowDrainRouteImport } from './routes/api/gafcor
 import { Route as ApiGafcoreOrchestratorEventsRouteImport } from './routes/api/gafcore/orchestrator.events'
 import { Route as ApiGafcoreChatStreamRouteImport } from './routes/api/gafcore/chat.stream'
 import { Route as ApiGafcoreChatCompleteRouteImport } from './routes/api/gafcore/chat.complete'
+import { Route as ApiGafcoreBuilderV2ProjectsRouteImport } from './routes/api/gafcore/builder-v2.projects'
+import { Route as ApiGafcoreBuilderV2PlanRouteImport } from './routes/api/gafcore/builder-v2.plan'
+import { Route as ApiGafcoreBuilderV2GenerateRouteImport } from './routes/api/gafcore/builder-v2.generate'
 import { Route as ApiGafcoreAdminSeedTemplatesRouteImport } from './routes/api/gafcore/admin/seed-templates'
 import { Route as ApiGafcoreAdminDiagnosticsIngestRouteImport } from './routes/api/gafcore/admin/diagnostics-ingest'
 import { Route as ApiExtensionsV1ManifestRouteImport } from './routes/api/extensions/v1/manifest'
@@ -69,6 +73,8 @@ import { Route as ApiExtensionsV1CatalogRouteImport } from './routes/api/extensi
 import { Route as ApiExtensionsV1AgentEchoRouteImport } from './routes/api/extensions/v1/agent-echo'
 import { Route as ApiPublicOauthVercelCallbackRouteImport } from './routes/api/public/oauth.vercel.callback'
 import { Route as ApiPublicOauthGithubCallbackRouteImport } from './routes/api/public/oauth.github.callback'
+import { Route as ApiGafcoreBuilderV2ProjectSaveRouteImport } from './routes/api/gafcore/builder-v2.project.save'
+import { Route as ApiGafcoreBuilderV2ProjectIdRouteImport } from './routes/api/gafcore/builder-v2.project.$id'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -143,6 +149,11 @@ const GafcoreMarketplaceRoute = GafcoreMarketplaceRouteImport.update({
 const GafcoreLoginRoute = GafcoreLoginRouteImport.update({
   id: '/gafcore_/login',
   path: '/gafcore/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GafcoreAppV2Route = GafcoreAppV2RouteImport.update({
+  id: '/gafcore_/app-v2',
+  path: '/gafcore/app-v2',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GafcoreAppRoute = GafcoreAppRouteImport.update({
@@ -339,6 +350,23 @@ const ApiGafcoreChatCompleteRoute = ApiGafcoreChatCompleteRouteImport.update({
   path: '/api/gafcore/chat/complete',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGafcoreBuilderV2ProjectsRoute =
+  ApiGafcoreBuilderV2ProjectsRouteImport.update({
+    id: '/api/gafcore/builder-v2/projects',
+    path: '/api/gafcore/builder-v2/projects',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreBuilderV2PlanRoute = ApiGafcoreBuilderV2PlanRouteImport.update({
+  id: '/api/gafcore/builder-v2/plan',
+  path: '/api/gafcore/builder-v2/plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGafcoreBuilderV2GenerateRoute =
+  ApiGafcoreBuilderV2GenerateRouteImport.update({
+    id: '/api/gafcore/builder-v2/generate',
+    path: '/api/gafcore/builder-v2/generate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGafcoreAdminSeedTemplatesRoute =
   ApiGafcoreAdminSeedTemplatesRouteImport.update({
     id: '/api/gafcore/admin/seed-templates',
@@ -390,6 +418,18 @@ const ApiPublicOauthGithubCallbackRoute =
     path: '/api/public/oauth/github/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiGafcoreBuilderV2ProjectSaveRoute =
+  ApiGafcoreBuilderV2ProjectSaveRouteImport.update({
+    id: '/api/gafcore/builder-v2/project/save',
+    path: '/api/gafcore/builder-v2/project/save',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreBuilderV2ProjectIdRoute =
+  ApiGafcoreBuilderV2ProjectIdRouteImport.update({
+    id: '/api/gafcore/builder-v2/project/$id',
+    path: '/api/gafcore/builder-v2/project/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -404,6 +444,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/api/chat': typeof ApiChatRoute
   '/gafcore/app': typeof GafcoreAppRoute
+  '/gafcore/app-v2': typeof GafcoreAppV2Route
   '/gafcore/login': typeof GafcoreLoginRoute
   '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
@@ -440,6 +481,9 @@ export interface FileRoutesByFullPath {
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
+  '/api/gafcore/builder-v2/generate': typeof ApiGafcoreBuilderV2GenerateRoute
+  '/api/gafcore/builder-v2/plan': typeof ApiGafcoreBuilderV2PlanRoute
+  '/api/gafcore/builder-v2/projects': typeof ApiGafcoreBuilderV2ProjectsRoute
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
@@ -450,6 +494,8 @@ export interface FileRoutesByFullPath {
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
+  '/api/gafcore/builder-v2/project/$id': typeof ApiGafcoreBuilderV2ProjectIdRoute
+  '/api/gafcore/builder-v2/project/save': typeof ApiGafcoreBuilderV2ProjectSaveRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
   '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
 }
@@ -466,6 +512,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/api/chat': typeof ApiChatRoute
   '/gafcore/app': typeof GafcoreAppRoute
+  '/gafcore/app-v2': typeof GafcoreAppV2Route
   '/gafcore/login': typeof GafcoreLoginRoute
   '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
@@ -502,6 +549,9 @@ export interface FileRoutesByTo {
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
+  '/api/gafcore/builder-v2/generate': typeof ApiGafcoreBuilderV2GenerateRoute
+  '/api/gafcore/builder-v2/plan': typeof ApiGafcoreBuilderV2PlanRoute
+  '/api/gafcore/builder-v2/projects': typeof ApiGafcoreBuilderV2ProjectsRoute
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
@@ -512,6 +562,8 @@ export interface FileRoutesByTo {
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
+  '/api/gafcore/builder-v2/project/$id': typeof ApiGafcoreBuilderV2ProjectIdRoute
+  '/api/gafcore/builder-v2/project/save': typeof ApiGafcoreBuilderV2ProjectSaveRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
   '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
 }
@@ -529,6 +581,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/api/chat': typeof ApiChatRoute
   '/gafcore_/app': typeof GafcoreAppRoute
+  '/gafcore_/app-v2': typeof GafcoreAppV2Route
   '/gafcore_/login': typeof GafcoreLoginRoute
   '/gafcore_/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore_/projects': typeof GafcoreProjectsRoute
@@ -565,6 +618,9 @@ export interface FileRoutesById {
   '/api/extensions/v1/manifest': typeof ApiExtensionsV1ManifestRoute
   '/api/gafcore/admin/diagnostics-ingest': typeof ApiGafcoreAdminDiagnosticsIngestRoute
   '/api/gafcore/admin/seed-templates': typeof ApiGafcoreAdminSeedTemplatesRoute
+  '/api/gafcore/builder-v2/generate': typeof ApiGafcoreBuilderV2GenerateRoute
+  '/api/gafcore/builder-v2/plan': typeof ApiGafcoreBuilderV2PlanRoute
+  '/api/gafcore/builder-v2/projects': typeof ApiGafcoreBuilderV2ProjectsRoute
   '/api/gafcore/chat/complete': typeof ApiGafcoreChatCompleteRoute
   '/api/gafcore/chat/stream': typeof ApiGafcoreChatStreamRoute
   '/api/gafcore/orchestrator/events': typeof ApiGafcoreOrchestratorEventsRoute
@@ -575,6 +631,8 @@ export interface FileRoutesById {
   '/api/v1/ai/generate': typeof ApiV1AiGenerateRoute
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
+  '/api/gafcore/builder-v2/project/$id': typeof ApiGafcoreBuilderV2ProjectIdRoute
+  '/api/gafcore/builder-v2/project/save': typeof ApiGafcoreBuilderV2ProjectSaveRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
   '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
 }
@@ -593,6 +651,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/chat'
     | '/gafcore/app'
+    | '/gafcore/app-v2'
     | '/gafcore/login'
     | '/gafcore/marketplace'
     | '/gafcore/projects'
@@ -629,6 +688,9 @@ export interface FileRouteTypes {
     | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
+    | '/api/gafcore/builder-v2/generate'
+    | '/api/gafcore/builder-v2/plan'
+    | '/api/gafcore/builder-v2/projects'
     | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
@@ -639,6 +701,8 @@ export interface FileRouteTypes {
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
+    | '/api/gafcore/builder-v2/project/$id'
+    | '/api/gafcore/builder-v2/project/save'
     | '/api/public/oauth/github/callback'
     | '/api/public/oauth/vercel/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -655,6 +719,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/chat'
     | '/gafcore/app'
+    | '/gafcore/app-v2'
     | '/gafcore/login'
     | '/gafcore/marketplace'
     | '/gafcore/projects'
@@ -691,6 +756,9 @@ export interface FileRouteTypes {
     | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
+    | '/api/gafcore/builder-v2/generate'
+    | '/api/gafcore/builder-v2/plan'
+    | '/api/gafcore/builder-v2/projects'
     | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
@@ -701,6 +769,8 @@ export interface FileRouteTypes {
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
+    | '/api/gafcore/builder-v2/project/$id'
+    | '/api/gafcore/builder-v2/project/save'
     | '/api/public/oauth/github/callback'
     | '/api/public/oauth/vercel/callback'
   id:
@@ -717,6 +787,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/api/chat'
     | '/gafcore_/app'
+    | '/gafcore_/app-v2'
     | '/gafcore_/login'
     | '/gafcore_/marketplace'
     | '/gafcore_/projects'
@@ -753,6 +824,9 @@ export interface FileRouteTypes {
     | '/api/extensions/v1/manifest'
     | '/api/gafcore/admin/diagnostics-ingest'
     | '/api/gafcore/admin/seed-templates'
+    | '/api/gafcore/builder-v2/generate'
+    | '/api/gafcore/builder-v2/plan'
+    | '/api/gafcore/builder-v2/projects'
     | '/api/gafcore/chat/complete'
     | '/api/gafcore/chat/stream'
     | '/api/gafcore/orchestrator/events'
@@ -763,6 +837,8 @@ export interface FileRouteTypes {
     | '/api/v1/ai/generate'
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
+    | '/api/gafcore/builder-v2/project/$id'
+    | '/api/gafcore/builder-v2/project/save'
     | '/api/public/oauth/github/callback'
     | '/api/public/oauth/vercel/callback'
   fileRoutesById: FileRoutesById
@@ -780,6 +856,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   ApiChatRoute: typeof ApiChatRoute
   GafcoreAppRoute: typeof GafcoreAppRoute
+  GafcoreAppV2Route: typeof GafcoreAppV2Route
   GafcoreLoginRoute: typeof GafcoreLoginRoute
   GafcoreMarketplaceRoute: typeof GafcoreMarketplaceRoute
   GafcoreProjectsRoute: typeof GafcoreProjectsRoute
@@ -816,6 +893,9 @@ export interface RootRouteChildren {
   ApiExtensionsV1ManifestRoute: typeof ApiExtensionsV1ManifestRoute
   ApiGafcoreAdminDiagnosticsIngestRoute: typeof ApiGafcoreAdminDiagnosticsIngestRoute
   ApiGafcoreAdminSeedTemplatesRoute: typeof ApiGafcoreAdminSeedTemplatesRoute
+  ApiGafcoreBuilderV2GenerateRoute: typeof ApiGafcoreBuilderV2GenerateRoute
+  ApiGafcoreBuilderV2PlanRoute: typeof ApiGafcoreBuilderV2PlanRoute
+  ApiGafcoreBuilderV2ProjectsRoute: typeof ApiGafcoreBuilderV2ProjectsRoute
   ApiGafcoreChatCompleteRoute: typeof ApiGafcoreChatCompleteRoute
   ApiGafcoreChatStreamRoute: typeof ApiGafcoreChatStreamRoute
   ApiGafcoreOrchestratorEventsRoute: typeof ApiGafcoreOrchestratorEventsRoute
@@ -825,6 +905,8 @@ export interface RootRouteChildren {
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
   ApiV1AiGenerateRoute: typeof ApiV1AiGenerateRoute
   ApiV1OpenapiJsonRoute: typeof ApiV1OpenapiJsonRoute
+  ApiGafcoreBuilderV2ProjectIdRoute: typeof ApiGafcoreBuilderV2ProjectIdRoute
+  ApiGafcoreBuilderV2ProjectSaveRoute: typeof ApiGafcoreBuilderV2ProjectSaveRoute
   ApiPublicOauthGithubCallbackRoute: typeof ApiPublicOauthGithubCallbackRoute
   ApiPublicOauthVercelCallbackRoute: typeof ApiPublicOauthVercelCallbackRoute
 }
@@ -934,6 +1016,13 @@ declare module '@tanstack/react-router' {
       path: '/gafcore/login'
       fullPath: '/gafcore/login'
       preLoaderRoute: typeof GafcoreLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gafcore_/app-v2': {
+      id: '/gafcore_/app-v2'
+      path: '/gafcore/app-v2'
+      fullPath: '/gafcore/app-v2'
+      preLoaderRoute: typeof GafcoreAppV2RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gafcore_/app': {
@@ -1188,6 +1277,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreChatCompleteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/builder-v2/projects': {
+      id: '/api/gafcore/builder-v2/projects'
+      path: '/api/gafcore/builder-v2/projects'
+      fullPath: '/api/gafcore/builder-v2/projects'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/plan': {
+      id: '/api/gafcore/builder-v2/plan'
+      path: '/api/gafcore/builder-v2/plan'
+      fullPath: '/api/gafcore/builder-v2/plan'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2PlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/generate': {
+      id: '/api/gafcore/builder-v2/generate'
+      path: '/api/gafcore/builder-v2/generate'
+      fullPath: '/api/gafcore/builder-v2/generate'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2GenerateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/gafcore/admin/seed-templates': {
       id: '/api/gafcore/admin/seed-templates'
       path: '/api/gafcore/admin/seed-templates'
@@ -1251,6 +1361,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicOauthGithubCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/builder-v2/project/save': {
+      id: '/api/gafcore/builder-v2/project/save'
+      path: '/api/gafcore/builder-v2/project/save'
+      fullPath: '/api/gafcore/builder-v2/project/save'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2ProjectSaveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/project/$id': {
+      id: '/api/gafcore/builder-v2/project/$id'
+      path: '/api/gafcore/builder-v2/project/$id'
+      fullPath: '/api/gafcore/builder-v2/project/$id'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2ProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1279,6 +1403,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   ApiChatRoute: ApiChatRoute,
   GafcoreAppRoute: GafcoreAppRoute,
+  GafcoreAppV2Route: GafcoreAppV2Route,
   GafcoreLoginRoute: GafcoreLoginRoute,
   GafcoreMarketplaceRoute: GafcoreMarketplaceRoute,
   GafcoreProjectsRoute: GafcoreProjectsRoute,
@@ -1315,6 +1440,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiExtensionsV1ManifestRoute: ApiExtensionsV1ManifestRoute,
   ApiGafcoreAdminDiagnosticsIngestRoute: ApiGafcoreAdminDiagnosticsIngestRoute,
   ApiGafcoreAdminSeedTemplatesRoute: ApiGafcoreAdminSeedTemplatesRoute,
+  ApiGafcoreBuilderV2GenerateRoute: ApiGafcoreBuilderV2GenerateRoute,
+  ApiGafcoreBuilderV2PlanRoute: ApiGafcoreBuilderV2PlanRoute,
+  ApiGafcoreBuilderV2ProjectsRoute: ApiGafcoreBuilderV2ProjectsRoute,
   ApiGafcoreChatCompleteRoute: ApiGafcoreChatCompleteRoute,
   ApiGafcoreChatStreamRoute: ApiGafcoreChatStreamRoute,
   ApiGafcoreOrchestratorEventsRoute: ApiGafcoreOrchestratorEventsRoute,
@@ -1324,6 +1452,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
   ApiV1AiGenerateRoute: ApiV1AiGenerateRoute,
   ApiV1OpenapiJsonRoute: ApiV1OpenapiJsonRoute,
+  ApiGafcoreBuilderV2ProjectIdRoute: ApiGafcoreBuilderV2ProjectIdRoute,
+  ApiGafcoreBuilderV2ProjectSaveRoute: ApiGafcoreBuilderV2ProjectSaveRoute,
   ApiPublicOauthGithubCallbackRoute: ApiPublicOauthGithubCallbackRoute,
   ApiPublicOauthVercelCallbackRoute: ApiPublicOauthVercelCallbackRoute,
 }
