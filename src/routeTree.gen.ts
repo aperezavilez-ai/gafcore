@@ -25,6 +25,7 @@ import { Route as GafcoreProjectsRouteImport } from './routes/gafcore_.projects'
 import { Route as GafcoreMarketplaceRouteImport } from './routes/gafcore_.marketplace'
 import { Route as GafcoreLoginRouteImport } from './routes/gafcore_.login'
 import { Route as GafcoreAppV2RouteImport } from './routes/gafcore_.app-v2'
+import { Route as GafcoreAppV2ProjectsRouteImport } from './routes/gafcore_.app-v2.projects'
 import { Route as GafcoreAppRouteImport } from './routes/gafcore_.app'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as GafcoreTemplatesMobilityRouteImport } from './routes/gafcore_.templates.mobility'
@@ -154,6 +155,11 @@ const GafcoreLoginRoute = GafcoreLoginRouteImport.update({
 const GafcoreAppV2Route = GafcoreAppV2RouteImport.update({
   id: '/gafcore_/app-v2',
   path: '/gafcore/app-v2',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GafcoreAppV2ProjectsRoute = GafcoreAppV2ProjectsRouteImport.update({
+  id: '/gafcore_/app-v2/projects',
+  path: '/gafcore/app-v2/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GafcoreAppRoute = GafcoreAppRouteImport.update({
@@ -445,6 +451,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/gafcore/app': typeof GafcoreAppRoute
   '/gafcore/app-v2': typeof GafcoreAppV2Route
+  '/gafcore/app-v2/projects': typeof GafcoreAppV2ProjectsRoute
   '/gafcore/login': typeof GafcoreLoginRoute
   '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
@@ -513,6 +520,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/gafcore/app': typeof GafcoreAppRoute
   '/gafcore/app-v2': typeof GafcoreAppV2Route
+  '/gafcore/app-v2/projects': typeof GafcoreAppV2ProjectsRoute
   '/gafcore/login': typeof GafcoreLoginRoute
   '/gafcore/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore/projects': typeof GafcoreProjectsRoute
@@ -582,6 +590,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/gafcore_/app': typeof GafcoreAppRoute
   '/gafcore_/app-v2': typeof GafcoreAppV2Route
+  '/gafcore_/app-v2/projects': typeof GafcoreAppV2ProjectsRoute
   '/gafcore_/login': typeof GafcoreLoginRoute
   '/gafcore_/marketplace': typeof GafcoreMarketplaceRoute
   '/gafcore_/projects': typeof GafcoreProjectsRoute
@@ -652,6 +661,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/gafcore/app'
     | '/gafcore/app-v2'
+    | '/gafcore/app-v2/projects'
     | '/gafcore/login'
     | '/gafcore/marketplace'
     | '/gafcore/projects'
@@ -720,6 +730,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/gafcore/app'
     | '/gafcore/app-v2'
+    | '/gafcore/app-v2/projects'
     | '/gafcore/login'
     | '/gafcore/marketplace'
     | '/gafcore/projects'
@@ -788,6 +799,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/gafcore_/app'
     | '/gafcore_/app-v2'
+    | '/gafcore_/app-v2/projects'
     | '/gafcore_/login'
     | '/gafcore_/marketplace'
     | '/gafcore_/projects'
@@ -857,6 +869,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   GafcoreAppRoute: typeof GafcoreAppRoute
   GafcoreAppV2Route: typeof GafcoreAppV2Route
+  GafcoreAppV2ProjectsRoute: typeof GafcoreAppV2ProjectsRoute
   GafcoreLoginRoute: typeof GafcoreLoginRoute
   GafcoreMarketplaceRoute: typeof GafcoreMarketplaceRoute
   GafcoreProjectsRoute: typeof GafcoreProjectsRoute
@@ -1023,6 +1036,13 @@ declare module '@tanstack/react-router' {
       path: '/gafcore/app-v2'
       fullPath: '/gafcore/app-v2'
       preLoaderRoute: typeof GafcoreAppV2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gafcore_/app-v2/projects': {
+      id: '/gafcore_/app-v2/projects'
+      path: '/gafcore/app-v2/projects'
+      fullPath: '/gafcore/app-v2/projects'
+      preLoaderRoute: typeof GafcoreAppV2ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gafcore_/app': {
@@ -1404,6 +1424,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   GafcoreAppRoute: GafcoreAppRoute,
   GafcoreAppV2Route: GafcoreAppV2Route,
+  GafcoreAppV2ProjectsRoute: GafcoreAppV2ProjectsRoute,
   GafcoreLoginRoute: GafcoreLoginRoute,
   GafcoreMarketplaceRoute: GafcoreMarketplaceRoute,
   GafcoreProjectsRoute: GafcoreProjectsRoute,
