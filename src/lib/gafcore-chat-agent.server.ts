@@ -1,7 +1,11 @@
 /**
- * Bucle agente: generar → validar → reintentar.
- * Máx. 2 intentos: el peor caso (agente × reintentos de red × timeout por
- * llamada) debe quedar bajo el maxDuration=300 s de la función en Vercel.
+ * Bucle agente: generar → validar → reintentar (máx. 3 correcciones).
+ * 3 intentos = 1 generación + 2 rondas de auto-corrección. Una página
+ * completa suele necesitar 2 correcciones de sintaxis/JSX; con solo 2
+ * intentos el gate bloqueaba la entrega ("No se aplicaron cambios").
+ * Caso realista: 3 × timeout por llamada (~60 s) ≈ 180 s, bajo el
+ * maxDuration=300 s de Vercel. El caso degenerado (reintentos de red por
+ * 5xx en cada intento) queda acotado por ese maxDuration.
  * Ver nota de timeouts en `ai-chat-completions.server.ts`.
  */
 import type { GafcoreChatMessage } from "@/lib/gafcore-media.shared";
@@ -16,7 +20,7 @@ import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { logDev } from "@/lib/gafcore-logger.server";
 import { validateGafcoreProjectCore } from "@/lib/gafcore-validate.server";
 
-const MAX_ATTEMPTS = 2;
+const MAX_ATTEMPTS = 3;
 
 const JSON_RETRY_INSTRUCTION =
   'Tu respuesta no fue JSON válido con archivos. Responde SOLO JSON { "reply": "...", "files": [...] } ' +
