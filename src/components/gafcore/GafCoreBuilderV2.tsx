@@ -383,7 +383,6 @@ export function GafCoreBuilderV2() {
     return;
   }
 
-    }
 
     setIsLoading(true);
 
