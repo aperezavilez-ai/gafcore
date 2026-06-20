@@ -506,6 +506,8 @@ export function GafCoreBuilderV2() {
         onOpenProjectsList={handleOpenProjectsList}
         onDeleteProject={handleDeleteProject}
         saveStatus={saveStatus}
+        getAuthHeader={getAuthHeader}
+        onRestoreHtml={setHtml}
       />
       <div className="flex flex-1 flex-col md:flex-row">
       <div className="flex w-full flex-col border-b border-neutral-200 bg-white md:w-[460px] md:border-b-0 md:border-r">

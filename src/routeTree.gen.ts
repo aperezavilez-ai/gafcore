@@ -76,6 +76,11 @@ import { Route as ApiPublicOauthVercelCallbackRouteImport } from './routes/api/p
 import { Route as ApiPublicOauthGithubCallbackRouteImport } from './routes/api/public/oauth.github.callback'
 import { Route as ApiGafcoreBuilderV2ProjectSaveRouteImport } from './routes/api/gafcore/builder-v2.project.save'
 import { Route as ApiGafcoreBuilderV2ProjectIdRouteImport } from './routes/api/gafcore/builder-v2.project.$id'
+import { Route as ApiGafcoreBuilderV2ProjectRenameRouteImport } from './routes/api/gafcore/builder-v2.project.rename'
+import { Route as ApiGafcoreBuilderV2VersionsRouteImport } from './routes/api/gafcore/builder-v2.versions'
+import { Route as ApiGafcoreBuilderV2VersionIdRouteImport } from './routes/api/gafcore/builder-v2.version.$id'
+import { Route as ApiGafcoreBuilderV2SecretsRouteImport } from './routes/api/gafcore/builder-v2.secrets'
+import { Route as ApiGafcoreBuilderV2SecretIdRouteImport } from './routes/api/gafcore/builder-v2.secret.$id'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -436,6 +441,36 @@ const ApiGafcoreBuilderV2ProjectIdRoute =
     path: '/api/gafcore/builder-v2/project/$id',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiGafcoreBuilderV2ProjectRenameRoute =
+  ApiGafcoreBuilderV2ProjectRenameRouteImport.update({
+    id: '/api/gafcore/builder-v2/project/rename',
+    path: '/api/gafcore/builder-v2/project/rename',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreBuilderV2VersionsRoute =
+  ApiGafcoreBuilderV2VersionsRouteImport.update({
+    id: '/api/gafcore/builder-v2/versions',
+    path: '/api/gafcore/builder-v2/versions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreBuilderV2VersionIdRoute =
+  ApiGafcoreBuilderV2VersionIdRouteImport.update({
+    id: '/api/gafcore/builder-v2/version/$id',
+    path: '/api/gafcore/builder-v2/version/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreBuilderV2SecretsRoute =
+  ApiGafcoreBuilderV2SecretsRouteImport.update({
+    id: '/api/gafcore/builder-v2/secrets',
+    path: '/api/gafcore/builder-v2/secrets',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiGafcoreBuilderV2SecretIdRoute =
+  ApiGafcoreBuilderV2SecretIdRouteImport.update({
+    id: '/api/gafcore/builder-v2/secret/$id',
+    path: '/api/gafcore/builder-v2/secret/$id',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -502,6 +537,11 @@ export interface FileRoutesByFullPath {
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
   '/api/gafcore/builder-v2/project/$id': typeof ApiGafcoreBuilderV2ProjectIdRoute
+  '/api/gafcore/builder-v2/project/rename': typeof ApiGafcoreBuilderV2ProjectRenameRoute
+  '/api/gafcore/builder-v2/versions': typeof ApiGafcoreBuilderV2VersionsRoute
+  '/api/gafcore/builder-v2/version/$id': typeof ApiGafcoreBuilderV2VersionIdRoute
+  '/api/gafcore/builder-v2/secrets': typeof ApiGafcoreBuilderV2SecretsRoute
+  '/api/gafcore/builder-v2/secret/$id': typeof ApiGafcoreBuilderV2SecretIdRoute
   '/api/gafcore/builder-v2/project/save': typeof ApiGafcoreBuilderV2ProjectSaveRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
   '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
@@ -571,6 +611,11 @@ export interface FileRoutesByTo {
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
   '/api/gafcore/builder-v2/project/$id': typeof ApiGafcoreBuilderV2ProjectIdRoute
+  '/api/gafcore/builder-v2/project/rename': typeof ApiGafcoreBuilderV2ProjectRenameRoute
+  '/api/gafcore/builder-v2/versions': typeof ApiGafcoreBuilderV2VersionsRoute
+  '/api/gafcore/builder-v2/version/$id': typeof ApiGafcoreBuilderV2VersionIdRoute
+  '/api/gafcore/builder-v2/secrets': typeof ApiGafcoreBuilderV2SecretsRoute
+  '/api/gafcore/builder-v2/secret/$id': typeof ApiGafcoreBuilderV2SecretIdRoute
   '/api/gafcore/builder-v2/project/save': typeof ApiGafcoreBuilderV2ProjectSaveRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
   '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
@@ -641,6 +686,11 @@ export interface FileRoutesById {
   '/api/v1/keys/$id': typeof ApiV1KeysIdRoute
   '/api/v1/openapi/json': typeof ApiV1OpenapiJsonRoute
   '/api/gafcore/builder-v2/project/$id': typeof ApiGafcoreBuilderV2ProjectIdRoute
+  '/api/gafcore/builder-v2/project/rename': typeof ApiGafcoreBuilderV2ProjectRenameRoute
+  '/api/gafcore/builder-v2/versions': typeof ApiGafcoreBuilderV2VersionsRoute
+  '/api/gafcore/builder-v2/version/$id': typeof ApiGafcoreBuilderV2VersionIdRoute
+  '/api/gafcore/builder-v2/secrets': typeof ApiGafcoreBuilderV2SecretsRoute
+  '/api/gafcore/builder-v2/secret/$id': typeof ApiGafcoreBuilderV2SecretIdRoute
   '/api/gafcore/builder-v2/project/save': typeof ApiGafcoreBuilderV2ProjectSaveRoute
   '/api/public/oauth/github/callback': typeof ApiPublicOauthGithubCallbackRoute
   '/api/public/oauth/vercel/callback': typeof ApiPublicOauthVercelCallbackRoute
@@ -712,6 +762,11 @@ export interface FileRouteTypes {
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
     | '/api/gafcore/builder-v2/project/$id'
+    | '/api/gafcore/builder-v2/project/rename'
+    | '/api/gafcore/builder-v2/versions'
+    | '/api/gafcore/builder-v2/version/$id'
+    | '/api/gafcore/builder-v2/secrets'
+    | '/api/gafcore/builder-v2/secret/$id'
     | '/api/gafcore/builder-v2/project/save'
     | '/api/public/oauth/github/callback'
     | '/api/public/oauth/vercel/callback'
@@ -781,6 +836,11 @@ export interface FileRouteTypes {
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
     | '/api/gafcore/builder-v2/project/$id'
+    | '/api/gafcore/builder-v2/project/rename'
+    | '/api/gafcore/builder-v2/versions'
+    | '/api/gafcore/builder-v2/version/$id'
+    | '/api/gafcore/builder-v2/secrets'
+    | '/api/gafcore/builder-v2/secret/$id'
     | '/api/gafcore/builder-v2/project/save'
     | '/api/public/oauth/github/callback'
     | '/api/public/oauth/vercel/callback'
@@ -850,6 +910,11 @@ export interface FileRouteTypes {
     | '/api/v1/keys/$id'
     | '/api/v1/openapi/json'
     | '/api/gafcore/builder-v2/project/$id'
+    | '/api/gafcore/builder-v2/project/rename'
+    | '/api/gafcore/builder-v2/versions'
+    | '/api/gafcore/builder-v2/version/$id'
+    | '/api/gafcore/builder-v2/secrets'
+    | '/api/gafcore/builder-v2/secret/$id'
     | '/api/gafcore/builder-v2/project/save'
     | '/api/public/oauth/github/callback'
     | '/api/public/oauth/vercel/callback'
@@ -919,6 +984,11 @@ export interface RootRouteChildren {
   ApiV1AiGenerateRoute: typeof ApiV1AiGenerateRoute
   ApiV1OpenapiJsonRoute: typeof ApiV1OpenapiJsonRoute
   ApiGafcoreBuilderV2ProjectIdRoute: typeof ApiGafcoreBuilderV2ProjectIdRoute
+  ApiGafcoreBuilderV2ProjectRenameRoute: typeof ApiGafcoreBuilderV2ProjectRenameRoute
+  ApiGafcoreBuilderV2VersionsRoute: typeof ApiGafcoreBuilderV2VersionsRoute
+  ApiGafcoreBuilderV2VersionIdRoute: typeof ApiGafcoreBuilderV2VersionIdRoute
+  ApiGafcoreBuilderV2SecretsRoute: typeof ApiGafcoreBuilderV2SecretsRoute
+  ApiGafcoreBuilderV2SecretIdRoute: typeof ApiGafcoreBuilderV2SecretIdRoute
   ApiGafcoreBuilderV2ProjectSaveRoute: typeof ApiGafcoreBuilderV2ProjectSaveRoute
   ApiPublicOauthGithubCallbackRoute: typeof ApiPublicOauthGithubCallbackRoute
   ApiPublicOauthVercelCallbackRoute: typeof ApiPublicOauthVercelCallbackRoute
@@ -1395,6 +1465,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGafcoreBuilderV2ProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/gafcore/builder-v2/project/rename': {
+      id: '/api/gafcore/builder-v2/project/rename'
+      path: '/api/gafcore/builder-v2/project/rename'
+      fullPath: '/api/gafcore/builder-v2/project/rename'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2ProjectRenameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/versions': {
+      id: '/api/gafcore/builder-v2/versions'
+      path: '/api/gafcore/builder-v2/versions'
+      fullPath: '/api/gafcore/builder-v2/versions'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2VersionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/version/$id': {
+      id: '/api/gafcore/builder-v2/version/$id'
+      path: '/api/gafcore/builder-v2/version/$id'
+      fullPath: '/api/gafcore/builder-v2/version/$id'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2VersionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/secrets': {
+      id: '/api/gafcore/builder-v2/secrets'
+      path: '/api/gafcore/builder-v2/secrets'
+      fullPath: '/api/gafcore/builder-v2/secrets'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2SecretsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gafcore/builder-v2/secret/$id': {
+      id: '/api/gafcore/builder-v2/secret/$id'
+      path: '/api/gafcore/builder-v2/secret/$id'
+      fullPath: '/api/gafcore/builder-v2/secret/$id'
+      preLoaderRoute: typeof ApiGafcoreBuilderV2SecretIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -1474,6 +1579,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1AiGenerateRoute: ApiV1AiGenerateRoute,
   ApiV1OpenapiJsonRoute: ApiV1OpenapiJsonRoute,
   ApiGafcoreBuilderV2ProjectIdRoute: ApiGafcoreBuilderV2ProjectIdRoute,
+  ApiGafcoreBuilderV2ProjectRenameRoute: ApiGafcoreBuilderV2ProjectRenameRoute,
+  ApiGafcoreBuilderV2VersionsRoute: ApiGafcoreBuilderV2VersionsRoute,
+  ApiGafcoreBuilderV2VersionIdRoute: ApiGafcoreBuilderV2VersionIdRoute,
+  ApiGafcoreBuilderV2SecretsRoute: ApiGafcoreBuilderV2SecretsRoute,
+  ApiGafcoreBuilderV2SecretIdRoute: ApiGafcoreBuilderV2SecretIdRoute,
   ApiGafcoreBuilderV2ProjectSaveRoute: ApiGafcoreBuilderV2ProjectSaveRoute,
   ApiPublicOauthGithubCallbackRoute: ApiPublicOauthGithubCallbackRoute,
   ApiPublicOauthVercelCallbackRoute: ApiPublicOauthVercelCallbackRoute,
