@@ -154,6 +154,16 @@ export default defineConfig(({ mode }) => {
         rollupConfig: {
           external: (id) => id === "typescript" || id.startsWith("typescript/"),
         },
+        // El chat IDE encadena varias llamadas IA por petición (bucle agente). Sin esto, la
+        // función usa el maxDuration por defecto de la plataforma y Vercel la mata con un 502
+        // sin cuerpo al editar proyectos. Build Output API ignora `functions` de vercel.json:
+        // la duración por ruta se fija aquí y Nitro la emite en el .vc-config.json de cada .func.
+        vercel: {
+          functionRules: {
+            "/api/gafcore/chat/complete": { maxDuration: 300 },
+            "/api/gafcore/chat/stream": { maxDuration: 300 },
+          },
+        },
       }),
       viteReact(),
     ],

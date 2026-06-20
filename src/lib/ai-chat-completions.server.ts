@@ -24,14 +24,19 @@ import { withTransientUpstreamRetry } from "@/lib/gafcore-ai-upstream-retry.serv
 /**
  * Timeout por llamada individual al proveedor de IA (no por intento del
  * agente completo). Sin esto, una sola llamada lenta puede consumir todo
- * el presupuesto de 3 min del cliente (ChatPanel) antes de que el bucle
- * de reintentos del agente (hasta 3 intentos) o de red (hasta 3 intentos)
+ * el presupuesto antes de que el bucle de reintentos del agente o de red
  * tengan oportunidad de fallar limpio y reintentar.
+ *
+ * Peor caso del endpoint complete (edición de proyecto):
+ *   agente MAX_ATTEMPTS(2) × [ red MAX_ATTEMPTS(2) × T(60s) + espera(2s) ] ≈ 244 s,
+ * cómodamente por debajo del maxDuration=300 s de la función en Vercel
+ * (vite.config.ts → nitro.vercel.functionRules). Si subes T o los reintentos,
+ * recalcula para no rebasar esos 300 s.
  *
  * El timeout de streaming es más generoso porque ahí el límite que importa
  * es el primer byte/chunk, no la duración total de la conexión.
  */
-const AI_UPSTREAM_REQUEST_TIMEOUT_MS = 90_000;
+const AI_UPSTREAM_REQUEST_TIMEOUT_MS = 60_000;
 const AI_UPSTREAM_STREAM_TIMEOUT_MS = 150_000;
 
 export type AiChatConfig = {
