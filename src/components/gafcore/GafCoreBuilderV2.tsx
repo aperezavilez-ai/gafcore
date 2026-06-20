@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Download, Loader2, Mic, Monitor, Paperclip, Pencil, Send, Smartphone, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,7 +58,7 @@ type PlanResponse = {
 type BuilderProjectSummary = {
   id: string;
   name: string;
-  updatedAt: string;
+  createdAt: string;
 };
 
 type BuilderProjectWithHtml = BuilderProjectSummary & {
@@ -78,6 +79,7 @@ type ChatMode = "build" | "chat";
  * autónomo vía Claude) para no heredar la fragilidad del IDE legado.
  */
 export function GafCoreBuilderV2() {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<BuilderMessage[]>([]);
   const [prompt, setPrompt] = useState("");
   const [html, setHtml] = useState<string | null>(null);
@@ -129,6 +131,19 @@ export function GafCoreBuilderV2() {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      const pendingId = window.localStorage.getItem("gafcore:builder-v2:openProjectId");
+      if (pendingId) {
+        window.localStorage.removeItem("gafcore:builder-v2:openProjectId");
+        void handleSelectProject(pendingId);
+      }
+    } catch {
+      // No es crítico si localStorage no está disponible.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const refreshProjects = useMemo(
     () => async () => {
       try {
@@ -150,6 +165,18 @@ export function GafCoreBuilderV2() {
     refreshProjects();
   }, [refreshProjects]);
 
+  function rememberLastProjectId(projectId: string | null) {
+    try {
+      if (projectId) {
+        window.localStorage.setItem("gafcore:builder-v2:lastProjectId", projectId);
+      } else {
+        window.localStorage.removeItem("gafcore:builder-v2:lastProjectId");
+      }
+    } catch {
+      // No es crítico si localStorage no está disponible.
+    }
+  }
+
   async function persistProject(nextHtml: string, nameOverride?: string) {
     setSaveStatus("saving");
     try {
@@ -168,6 +195,7 @@ export function GafCoreBuilderV2() {
       setCurrentProjectId(saved.id);
       setCurrentProjectName(saved.name);
       setSaveStatus("saved");
+      rememberLastProjectId(saved.id);
       refreshProjects();
     } catch {
       setSaveStatus("error");
@@ -186,6 +214,7 @@ export function GafCoreBuilderV2() {
       setCurrentProjectId(project.id);
       setCurrentProjectName(project.name);
       setHtml(project.html);
+      rememberLastProjectId(project.id);
       setMessages([
         {
           id: nextId(),
@@ -205,6 +234,29 @@ export function GafCoreBuilderV2() {
     setHtml(null);
     setMessages([]);
     setSaveStatus("idle");
+    rememberLastProjectId(null);
+  }
+
+  function handleOpenProjectsList() {
+    navigate({ to: "/gafcore/app-v2/projects" });
+  }
+
+  async function handleDeleteProject(projectId: string): Promise<boolean> {
+    try {
+      const authHeader = await getAuthHeader();
+      const res = await fetch(`/api/gafcore/builder-v2/project/${projectId}`, {
+        method: "DELETE",
+        headers: { Authorization: authHeader },
+      });
+      if (!res.ok) return false;
+      if (projectId === currentProjectId) {
+        handleNewProject();
+      }
+      await refreshProjects();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function handleSignOut() {
@@ -451,6 +503,8 @@ export function GafCoreBuilderV2() {
         currentProjectId={currentProjectId}
         onSelectProject={handleSelectProject}
         onNewProject={handleNewProject}
+        onOpenProjectsList={handleOpenProjectsList}
+        onDeleteProject={handleDeleteProject}
         saveStatus={saveStatus}
       />
       <div className="flex flex-1 flex-col md:flex-row">

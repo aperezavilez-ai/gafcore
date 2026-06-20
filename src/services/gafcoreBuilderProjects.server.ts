@@ -209,6 +209,46 @@ export async function saveBuilderProject(
 }
 
 /**
+ * Renombra un proyecto del Builder V2 sin tocar su HTML.
+ */
+export async function renameBuilderProject(
+  userId: string,
+  params: { projectId: string; name: string },
+): Promise<BuilderProjectSummary> {
+  const { projectId, name } = params;
+
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("projects")
+    .select("id, created_at")
+    .eq("id", projectId)
+    .eq("user_id", userId)
+    .eq("source", BUILDER_SOURCE)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(`No se pudo verificar el proyecto: ${existingError.message}`);
+  }
+  if (!existing) {
+    throw new Error("El proyecto no existe o no pertenece al usuario.");
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("projects")
+    .update({ name })
+    .eq("id", projectId);
+
+  if (updateError) {
+    throw new Error(`No se pudo renombrar el proyecto: ${updateError.message}`);
+  }
+
+  return {
+    id: projectId,
+    name,
+    createdAt: existing.created_at,
+  };
+}
+
+/**
  * Elimina un proyecto del Builder V2 y su archivo asociado.
  */
 export async function deleteBuilderProject(

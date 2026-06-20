@@ -50,7 +50,7 @@ type ViewMode = "preview" | "code";
 type BuilderProjectSummary = {
   id: string;
   name: string;
-  updatedAt: string;
+  createdAt: string;
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -66,6 +66,8 @@ type Props = {
   currentProjectId: string | null;
   onSelectProject: (projectId: string) => void;
   onNewProject: () => void;
+  onOpenProjectsList: () => void;
+  onDeleteProject: (projectId: string) => Promise<boolean>;
   saveStatus: SaveStatus;
 };
 
@@ -92,12 +94,26 @@ export function GafCoreBuilderTopBar({
   currentProjectId,
   onSelectProject,
   onNewProject,
+  onOpenProjectsList,
+  onDeleteProject,
   saveStatus,
 }: Props) {
   const [comingSoonLabel, setComingSoonLabel] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BuilderProjectSummary | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   function openComingSoon(label: string) {
     setComingSoonLabel(label);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    const ok = await onDeleteProject(deleteTarget.id);
+    setDeleteBusy(false);
+    if (ok) {
+      setDeleteTarget(null);
+    }
   }
 
   return (
@@ -220,7 +236,7 @@ export function GafCoreBuilderTopBar({
               Importar proyecto...
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => openComingSoon("Todos los proyectos")}>
+            <DropdownMenuItem onSelect={onOpenProjectsList}>
               Todos los proyectos
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => openComingSoon("Marketplace")}>
@@ -247,7 +263,12 @@ export function GafCoreBuilderTopBar({
               Cambiar el nombre del proyecto
             </DropdownMenuItem>
             <DropdownMenuItem
-              onSelect={() => openComingSoon("Eliminar proyecto")}
+              onSelect={() => {
+                if (!currentProjectId) return;
+                const current = projects.find((p) => p.id === currentProjectId);
+                if (current) setDeleteTarget(current);
+              }}
+              disabled={!currentProjectId}
               className="text-red-500 focus:text-red-500"
             >
               <Trash2 className="mr-2 h-4 w-4" />
@@ -398,6 +419,41 @@ export function GafCoreBuilderTopBar({
               generar tu sitio, editarlo por chat y descargar el HTML.
             </DialogDescription>
           </DialogHeader>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar proyecto</DialogTitle>
+            <DialogDescription>
+              Vas a eliminar definitivamente «{deleteTarget?.name}» y todo su
+              contenido. Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteBusy}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={deleteBusy}
+              onClick={() => void confirmDelete()}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleteBusy ? "Eliminando..." : "Eliminar definitivamente"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>
