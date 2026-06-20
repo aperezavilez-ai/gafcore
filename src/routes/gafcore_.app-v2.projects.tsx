@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -73,7 +73,6 @@ function formatDate(iso: string): string {
 }
 
 function BuilderV2ProjectsPage() {
-  const navigate = useNavigate();
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [currentProjectIdHint, setCurrentProjectIdHint] = useState<string | null>(null);
   const [projects, setProjects] = useState<BuilderProjectSummary[]>([]);
@@ -159,7 +158,7 @@ function BuilderV2ProjectsPage() {
     } catch {
       // No es crítico si falla.
     }
-    navigate({ to: "/gafcore/app-v2" });
+    window.location.href = "/gafcore/app-v2";
   }
 
   function openRenameDialog(p: BuilderProjectSummary) {
@@ -263,7 +262,7 @@ function BuilderV2ProjectsPage() {
           <Button
             type="button"
             className="bg-violet-600 text-white hover:bg-violet-500"
-            onClick={() => navigate({ to: "/gafcore/app-v2" })}
+            onClick={() => { window.location.href = "/gafcore/app-v2"; }}
           >
             <Plus className="mr-2 h-4 w-4" />
             Crear en el editor
@@ -313,7 +312,7 @@ function BuilderV2ProjectsPage() {
               <Button
                 type="button"
                 className="mt-4 bg-violet-600 text-white hover:bg-violet-500"
-                onClick={() => navigate({ to: "/gafcore/app-v2" })}
+                onClick={() => { window.location.href = "/gafcore/app-v2"; }}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Ir al editor

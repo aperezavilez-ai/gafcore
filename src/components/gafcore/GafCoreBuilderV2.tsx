@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { Download, Loader2, Mic, Monitor, Paperclip, Pencil, Send, Smartphone, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -79,7 +78,6 @@ type ChatMode = "build" | "chat";
  * autónomo vía Claude) para no heredar la fragilidad del IDE legado.
  */
 export function GafCoreBuilderV2() {
-  const navigate = useNavigate();
   const [messages, setMessages] = useState<BuilderMessage[]>([]);
   const [prompt, setPrompt] = useState("");
   const [html, setHtml] = useState<string | null>(null);
@@ -238,7 +236,7 @@ export function GafCoreBuilderV2() {
   }
 
   function handleOpenProjectsList() {
-    navigate({ to: "/gafcore/app-v2/projects" });
+    window.location.href = "/gafcore/app-v2/projects";
   }
 
   async function handleDeleteProject(projectId: string): Promise<boolean> {
