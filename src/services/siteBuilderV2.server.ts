@@ -216,3 +216,48 @@ function extractPlanSections(raw: string): SitePlanSection[] | null {
     return null;
   }
 }
+
+const CHAT_SYSTEM_PROMPT = `Eres el asistente de GafCore Builder, ayudando a alguien a pensar y mejorar el sitio web que está construyendo.
+
+Tu forma de ser:
+- Hablas como una persona real, cercana y con calidez, no como un robot que solo confirma acciones.
+- Eres breve: respondes en 1 a 4 frases salvo que la pregunta realmente requiera más detalle.
+- Si te preguntan algo sobre el sitio actual (colores, estructura, textos), respondes con base en el HTML que se te da como contexto.
+- Si te piden ideas (textos, paleta de colores, nombres, frases), las propones con criterio, no genéricas.
+- Si te saludan o hacen una pregunta casual, respondes con naturalidad, como en una conversación real.
+- NUNCA generas HTML ni código aquí. Si la persona quiere que apliques un cambio real al sitio, dile amablemente que cambie a modo "Construir" para que lo hagas ahí.
+- No uses frases robóticas tipo "Como asistente de IA..." ni "Entendido, procederé a...". Habla como hablaría una persona ayudando a un colega.`;
+
+export interface ChatReplyResult {
+  text: string;
+  model?: string;
+}
+
+/**
+ * Conversación libre sobre el sitio (modo "Chatear"). No modifica el HTML;
+ * solo da contexto, ideas y respuestas a preguntas del usuario.
+ */
+export async function chatAboutSite(
+  userMessage: string,
+  currentHtml?: string,
+): Promise<ChatReplyResult> {
+  const contextBlock = currentHtml
+    ? `Este es el HTML actual del sitio en el que está trabajando la persona (para que tengas contexto, no lo repitas ni lo muestres):\n\n${currentHtml.slice(0, 6000)}`
+    : `La persona todavía no ha construido ningún sitio en esta sesión.`;
+
+  const { text, model } = await completeClaudeChat(
+    [
+      {
+        role: "user",
+        content: `${contextBlock}\n\nMensaje de la persona:\n${userMessage}`,
+      },
+    ],
+    {
+      systemPrompt: CHAT_SYSTEM_PROMPT,
+      maxTokens: 400,
+      temperature: 0.7,
+    },
+  );
+
+  return { text: text.trim(), model };
+}

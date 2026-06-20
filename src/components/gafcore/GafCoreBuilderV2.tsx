@@ -353,14 +353,36 @@ export function GafCoreBuilderV2() {
     setPrompt("");
     setActiveStepId(null);
 
-    if (chatMode === "chat") {
+  if (chatMode === "chat") {
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/gafcore/builder-v2/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmed, currentHtml: html || undefined }),
+      });
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody?.error ?? "No pude responder en este momento.");
+      }
+      const data = await response.json();
       setMessages((prev) => [
         ...prev,
-        {
-          id: nextId(),
-          kind: "text",
-          role: "system",
-          text: "Estás en modo Chatear: puedo platicar contigo pero no aplicaré cambios al sitio. Cambia a Construir cuando quieras que lo edite.",
+        { id: nextId(), kind: "text", role: "system", text: data.text },
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error inesperado.";
+      setErrorMsg(message);
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), kind: "text", role: "system", text: `No pude responder: ${message}` },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+    return;
+  }
+
         },
       ]);
       return;
