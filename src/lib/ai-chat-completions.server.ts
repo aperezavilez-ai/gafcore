@@ -21,6 +21,19 @@ import {
 import { logDev } from "@/lib/gafcore-logger.server";
 import { withTransientUpstreamRetry } from "@/lib/gafcore-ai-upstream-retry.server";
 
+/**
+ * Timeout por llamada individual al proveedor de IA (no por intento del
+ * agente completo). Sin esto, una sola llamada lenta puede consumir todo
+ * el presupuesto de 3 min del cliente (ChatPanel) antes de que el bucle
+ * de reintentos del agente (hasta 3 intentos) o de red (hasta 3 intentos)
+ * tengan oportunidad de fallar limpio y reintentar.
+ *
+ * El timeout de streaming es más generoso porque ahí el límite que importa
+ * es el primer byte/chunk, no la duración total de la conexión.
+ */
+const AI_UPSTREAM_REQUEST_TIMEOUT_MS = 90_000;
+const AI_UPSTREAM_STREAM_TIMEOUT_MS = 150_000;
+
 export type AiChatConfig = {
   url: string;
   apiKey: string;
@@ -233,6 +246,30 @@ function isProviderFatalForFallback(status: number): boolean {
   );
 }
 
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    const isAbort =
+      err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
+    logDev("gafcore_ai_upstream_fetch_failed", {
+      url,
+      isAbort,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return new Response(
+      JSON.stringify({
+        error: isAbort ? "upstream_timeout" : "upstream_fetch_failed",
+      }),
+      { status: 504, headers: { "Content-Type": "application/json" } },
+    );
+  }
+}
+
 async function executeRouteFetch(
   route: ResolvedRoute,
   body: ChatCompletionsBody,
@@ -240,16 +277,23 @@ async function executeRouteFetch(
   if (route.provider === "anthropic") {
     const anthropicBody = toAnthropicBody(body, route.modelSlug);
     const nativeUrl = "https://api.anthropic.com/v1/messages";
-    const res = await fetch(nativeUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": route.apiKey,
-        "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION,
-        ...route.extraHeaders,
+    const timeoutMs = anthropicBody.stream
+      ? AI_UPSTREAM_STREAM_TIMEOUT_MS
+      : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
+    const res = await fetchWithTimeout(
+      nativeUrl,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": route.apiKey,
+          "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION,
+          ...route.extraHeaders,
+        },
+        body: JSON.stringify(anthropicBody),
       },
-      body: JSON.stringify(anthropicBody),
-    });
+      timeoutMs,
+    );
     if (anthropicBody.stream) {
       return wrapAnthropicStreamResponse(res);
     }
@@ -258,16 +302,21 @@ async function executeRouteFetch(
 
   const outBody: Record<string, unknown> = { ...body };
   if (route.modelSlug) outBody.model = route.modelSlug;
+  const timeoutMs = outBody.stream ? AI_UPSTREAM_STREAM_TIMEOUT_MS : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
 
-  return fetch(route.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${route.apiKey}`,
-      ...route.extraHeaders,
+  return fetchWithTimeout(
+    route.url,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${route.apiKey}`,
+        ...route.extraHeaders,
+      },
+      body: JSON.stringify(outBody),
     },
-    body: JSON.stringify(outBody),
-  });
+    timeoutMs,
+  );
 }
 
 async function callRoute(route: ResolvedRoute, body: ChatCompletionsBody): Promise<Response> {

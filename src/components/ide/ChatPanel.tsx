@@ -199,7 +199,11 @@ import { useCreateProject } from "@/hooks/useCreateProject";
 type Msg = { role: "user" | "ai"; content: string; ts?: number };
 
 /** Evita chat/preview “trabado” si el stream o la validación no terminan. */
-const CHAT_REQUEST_TIMEOUT_MS = 180_000;
+// 4 min: con el timeout de 90s por llamada al proveedor de IA (server),
+// hasta 3 intentos del agente quedan cómodos dentro de este margen en el
+// caso típico (1-2 intentos). Antes eran 3 min, insuficientes cuando el
+// agente necesitaba su segundo o tercer intento de corrección.
+const CHAT_REQUEST_TIMEOUT_MS = 240_000;
 
 type PendingComposerImage = { id: string; previewUrl: string; fileName: string };
 
@@ -3000,7 +3004,7 @@ export function ChatPanel({
       toast.error(
         fastWelcomeBuild
           ? "El build tardó más de 90 s. Pulsa Construir de nuevo (un solo intento rápido)."
-          : "La solicitud tardó demasiado (3 min). Pulsa el cuadrado para detener o envía de nuevo.",
+          : "La solicitud tardó demasiado (4 min). Pulsa el cuadrado para detener o envía de nuevo.",
         { duration: 8000 },
       );
     }, requestTimeoutMs);
