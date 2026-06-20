@@ -13,6 +13,7 @@ import {
   History,
   Home,
   KeyRound,
+  LayoutGrid,
   LogOut,
   MoreHorizontal,
   Package,
@@ -237,6 +238,7 @@ export function GafCoreBuilderTopBar({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenProjectsList}>
+              <LayoutGrid className="mr-2 h-4 w-4 text-neutral-400" />
               Todos los proyectos
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => openComingSoon("Marketplace")}>
