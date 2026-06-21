@@ -1341,23 +1341,13 @@ export function GafCoreIDE() {
             </button>
           </div>
           {isAdmin ? (
-            <>
-              <Link
-                to="/gafcore/admin/ops"
-                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
-                title="Ops — diagnóstico y aprobación (admin)"
-              >
-                <ShieldAlert className="h-4 w-4" />
-              </Link>
-              <button
-                type="button"
-                onClick={() => setSecretsOpen(true)}
-                className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
-                title="Secretos del proyecto (solo administración)"
-              >
-                <KeyRound className="h-4 w-4" />
-              </button>
-            </>
+            <Link
+              to="/gafcore/admin/ops"
+              className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:flex"
+              title="Ops — diagnóstico y aprobación (admin)"
+            >
+              <ShieldAlert className="h-4 w-4" />
+            </Link>
           ) : null}
           {isAdmin && (
             <button
