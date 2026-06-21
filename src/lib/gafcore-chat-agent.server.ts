@@ -181,7 +181,7 @@ export async function runGafcoreAgentChatCompletion(input: {
       };
     }
 
-    const gate = gateDeliveredFiles(input.contextFiles, safeFiles, input.instruction);
+    const gate = await gateDeliveredFiles(input.contextFiles, safeFiles, input.instruction);
     if (gate.ok) {
       const mergedForTranspile = mergeContextWithDelta(input.contextFiles, gate.files);
       const transpile = await validateGafcoreProjectCore(

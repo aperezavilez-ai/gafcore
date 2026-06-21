@@ -245,7 +245,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     if (cached) cacheSet(cacheKey, cached);
   }
   if (cached) {
-    const cachedGate = gateDeliveredFiles(projFiles, cached.files, data.instruction);
+    const cachedGate = await gateDeliveredFiles(projFiles, cached.files, data.instruction);
     const balance = await fetchBalance(userId);
     auditAiActionCompleted({
       userId,
@@ -465,7 +465,7 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     if (cachedComplete) cacheSet(cacheKey, cachedComplete);
   }
   if (cachedComplete) {
-    const cachedGate = gateDeliveredFiles(
+    const cachedGate = await gateDeliveredFiles(
       projFilesComplete,
       cachedComplete.files,
       data.instruction,

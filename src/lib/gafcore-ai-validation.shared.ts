@@ -171,24 +171,28 @@ function auditBuildReadiness(files: Array<{ name: string; content: string }>): P
     });
   }
 
+  // Sintaxis: las heurísticas por regex (conteo de llaves/tags) NO entienden
+  // genéricos TS (useState<string>, useRef<HTMLInputElement>) y producen falsos
+  // positivos. Babel real (validateGafcoreProjectCore) es la autoridad de error
+  // de sintaxis; aquí solo emitimos `warn` informativo, nunca bloqueante.
   for (const f of files) {
     if (!/\.(tsx|jsx)$/i.test(f.name)) continue;
     const closure = auditSyntaxClosure(f.content);
     if (!closure.ok) {
       issues.push({
-        severity: "error",
+        severity: "warn",
         category: "syntax",
         file: f.name,
-        message: `Cierre sintáctico: ${closure.messages.join("; ")}.`,
+        message: `Posible cierre sintáctico (heurística): ${closure.messages.join("; ")}.`,
       });
     } else {
       const tagBalance = auditJsxTagBalance(f.content);
       if (tagBalance !== 0) {
         issues.push({
-          severity: "error",
+          severity: "warn",
           category: "syntax",
           file: f.name,
-          message: `Tags JSX desbalanceados (${tagBalance > 0 ? "faltan cierres" : "sobran cierres"}).`,
+          message: `Posible desbalance de tags JSX (heurística, ${tagBalance > 0 ? "faltan cierres" : "sobran cierres"}).`,
         });
       }
     }
