@@ -84,7 +84,6 @@ import {
   ShieldAlert,
   MoreHorizontal,
   Globe,
-  Home,
   Plug,
   KeyRound,
   Users,
@@ -100,7 +99,6 @@ import {
   Upload,
   CreditCard,
   Check,
-  Brain,
   Search,
   Package,
   Trash2,
@@ -1509,22 +1507,11 @@ export function GafCoreIDE() {
                 <Package className="mr-2 h-4 w-4" />
                 Marketplace
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/gafcore" })}>
-                <Home className="mr-2 h-4 w-4" />
-                Ir a inicio
-              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate({ to: "/gafcore/settings/project" })}>
                 <SettingsIcon className="mr-2 h-4 w-4" />
                 <span className="flex-1">Ajustes del proyecto</span>
                 <span className="text-[11px] text-muted-foreground">Ctrl ,</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  navigate({ to: "/gafcore/settings/project", search: { section: "memory" } })
-                }
-              >
-                <Brain className="mr-2 h-4 w-4" />
-                Memoria IA del proyecto
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setConnectorsOpen(true)}>
                 <Plug className="mr-2 h-4 w-4" />
@@ -1539,6 +1526,7 @@ export function GafCoreIDE() {
                 <Pencil className="mr-2 h-4 w-4" />
                 Cambiar el nombre del proyecto
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 disabled={!currentProjectId || switchingProject}
@@ -1548,24 +1536,6 @@ export function GafCoreIDE() {
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Eliminar proyecto
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  window.setTimeout(() => {
-                    setFolderDraft(projectFolder);
-                    setFolderDialogOpen(true);
-                  }, 0);
-                }}
-              >
-                <Folder className="mr-2 h-4 w-4" />
-                <span className="flex-1">Mover a carpeta</span>
-                <span className="max-w-[80px] truncate text-[11px] text-muted-foreground">
-                  {projectFolder}
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDetailsOpen(true)}>
-                <Info className="mr-2 h-4 w-4" />
-                Detalles
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
