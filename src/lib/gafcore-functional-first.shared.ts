@@ -108,7 +108,7 @@ export function auditFunctionalFirst(
         raw,
       );
     const hasState = /\buseState\b/.test(code);
-    if (needsState && !hasState && buttonTags + formTags > 2) {
+    if (needsState && !hasState && nativeButtons + formTags > 2) {
       issues.push({
         severity: "warn",
         file: f.name,

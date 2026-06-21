@@ -17,7 +17,7 @@ import { buildValidationFixInstruction } from "@/lib/gafcore-ai-validation.share
 import { mergeContextWithDelta } from "@/lib/gafcore-brain-agent.shared";
 import { isSubstantiveBuildRequest, isReviewAnalysisInstruction } from "@/lib/gafcore-chat-intent.shared";
 import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
-import { logDev } from "@/lib/gafcore-logger.server";
+import { logDev, logWarn } from "@/lib/gafcore-logger.server";
 import { validateGafcoreProjectCore } from "@/lib/gafcore-validate.server";
 
 const MAX_ATTEMPTS = 3;
@@ -29,6 +29,34 @@ const JSON_RETRY_INSTRUCTION =
 const EMPTY_FILES_RETRY_INSTRUCTION =
   "No se recibieron archivos aplicables. Responde SOLO JSON con files no vacío. " +
   "Incluye App.tsx (export default function App) con código completo y funcional.";
+
+/**
+ * INSTRUMENTACIÓN TEMPORAL (diagnóstico bloqueo de validación).
+ * Emite con logWarn (visible en prod) el código generado + issues exactos
+ * cuando el agente bloquea. Quitar tras capturar evidencia.
+ */
+function logBlockDiagnostic(
+  stage: string,
+  attempt: number,
+  instruction: string,
+  files: Array<{ name: string; content: string }>,
+  issues: Array<{ severity: string; category?: string; file: string; message: string }>,
+): void {
+  logWarn("gafcore_block_diag", {
+    stage,
+    attempt,
+    instruction: instruction.slice(0, 300),
+    issues: issues.slice(0, 12).map((i) => `[${i.severity}/${i.category ?? "?"}] ${i.file}: ${i.message}`),
+    files: files.map((f) => ({
+      name: f.name,
+      len: f.content.length,
+      hasUseState: /\buseState\b/.test(f.content),
+      // Recortes acotados para no exceder límites de log (inicio + fin del archivo).
+      head: f.content.slice(0, 1500),
+      tail: f.content.length > 1500 ? f.content.slice(-700) : "",
+    })),
+  });
+}
 
 export type AgentChatRunResult = {
   reply: string;
@@ -125,6 +153,13 @@ export async function runGafcoreAgentChatCompletion(input: {
           rawFilesCount,
           deliverySource: delivery.source,
         });
+        logBlockDiagnostic(
+          "empty_delivery",
+          attempt,
+          input.instruction,
+          [{ name: "__raw_ai_content__", content: content }],
+          [{ severity: "error", category: "build", file: "-", message: `parseFailed=${parseFailed} rawFilesCount=${rawFilesCount} source=${delivery.source}` }],
+        );
         const reason = parseFailed
           ? "la respuesta de la IA no era JSON válido con archivos"
           : rawFilesCount > 0
@@ -159,6 +194,13 @@ export async function runGafcoreAgentChatCompletion(input: {
           errors: syntaxBlocking.length,
         });
         if (attempt >= MAX_ATTEMPTS) {
+          logBlockDiagnostic(
+            "transpile_fail",
+            attempt,
+            input.instruction,
+            mergedForTranspile.map((f) => ({ name: f.name, content: f.content })),
+            syntaxBlocking,
+          );
           return {
             reply: `${replyRaw}\n\nNo se aplicaron cambios: el código no compila.`,
             files: [],
@@ -199,6 +241,13 @@ export async function runGafcoreAgentChatCompletion(input: {
     });
 
     if (attempt >= MAX_ATTEMPTS) {
+      logBlockDiagnostic(
+        "gate_fail",
+        attempt,
+        input.instruction,
+        safeFiles.map((f) => ({ name: f.name, content: f.content })),
+        gate.issues,
+      );
       return {
         reply: `${replyRaw}\n\nNo se aplicaron cambios: ${gate.userMessage}`,
         files: [],
