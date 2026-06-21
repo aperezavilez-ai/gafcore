@@ -4073,25 +4073,7 @@ export function ChatPanel({
                   <DropdownMenuItem onSelect={() => void handleScreenshot()}>
                     <ImageIcon className="mr-2 h-4 w-4" />
                     <span className="flex-1">Toma una captura de pantalla</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      imageInputRef.current?.click();
-                    }}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Agregar referencia</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    <Folder className="mr-2 h-4 w-4" />
-                    <span className="flex-1">Adjuntar</span>
-                  </DropdownMenuItem>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
