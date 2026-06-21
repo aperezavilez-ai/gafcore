@@ -13,7 +13,6 @@ import {
   FolderGit2,
   Gift,
   History,
-  Home,
   KeyRound,
   LayoutGrid,
   Loader2,
@@ -258,16 +257,10 @@ export function GafCoreBuilderTopBar({
               <Package className="mr-2 h-4 w-4 text-neutral-400" />
               Marketplace
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => openComingSoon("Ir a inicio")}>
-              <Home className="mr-2 h-4 w-4 text-neutral-400" />
-              Ir a inicio
-            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => openComingSoon("Ajustes del proyecto")}>
               <Settings className="mr-2 h-4 w-4 text-neutral-400" />
               Ajustes del proyecto
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => openComingSoon("Memoria IA del proyecto")}>
-              Memoria IA del proyecto
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => openComingSoon("Conectores")}>
               <Plug className="mr-2 h-4 w-4 text-neutral-400" />
@@ -277,6 +270,7 @@ export function GafCoreBuilderTopBar({
               <Pencil className="mr-2 h-4 w-4 text-neutral-400" />
               Cambiar el nombre del proyecto
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => {
                 if (!currentProjectId) return;
@@ -288,12 +282,6 @@ export function GafCoreBuilderTopBar({
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Eliminar proyecto
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => openComingSoon("Mover a carpeta")}>
-              Mover a carpeta
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => openComingSoon("Detalles")}>
-              Detalles
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
