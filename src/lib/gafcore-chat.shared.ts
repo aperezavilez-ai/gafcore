@@ -434,8 +434,13 @@ export function buildGafcoreMessages(
   const v2Only = isGafcoreBrainV2Only();
   let legacyAppend: string;
   if (v2Only) {
+    const inferredTask = inferAiBrainTaskFromInstruction(data.instruction);
+    const designMotor = buildDesignMotorPromptAppend(inferredTask, data.instruction);
+    const designLayer = designMotor ? "" : GAFCORE_DESIGN_CONDENSED;
     legacyAppend = [
       buildAgentProjectContext(ctxFiles),
+      designLayer,
+      designMotor,
       buildAgentModeAppend(data.instruction),
       brandBlock,
       incrementalNote,
