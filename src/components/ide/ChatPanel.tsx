@@ -2998,14 +2998,12 @@ export function ChatPanel({
     setStreamChars(null);
     const ac = new AbortController();
     abortControllerRef.current = ac;
-    const requestTimeoutMs = fastWelcomeBuild ? 90_000 : CHAT_REQUEST_TIMEOUT_MS;
+    const requestTimeoutMs = CHAT_REQUEST_TIMEOUT_MS;
     const chatTimeoutId = window.setTimeout(() => {
       if (!sendInFlightRef.current) return;
       ac.abort();
       toast.error(
-        fastWelcomeBuild
-          ? "El build tardó más de 90 s. Pulsa Construir de nuevo (un solo intento rápido)."
-          : "La solicitud tardó demasiado (4 min). Pulsa el cuadrado para detener o envía de nuevo.",
+        "La solicitud tardó demasiado (4 min). Pulsa el cuadrado para detener o envía de nuevo.",
         { duration: 8000 },
       );
     }, requestTimeoutMs);
@@ -4073,7 +4071,7 @@ export function ChatPanel({
                   <DropdownMenuItem onSelect={() => void handleScreenshot()}>
                     <ImageIcon className="mr-2 h-4 w-4" />
                     <span className="flex-1">Toma una captura de pantalla</span>
-                  </DropdownMenuItem>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
