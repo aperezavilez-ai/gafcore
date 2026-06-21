@@ -436,7 +436,7 @@ export function buildGafcoreMessages(
   if (v2Only) {
     const inferredTask = inferAiBrainTaskFromInstruction(data.instruction);
     const designMotor = buildDesignMotorPromptAppend(inferredTask, data.instruction);
-    const designLayer = designMotor ? "" : GAFCORE_DESIGN_CONDENSED;
+    const designLayer = designMotor ? "" : GAFCORE_DESIGN_SYSTEM;
     legacyAppend = [
       buildAgentProjectContext(ctxFiles),
       designLayer,
