@@ -1728,8 +1728,9 @@ export function ChatPanel({
         /* fallback local + server fn */
       }
     }
-    const local = auditProjectLocally(payload);
+    let local: { issues: ProjectValidationIssue[] } = { issues: [] };
     try {
+      local = auditProjectLocally(payload);
       const remote = await callValidateProject({ data: payload.slice(0, 40) });
       if (typeof remote.overallScore === "number" && remote.status) {
         setValidationLabel(formatValidationScoreShort(remote.overallScore, remote.status));
