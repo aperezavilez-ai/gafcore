@@ -177,7 +177,7 @@ export async function runSafeBuildQualityLoop(
   }
 
   const mergedProject = mergeContextWithDelta(input.contextFiles, files);
-  const gate = gateDeliveredFiles(
+  const gate = await gateDeliveredFiles(
     input.contextFiles,
     files,
     input.instruction,

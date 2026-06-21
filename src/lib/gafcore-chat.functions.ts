@@ -128,7 +128,7 @@ export const gafcoreChat = createServerFn({ method: "POST" })
       if (cached) cacheSet(cacheKey, cached);
     }
     if (cached) {
-      const cachedGate = gateDeliveredFiles(projFiles, cached.files, data.instruction);
+      const cachedGate = await gateDeliveredFiles(projFiles, cached.files, data.instruction);
       const bal = await fetchBalance(userId);
       auditAiActionCompleted({
         userId,
