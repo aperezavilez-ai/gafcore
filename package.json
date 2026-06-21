@@ -65,6 +65,7 @@
     "gafcore:mobile:ios": "npm run cap:ios --prefix apps/gafcore-mobile"
   },
   "dependencies": {
+    "@babel/standalone": "^7.27.0",
     "@cloudflare/vite-plugin": "^1.25.5",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",

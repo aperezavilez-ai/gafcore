@@ -9,18 +9,23 @@ import {
 import type { ProjectValidationIssue } from "@/lib/gafcore-ai-validation.shared";
 import { runValidationWithAutofix } from "@/validation/runner";
 
-// `typescript` se importa de forma diferida — ver gafcore-validate.server.ts para detalles.
-type TsModule = typeof import("typescript");
-let cachedTs: TsModule | null | undefined;
-async function loadTs(): Promise<TsModule | null> {
-  if (cachedTs !== undefined) return cachedTs;
+// Babel standalone: mismo motor que el preview del navegador → paridad real servidor/cliente.
+type BabelStandalone = {
+  transform: (code: string, opts: Record<string, unknown>) => { code: string | null };
+};
+let cachedBabel: BabelStandalone | null | undefined;
+async function loadBabel(): Promise<BabelStandalone | null> {
+  if (cachedBabel !== undefined) return cachedBabel;
   try {
-    const mod = (await import("typescript")) as unknown as { default?: TsModule } & TsModule;
-    cachedTs = (mod.default ?? mod) as TsModule;
+    const mod = (await import("@babel/standalone")) as unknown as
+      | { default?: BabelStandalone }
+      | BabelStandalone;
+    cachedBabel = (("default" in mod ? (mod as { default?: BabelStandalone }).default : undefined) ??
+      (mod as BabelStandalone));
   } catch {
-    cachedTs = null;
+    cachedBabel = null;
   }
-  return cachedTs;
+  return cachedBabel;
 }
 
 const fileSchema = z.object({
@@ -31,46 +36,34 @@ const fileSchema = z.object({
 const schema = z.array(fileSchema).max(40);
 
 /**
- * Validación ligera (transpile TS/JS) de archivos generados — sin `tsc` completo ni disco.
+ * Validación ligera (transpile TS/JSX via Babel) de archivos generados — sin `tsc` completo ni disco.
  */
 export const validateGafcoreSources = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => schema.parse(input))
   .handler(async ({ data }) => {
     const errors: { name: string; message: string }[] = [];
-    const ts = await loadTs();
-    if (!ts) {
-      // typescript no disponible en runtime — devolvemos OK para no bloquear al usuario.
+    const babel = await loadBabel();
+    if (!babel) {
       return { ok: true, errors };
     }
     for (const f of data) {
       const isJsx = /\.(tsx|jsx|mtsx)$/i.test(f.name);
+      const isTs = /\.(tsx|ts|mts|mtsx)$/i.test(f.name);
       const isScript = /\.(ts|mts|js|mjs|cjs)$/i.test(f.name);
       if (!isJsx && !isScript) continue;
       try {
-        const compilerOptions: import("typescript").CompilerOptions = {
-          target: ts.ScriptTarget.ES2022,
-          module: ts.ModuleKind.ESNext,
-          strict: false,
-        };
-        // Solo archivos JSX llevan opción jsx (evita falso error en lib/store.ts).
-        if (isJsx) {
-          compilerOptions.jsx = ts.JsxEmit.ReactJSX;
-        }
-        const r = ts.transpileModule(f.content, {
-          compilerOptions,
-          reportDiagnostics: true,
-          fileName: f.name,
+        const presets: string[] = [];
+        if (isTs) presets.push("typescript");
+        if (isJsx) presets.push("react");
+        babel.transform(f.content, {
+          filename: f.name,
+          presets,
+          configFile: false,
+          babelrc: false,
         });
-        const errList = (r.diagnostics || []).filter((d) => d.category === ts.DiagnosticCategory.Error);
-        if (errList.length > 0) {
-          errors.push({
-            name: f.name,
-            message: ts.flattenDiagnosticMessageText(errList[0].messageText, "\n").slice(0, 600),
-          });
-        }
       } catch (e: any) {
-        errors.push({ name: f.name, message: String(e?.message || "syntax") });
+        errors.push({ name: f.name, message: String(e?.message || "syntax error").slice(0, 600) });
       }
     }
     return { ok: errors.length === 0, errors };

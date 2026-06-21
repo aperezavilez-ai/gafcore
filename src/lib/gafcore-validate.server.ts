@@ -9,58 +9,54 @@ export type ValidateProjectFileInput = {
   content: string;
 };
 
-// Cache del módulo `typescript` cargado de forma diferida.
-// Razón: `typescript` no está garantizado en runtime serverless (Nitro/Vercel no lo bundlea
-// si está como devDep o transitive). Si falta, la validación sintáctica se omite — el resto
-// del SSR sigue funcionando.
-type TsModule = typeof import("typescript");
-let cachedTs: TsModule | null | undefined;
+// Babel standalone: mismo motor que usa el preview del navegador → paridad real
+// servidor/cliente. Se bundlea en el lambda (no está en la lista external de vite.config).
+type BabelStandalone = {
+  transform: (code: string, opts: Record<string, unknown>) => { code: string | null };
+};
+let cachedBabel: BabelStandalone | null | undefined;
 
-async function loadTs(): Promise<TsModule | null> {
-  if (cachedTs !== undefined) return cachedTs;
+async function loadBabel(): Promise<BabelStandalone | null> {
+  if (cachedBabel !== undefined) return cachedBabel;
   try {
-    const mod = (await import("typescript")) as unknown as { default?: TsModule } & TsModule;
-    cachedTs = (mod.default ?? mod) as TsModule;
+    const mod = (await import("@babel/standalone")) as unknown as
+      | { default?: BabelStandalone }
+      | BabelStandalone;
+    cachedBabel = (("default" in mod ? (mod as { default?: BabelStandalone }).default : undefined) ??
+      (mod as BabelStandalone));
   } catch {
-    cachedTs = null;
+    cachedBabel = null;
   }
-  return cachedTs;
+  return cachedBabel;
 }
 
-/** Núcleo: sintaxis TS + heurísticas locales (sin security/env/score). */
+/** Núcleo: sintaxis TS/JSX via Babel + heurísticas locales (sin security/env/score). */
 export async function validateGafcoreProjectCore(
   data: ValidateProjectFileInput[],
 ): Promise<{ ok: boolean; issues: ProjectValidationIssue[] }> {
   const local = auditProjectLocally(data);
   const syntaxErrors: { name: string; message: string }[] = [];
 
-  const ts = await loadTs();
-  if (ts) {
+  const babel = await loadBabel();
+  if (babel) {
     for (const f of data) {
       if (!/\.(mtsx|mts|tsx|ts|jsx|js|cjs|mjs)$/i.test(f.name)) continue;
       try {
-        const isTsx = /\.(mtsx|tsx|jsx)$/i.test(f.name);
-        const r = ts.transpileModule(f.content, {
-          compilerOptions: {
-            jsx: isTsx ? ts.JsxEmit.ReactJSX : ts.JsxEmit.None,
-            target: ts.ScriptTarget.ES2022,
-            module: ts.ModuleKind.ESNext,
-            strict: false,
-          },
-          reportDiagnostics: true,
-          fileName: f.name,
+        const isTs = /\.(mtsx|mts|tsx|ts)$/i.test(f.name);
+        const isJsx = /\.(mtsx|tsx|jsx)$/i.test(f.name);
+        const presets: string[] = [];
+        if (isTs) presets.push("typescript");
+        if (isJsx) presets.push("react");
+        babel.transform(f.content, {
+          filename: f.name,
+          presets,
+          configFile: false,
+          babelrc: false,
         });
-        const errList = (r.diagnostics || []).filter((d) => d.category === ts.DiagnosticCategory.Error);
-        if (errList.length > 0) {
-          syntaxErrors.push({
-            name: f.name,
-            message: ts.flattenDiagnosticMessageText(errList[0].messageText, "\n").slice(0, 600),
-          });
-        }
       } catch (e: unknown) {
         syntaxErrors.push({
           name: f.name,
-          message: e instanceof Error ? e.message : "syntax",
+          message: (e instanceof Error ? e.message : "syntax error").slice(0, 600),
         });
       }
     }
