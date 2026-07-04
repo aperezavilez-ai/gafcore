@@ -8,7 +8,8 @@
  */
 import { completeClaudeChat } from "@/services/claudeService";
 import { LANDING_PREMIUM_EXAMPLE, LANDING_PREMIUM_PROMPT_HINT } from "@/services/ai/blueprints/landingPremium";
-import { MODERN_SAAS_GOLDEN_EXAMPLE, MODERN_SAAS_BLUEPRINT_PROMPT_HINT } from "@/interfaces/ai/blueprints/modernSaaS";
+import { MODERN_SAAS_GOLDEN_EXAMPLE, MODERN_SAAS_BLUEPRINT_PROMPT_HINT } from "@/services/ai/blueprints/modernSaaS";
+import { ECOMMERCE_PREMIUM_EXAMPLE, ECOMMERCE_PREMIUM_PROMPT_HINT } from "@/services/ai/blueprints/ecommercePremium";
 
 const SITE_BUILDER_SYSTEM_PROMPT = `Eres un generador experto de sitios web PREMIUM de alta fidelidad. Tu objetivo es crear sitios que parezcan hechos por un diseñador profesional de UI/UX, NO plantillas básicas.
 
