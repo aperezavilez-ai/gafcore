@@ -64,6 +64,7 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
   }
 
   if (openaiKey) {
+    const openaiUrl = process.env.OPENAI_CHAT_COMPLETIONS_URL?.trim() || "https://api.openai.com/v1/chat/completions";
     let openaiSlug: string;
     if (family === "claude") {
       openaiSlug = /haiku|fast/i.test(modelHint ?? "") ? "gpt-4o-mini" : "gpt-4o";
@@ -74,7 +75,7 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
     }
     routes.push({
       provider: "openai",
-      url: "https://api.openai.com/v1/chat/completions",
+      url: openaiUrl,
       apiKey: openaiKey,
       extraHeaders: {},
       modelSlug: openaiSlug,
