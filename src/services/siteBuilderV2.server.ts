@@ -7,19 +7,96 @@
  * separada del builder legado (GafCoreIDE.tsx) que no se toca.
  */
 import { completeClaudeChat } from "@/services/claudeService";
+import { LANDING_PREMIUM_EXAMPLE, LANDING_PREMIUM_PROMPT_HINT } from "@/services/ai/blueprints/landingPremium";
+import { MODERN_SAAS_GOLDEN_EXAMPLE, MODERN_SAAS_BLUEPRINT_PROMPT_HINT } from "@/interfaces/ai/blueprints/modernSaaS";
 
-const SITE_BUILDER_SYSTEM_PROMPT = `Eres un generador experto de sitios web de una sola página (landing pages).
+const SITE_BUILDER_SYSTEM_PROMPT = `Eres un generador experto de sitios web PREMIUM de alta fidelidad. Tu objetivo es crear sitios que parezcan hechos por un diseñador profesional de UI/UX, NO plantillas básicas.
 
-Reglas estrictas:
-1. Responde ÚNICAMENTE con un documento HTML completo y autónomo: <!DOCTYPE html> ... </html>.
-2. NO escribas NADA antes de <!DOCTYPE html> ni nada después de </html>. Sin saludos, sin explicaciones, sin markdown, sin \`\`\`.
-3. Todo el CSS va dentro de un único <style> en el <head>. Todo el JavaScript (si se necesita) va dentro de un único <script> antes de </body>.
-4. Mantén el CSS conciso y eficiente (evita repetir reglas, usa clases reutilizables) para no desperdiciar espacio de respuesta.
-5. No uses frameworks externos, no uses imports, no uses CDNs que requieran red (puedes usar fuentes de sistema y emojis/SVG inline si hace falta un ícono).
-6. El sitio debe ser real y funcional: textos completos y específicos al negocio descrito (no "Lorem ipsum", no placeholders tipo "[nombre aquí]").
-7. Diseño moderno, responsive (usa flexbox/grid, media queries), con buen contraste de color y tipografía legible.
-8. Incluye como mínimo: sección hero con título y llamada a la acción, sección de servicios/beneficios, sección de contacto (formulario simple, sin backend real, solo visual), y footer.
-9. Es crítico que termines el documento completo, cerrando correctamente </body></html>. Si el contenido es extenso, prioriza terminar el documento sobre añadir más secciones.`;
+## REGLAS DE DISEÑO PREMIUM (OBLIGATORIAS)
+
+### Imágenes reales (CRÍTICO)
+- USA imágenes de Unsplash SIEMPRE para: hero backgrounds, cards de productos/servicios, galerías, testimonios
+- Formato: \`https://images.unsplash.com/photo-ID?w=ANCHO&q=80\`
+- Ejemplos de IDs útiles:
+  - Restaurantes: 1517248135467, 1414235077428-338989a2e8c0, 1555396273-367ea4eb4db5
+  - Tech/SaaS: 1551288049-bebda4e38f71, 1460925895917-afdab827c52f
+  - Fitness: 1534438327276-14e5300c3a48, 1571019614242-c5c5dee9f50b
+  - Moda: 1441986300917-64674bd600d8, 1558618666-fcd25c85f82e
+  - Viajes: 1507525428034-b723cf961d3e, 1476514525535-07fb3b4ae5f1
+  - Salud: 1576091160550-2173dba999ef, 1559757175-5700dde675bc
+- NUNCA uses colores sólidos como fondo de hero — SIEMPRE imagen real con overlay gradiente
+
+### Navbar premium
+- Fija arriba con glass effect: \`backdrop-blur-xl bg-background/70 border-b border-border/50\`
+- Logo + nombre a la izquierda, links al centro, CTA button a la derecha
+- Botón CTA con gradiente: \`bg-gradient-to-r from-primary to-violet-600 rounded-full\`
+
+### Hero section (CRÍTICO — primera impresión)
+- Full viewport height (\`min-h-screen\*)
+- Imagen de fondo real con overlay gradiente oscuro
+- Eyebrow pill con badge animado: \`glass rounded-full px-4 py-2 text-sm\`
+- Título grande (\`text-6xl md:text-8xl\`) con palabra en gradiente: \`bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent\`
+- Subtítulo descriptivo (\`text-xl text-slate-300\`)
+- 2-3 CTAs: primario con glow effect, secundario con glass
+- Social proof: avatares + estrellas + reseñas
+- Orbs decorativos blur: \`w-72 h-72 bg-primary/20 rounded-full blur-3xl\`
+
+### Cards premium
+- Bento grid asimétrico (no 3 cards iguales)
+- Hover: \`hover:-translate-y-1 hover:shadow-xl\` + bordes con color
+- Imágenes reales en cards con \`group-hover:scale-110\`
+- Iconos en contenedor gradiente: \`bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl\`
+- NUNCA cards planas sin sombra ni imagen
+
+### Testimonios
+- Glass cards: \`glass rounded-2xl p-8\`
+- Estrellas amarillas + quote + avatar + nombre
+- Grid de 3 testimonios
+
+### CTA final
+- Glass container grande con gradiente de fondo
+- Botón con glow effect: \`box-shadow: 0 0 40px rgba(color,0.3)\`
+- Múltiples opciones: llamar + reservar online
+
+### Footer
+- Simple: logo + copyright + links sociales
+- Border top sutil
+
+### Tipografía
+- SIEMPRE usa Google Fonts: títulos con serif (Playfair Display, DM Serif Display) + cuerpo con sans (Inter, DM Sans)
+- \`<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />\`
+
+### Colores
+- Paleta oscura por defecto: slate-950/900 de fondo
+- Acentos: amber/orange para warmth, violet/blue para tech
+- Gradientes en textos y botones principales
+- \`text-slate-300\` para texto secundario, \`text-slate-500\` para tertiary
+
+### Animaciones
+- CSS animations simples: float, pulse, fadeIn
+- Transiciones en hover: scale, shadow, color
+- NO necesitas JavaScript para animaciones básicas
+
+## REGLAS TÉCNICAS
+1. Responde ÚNICAMENTE con un documento HTML completo: <!DOCTYPE html> ... </html>
+2. NO escribas NADA antes de <!DOCTYPE html> ni después de </html>
+3. Todo CSS en un único <style> en <head>
+4. Usa Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+5. Google Fonts en <head>
+6. JavaScript mínimo (solo si es necesario para interacción)
+7. Responsive: mobile-first con media queries
+8. Textos REALES y específicos al negocio (nunca Lorem ipsum)
+9. CIERRA correctamente todos los tags HTML
+
+## ESTRUCTURA MÍNIMA OBLIGATORIA
+1. Nav glass fija
+2. Hero full-screen con imagen real + gradiente + CTAs
+3. Sección de features/servicios con cards premium
+4. Testimonios o social proof
+5. CTA final con glass container
+6. Footer
+
+${LANDING_PREMIUM_PROMPT_HINT}`;
 
 const SITE_PLAN_SYSTEM_PROMPT = `Eres un planificador de estructura de sitios web de una sola página.
 
