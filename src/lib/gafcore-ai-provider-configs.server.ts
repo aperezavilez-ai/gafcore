@@ -284,6 +284,79 @@ export async function deleteGafcoreAiProviderConfig(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+async function fetchProviderProbe(
+  route: ResolvedRoute,
+): Promise<{ ok: boolean; status: number }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const model = route.modelSlug?.trim();
+
+  try {
+    if (route.provider === "anthropic") {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": route.apiKey,
+          "anthropic-version": "2023-06-01",
+          ...route.extraHeaders,
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 8,
+          messages: [{ role: "user", content: "Responde solo OK." }],
+        }),
+      });
+      return { ok: res.ok, status: res.status };
+    }
+
+    if (route.wireApi === "responses") {
+      const res = await fetch(route.url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${route.apiKey}`,
+          ...route.extraHeaders,
+        },
+        body: JSON.stringify({
+          ...(model ? { model } : {}),
+          input: "Responde solo OK.",
+          max_output_tokens: 8,
+        }),
+      });
+      return { ok: res.ok, status: res.status };
+    }
+
+    const res = await fetch(route.url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${route.apiKey}`,
+        ...route.extraHeaders,
+      },
+      body: JSON.stringify({
+        ...(model ? { model } : {}),
+        messages: [{ role: "user", content: "Responde solo OK." }],
+        max_tokens: 8,
+        temperature: 0,
+      }),
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    logDev("gafcore_ai_provider_probe_failed", {
+      provider: route.provider,
+      model: route.modelSlug,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return { ok: false, status: 0 };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function testGafcoreAiProviderRoute(id: string): Promise<{ ok: boolean; message: string }> {
   const configs = await listGafcoreAiProviderConfigs();
   const config = configs.find((c) => c.id === id);
@@ -291,5 +364,13 @@ export async function testGafcoreAiProviderRoute(id: string): Promise<{ ok: bool
   const routes = await listActiveGafcoreAiProviderRoutes(config.defaultModel);
   const route = routes.find((r) => r.provider === config.provider && r.modelSlug === config.defaultModel) ?? routes[0];
   if (!route) return { ok: false, message: "No hay llave activa para probar." };
-  return { ok: true, message: `Configuracion lista: ${route.provider} / ${route.modelSlug}.` };
+  const probe = await fetchProviderProbe(route);
+  if (!probe.ok) {
+    const detail = probe.status > 0 ? `HTTP ${probe.status}` : "sin respuesta";
+    return {
+      ok: false,
+      message: `La API no respondio correctamente (${detail}). Revisa saldo, llave o modelo.`,
+    };
+  }
+  return { ok: true, message: `API activa y con respuesta: ${route.provider} / ${route.modelSlug}.` };
 }
