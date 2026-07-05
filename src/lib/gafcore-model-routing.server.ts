@@ -9,6 +9,7 @@ import {
   type ResolvedProvider,
   type ResolvedRoute,
 } from "@/lib/gafcore-model-routing.shared";
+import { GPTPRO4ALL_API_DEFAULT_MODEL } from "@/lib/gafcore-chat.shared";
 
 export type { ResolvedProvider, ResolvedRoute };
 
@@ -33,43 +34,108 @@ function normalizeChatCompletionsUrl(rawUrl: string): string {
   }
 }
 
+function normalizeResponsesUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    const path = url.pathname.replace(/\/+$/g, "");
+    if (!path || path === "/" || path === "/v1" || path === "/v1/chat/completions") {
+      url.pathname = "/v1/responses";
+      return url.toString();
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+function isGptpro4AllUrl(rawUrl: string | undefined): boolean {
+  return Boolean(rawUrl?.toLowerCase().includes("api.chatgptpro4all.com"));
+}
+
+function resolveGptpro4AllRoute(
+  modelHint: string | undefined,
+  family: ReturnType<typeof detectModelFamily>,
+): ResolvedRoute | null {
+  const explicitBase = process.env.GPTPRO4ALL_BASE_URL?.trim();
+  const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
+  const baseUrl =
+    explicitBase ||
+    (isGptpro4AllUrl(customUrl) ? customUrl : "") ||
+    (process.env.GPTPRO4ALL_API_KEY?.trim() ? "https://api.chatgptpro4all.com/v1" : "");
+  const apiKey =
+    process.env.GPTPRO4ALL_API_KEY?.trim() ||
+    (baseUrl ? process.env.AI_API_KEY?.trim() : "");
+
+  if (!baseUrl || !apiKey) return null;
+
+  const requested = modelHint?.trim();
+  const modelSlug =
+    requested && family !== "claude"
+      ? normalizeModelSlug(requested, "gptpro4all")
+      : (process.env.AI_MODEL_DEEP?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL);
+
+  return {
+    provider: "gptpro4all",
+    url: normalizeResponsesUrl(baseUrl),
+    apiKey,
+    extraHeaders: {},
+    modelSlug,
+    wireApi: "responses",
+  };
+}
+
+function makeAnthropicRoute(modelSlug: string, apiKey: string): ResolvedRoute {
+  return {
+    provider: "anthropic",
+    url: "https://api.anthropic.com/v1/messages",
+    apiKey,
+    extraHeaders: { "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION },
+    modelSlug,
+    wireApi: "chat_completions",
+  };
+}
+
 export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
   const routes: ResolvedRoute[] = [];
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const family = modelHint ? detectModelFamily(modelHint) : "other";
+
+  const gptpro4allRoute = resolveGptpro4AllRoute(modelHint, family);
+  if (gptpro4allRoute && family !== "claude") {
+    routes.push(gptpro4allRoute);
+  }
 
   const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
   const customKey = process.env.AI_API_KEY?.trim();
-  if (customUrl && customKey) {
+  if (customUrl && customKey && !isGptpro4AllUrl(customUrl)) {
     routes.push({
       provider: "custom",
       url: normalizeChatCompletionsUrl(customUrl),
       apiKey: customKey,
       extraHeaders: {},
       modelSlug: modelHint?.trim() ?? "",
+      wireApi: "chat_completions",
     });
   }
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const family = modelHint
-    ? detectModelFamily(modelHint)
-    : anthropicKey
-      ? "claude"
-      : "other";
+  if (anthropicKey && (family === "claude" || (!modelHint && !gptpro4allRoute))) {
+    const slug = family === "claude"
+      ? normalizeModelSlug(modelHint?.trim() || GAFCORE_ANTHROPIC_MODEL_DEFAULT, "anthropic")
+      : GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+    routes.push(makeAnthropicRoute(slug, anthropicKey));
+  }
 
-  const shouldPreferAnthropic = anthropicKey && (!modelHint || family === "claude");
-  if (shouldPreferAnthropic) {
-    const slug =
-      family === "claude"
-        ? normalizeModelSlug(modelHint?.trim() || GAFCORE_ANTHROPIC_MODEL_DEFAULT, "anthropic")
-        : GAFCORE_ANTHROPIC_MODEL_DEFAULT;
-    routes.push({
-      provider: "anthropic",
-      url: "https://api.anthropic.com/v1/messages",
-      apiKey: anthropicKey,
-      extraHeaders: { "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION },
-      modelSlug: slug,
-    });
+  if (gptpro4allRoute && family === "claude") {
+    routes.push(gptpro4allRoute);
+  }
+
+  if (anthropicKey && gptpro4allRoute && family !== "claude") {
+    routes.push(makeAnthropicRoute(GAFCORE_ANTHROPIC_MODEL_DEFAULT, anthropicKey));
   }
 
   if (openrouterKey) {
@@ -83,6 +149,7 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
         "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() || "GafCore",
       },
       modelSlug: modelHint ? normalizeModelSlug(modelHint, "openrouter") : "",
+      wireApi: "chat_completions",
     });
   }
 
@@ -102,17 +169,12 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
       apiKey: openaiKey,
       extraHeaders: {},
       modelSlug: openaiSlug,
+      wireApi: "chat_completions",
     });
   }
 
-  if (anthropicKey && !shouldPreferAnthropic && routes.length === 0) {
-    routes.push({
-      provider: "anthropic",
-      url: "https://api.anthropic.com/v1/messages",
-      apiKey: anthropicKey,
-      extraHeaders: { "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION },
-      modelSlug: GAFCORE_ANTHROPIC_MODEL_DEFAULT,
-    });
+  if (anthropicKey && routes.length === 0) {
+    routes.push(makeAnthropicRoute(GAFCORE_ANTHROPIC_MODEL_DEFAULT, anthropicKey));
   }
 
   return routes;
@@ -122,7 +184,7 @@ export function resolveAiRoute(modelHint?: string): ResolvedRoute {
   const all = resolveAllAiRoutes(modelHint);
   if (all.length === 0) {
     throw new Error(
-      "AI no configurado: define ANTHROPIC_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL+AI_API_KEY.",
+      "AI no configurado: define GPTPRO4ALL_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL+AI_API_KEY.",
     );
   }
   return all[0];

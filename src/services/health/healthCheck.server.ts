@@ -14,7 +14,7 @@ export function runHealthCheck(): HealthCheckSummary {
       module: "brain",
       title: "Cerebro IA sin proveedor de chat",
       description:
-        "Define OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL + AI_API_KEY.",
+        "Define GPTPRO4ALL_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL + AI_API_KEY.",
       severity: "critical",
       source: "doctor",
     });

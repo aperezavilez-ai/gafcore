@@ -20,6 +20,7 @@ export type AiBrainProviderId =
   | "anthropic"
   | "openrouter"
   | "custom"
+  | "gptpro4all"
   | "elevenlabs";
 
 export type AiBrainRequest = {

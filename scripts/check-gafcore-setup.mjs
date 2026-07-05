@@ -49,6 +49,8 @@ function mask(k) {
 }
 
 function aiConfigured() {
+  if (has("GPTPRO4ALL_API_KEY")) return true;
+  if (has("GPTPRO4ALL_BASE_URL") && has("AI_API_KEY")) return true;
   if (has("AI_CHAT_COMPLETIONS_URL") && has("AI_API_KEY")) return true;
   if (has("ANTHROPIC_API_KEY")) return true;
   if (has("OPENROUTER_API_KEY")) return true;
@@ -87,11 +89,11 @@ else
 
 if (aiConfigured())
   ok.push(
-    "IA: ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY o AI_CHAT_COMPLETIONS_URL+AI_API_KEY",
+    "IA: GPTPRO4ALL_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY o AI_CHAT_COMPLETIONS_URL+AI_API_KEY",
   );
 else
   issues.push(
-    "Falta configuración de IA: define ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, o AI_CHAT_COMPLETIONS_URL + AI_API_KEY",
+    "Falta configuracion de IA: define GPTPRO4ALL_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, o AI_CHAT_COMPLETIONS_URL + AI_API_KEY",
   );
 
 if (has("VITE_PAYMENTS_CLIENT_TOKEN")) ok.push("VITE_PAYMENTS_CLIENT_TOKEN (Stripe publishable)");
@@ -108,6 +110,8 @@ for (const k of [
   "SUPABASE_SERVICE_ROLE_KEY",
   "OPENAI_API_KEY",
   "OPENROUTER_API_KEY",
+  "GPTPRO4ALL_BASE_URL",
+  "GPTPRO4ALL_API_KEY",
   "AI_CHAT_COMPLETIONS_URL",
   "AI_API_KEY",
   "AI_MODEL_FAST",
@@ -119,7 +123,9 @@ for (const k of [
 
 if (has("AI_CHAT_COMPLETIONS_URL")) {
   const url = env.AI_CHAT_COMPLETIONS_URL.trim();
-  if (/\/v1\/?$/i.test(url)) {
+  if (/api\.chatgptpro4all\.com/i.test(url)) {
+    ok.push("AI_CHAT_COMPLETIONS_URL (GPTPRO4ALL; GafCore usara /v1/responses)");
+  } else if (/\/v1\/?$/i.test(url)) {
     ok.push("AI_CHAT_COMPLETIONS_URL (base /v1; GafCore añadirá /chat/completions)");
   } else if (/\/chat\/completions\/?$/i.test(url)) {
     ok.push("AI_CHAT_COMPLETIONS_URL (/chat/completions)");

@@ -7,7 +7,8 @@ import {
   GAFCORE_ANTHROPIC_MODEL_RETIRED,
 } from "@/lib/gafcore-assistant-prompt.shared";
 
-export type ResolvedProvider = "anthropic" | "openai" | "openrouter" | "custom";
+export type ResolvedProvider = "anthropic" | "openai" | "openrouter" | "custom" | "gptpro4all";
+export type AiWireApi = "chat_completions" | "responses";
 
 export type ResolvedRoute = {
   provider: ResolvedProvider;
@@ -15,6 +16,7 @@ export type ResolvedRoute = {
   apiKey: string;
   extraHeaders: Record<string, string>;
   modelSlug: string;
+  wireApi?: AiWireApi;
 };
 
 export function normalizeModelSlug(model: string, target: ResolvedProvider): string {
@@ -32,6 +34,10 @@ export function normalizeModelSlug(model: string, target: ResolvedProvider): str
 
   if (target === "openai") {
     return m.replace(/^openai\//i, "");
+  }
+
+  if (target === "gptpro4all") {
+    return m.replace(/^(gptpro4all|openai)\//i, "");
   }
 
   if (target === "openrouter") {

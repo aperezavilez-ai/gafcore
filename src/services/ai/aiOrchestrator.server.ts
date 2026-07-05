@@ -30,7 +30,32 @@ function mapResolvedProvider(p: ResolvedProvider): AiBrainProviderId {
   if (p === "openrouter") return "openrouter";
   if (p === "openai") return "openai";
   if (p === "anthropic") return "anthropic";
+  if (p === "gptpro4all") return "gptpro4all";
   return "custom";
+}
+
+function hasEnv(key: string): boolean {
+  const v = process.env[key];
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+function getGptpro4AllProviderStatus() {
+  const explicit = hasEnv("GPTPRO4ALL_API_KEY");
+  const viaCustom =
+    hasEnv("AI_API_KEY") &&
+    Boolean(
+      hasEnv("GPTPRO4ALL_BASE_URL") ||
+        process.env.AI_CHAT_COMPLETIONS_URL?.toLowerCase().includes("api.chatgptpro4all.com"),
+    );
+  return {
+    id: "gptpro4all" as const,
+    configured: explicit || viaCustom,
+    envKeys: explicit
+      ? ["GPTPRO4ALL_API_KEY"]
+      : viaCustom
+        ? ["AI_CHAT_COMPLETIONS_URL", "AI_API_KEY"]
+        : ["GPTPRO4ALL_API_KEY", "GPTPRO4ALL_BASE_URL"],
+  };
 }
 
 function inferProviderFromModel(model: string): AiBrainProviderId {
@@ -130,6 +155,7 @@ export function resolveBrainRoute(request: AiBrainRequest): AiBrainRoute {
 
 export function listBrainProviderStatuses() {
   return [
+    getGptpro4AllProviderStatus(),
     getOpenAiProviderStatus(),
     getGeminiProviderStatus(),
     getAnthropicProviderStatus(),

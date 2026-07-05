@@ -189,6 +189,161 @@ function wrapAnthropicStreamResponse(res: Response): Response {
   });
 }
 
+function messageContentToText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const p = part as { type?: string; text?: string; image_url?: { url?: string } };
+      if (typeof p.text === "string") return p.text;
+      if (p.image_url?.url) return `[imagen: ${p.image_url.url}]`;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function toResponsesBody(body: ChatCompletionsBody, modelSlug: string): Record<string, unknown> {
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  const instructions: string[] = [];
+  const input: Array<{ role: string; content: string }> = [];
+
+  for (const m of messages as Array<{ role: string; content: unknown }>) {
+    if (!m || typeof m !== "object") continue;
+    const text = messageContentToText(m.content);
+    if (!text.trim()) continue;
+    if (m.role === "system") {
+      instructions.push(text);
+      continue;
+    }
+    if (m.role === "user" || m.role === "assistant") {
+      input.push({ role: m.role, content: text });
+    }
+  }
+
+  const rf = body.response_format;
+  const wantsJson =
+    rf &&
+    typeof rf === "object" &&
+    (rf as { type?: string }).type === "json_object";
+  if (wantsJson) {
+    instructions.push(
+      "Responde con un unico objeto JSON valido. Sin markdown, sin texto antes ni despues del JSON.",
+    );
+  }
+
+  const out: Record<string, unknown> = {
+    model: modelSlug,
+    input: input.length > 0 ? input : "",
+  };
+  if (instructions.length) out.instructions = instructions.join("\n\n");
+  if (typeof body.temperature === "number") out.temperature = body.temperature;
+  if (typeof body.max_tokens === "number") out.max_output_tokens = body.max_tokens;
+  if (body.stream) out.stream = true;
+  return out;
+}
+
+function extractResponsesText(json: unknown): string {
+  const direct = (json as { output_text?: unknown } | null)?.output_text;
+  if (typeof direct === "string") return direct;
+
+  const output = (json as { output?: unknown } | null)?.output;
+  if (!Array.isArray(output)) return "";
+
+  const parts: string[] = [];
+  for (const item of output as Array<{ type?: string; content?: unknown }>) {
+    const content = item?.content;
+    if (!Array.isArray(content)) continue;
+    for (const c of content as Array<{ type?: string; text?: unknown }>) {
+      if (typeof c?.text === "string") parts.push(c.text);
+    }
+  }
+  return parts.join("");
+}
+
+async function wrapResponsesApiResponse(res: Response): Promise<Response> {
+  if (!res.ok) return res;
+  const json = (await res.json().catch(() => null)) as unknown;
+  if (!json) {
+    return new Response(JSON.stringify({ error: "responses_invalid_response" }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const text = extractResponsesText(json);
+  const openaiShape = {
+    id: (json as { id?: string } | null)?.id ?? `responses-${Date.now()}`,
+    object: "chat.completion",
+    model: (json as { model?: string } | null)?.model ?? "gptpro4all",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: text },
+        finish_reason: "stop",
+      },
+    ],
+    usage: (json as { usage?: unknown } | null)?.usage ?? undefined,
+  };
+
+  return new Response(JSON.stringify(openaiShape), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function wrapResponsesApiStreamResponse(res: Response): Response {
+  if (!res.ok || !res.body) return res;
+
+  const reader = res.body.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let lineEnd: number;
+          while ((lineEnd = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, lineEnd).trim();
+            buffer = buffer.slice(lineEnd + 1);
+            if (!line.startsWith("data:")) continue;
+            const payload = line.replace(/^data:\s*/, "").trim();
+            if (!payload || payload === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(payload) as { type?: string; delta?: string };
+              if (parsed.type === "response.output_text.delta" && typeof parsed.delta === "string") {
+                const chunk = { choices: [{ delta: { content: parsed.delta } }] };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              }
+            } catch {
+              /* linea parcial SSE */
+            }
+          }
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: res.status,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 /** Envuelve una respuesta nativa de Anthropic como si fuera OpenAI chat-completions. */
 async function wrapAnthropicResponse(res: Response): Promise<Response> {
   if (!res.ok) return res;
@@ -304,6 +459,28 @@ async function executeRouteFetch(
       return wrapAnthropicStreamResponse(res);
     }
     return wrapAnthropicResponse(res);
+  }
+
+  if (route.wireApi === "responses") {
+    const responsesBody = toResponsesBody(body, route.modelSlug || String(body.model ?? ""));
+    const timeoutMs = responsesBody.stream
+      ? AI_UPSTREAM_STREAM_TIMEOUT_MS
+      : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
+    const res = await fetchWithTimeout(
+      route.url,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${route.apiKey}`,
+          ...route.extraHeaders,
+        },
+        body: JSON.stringify(responsesBody),
+      },
+      timeoutMs,
+    );
+    if (responsesBody.stream) return wrapResponsesApiStreamResponse(res);
+    return wrapResponsesApiResponse(res);
   }
 
   const outBody: Record<string, unknown> = { ...body };
