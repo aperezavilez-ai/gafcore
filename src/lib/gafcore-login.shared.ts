@@ -3,8 +3,92 @@
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
-import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
-import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
+import {
+  fetchGafcorePublicClientEnv,
+  getGafcoreSupabaseBrowser,
+  isSupabaseReadyOnClient,
+} from "@/lib/gafcore-supabase-browser";
+
+const LOGIN_AUTH_TIMEOUT_MS = 30_000;
+
+type GafcorePasswordGrantResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  user?: User;
+  error?: string;
+  error_description?: string;
+  msg?: string;
+  message?: string;
+};
+
+async function signInWithPasswordGrant(
+  email: string,
+  password: string,
+): Promise<{ session: Session | null; user: User | null; error?: string }> {
+  const env = await fetchGafcorePublicClientEnv();
+  if (!env?.url || !env.publishableKey) {
+    return {
+      session: null,
+      user: null,
+      error:
+        "Supabase no esta disponible en este sitio. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel.",
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), LOGIN_AUTH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${env.url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: env.publishableKey,
+        Authorization: `Bearer ${env.publishableKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+    });
+    const body = (await res.json().catch(() => ({}))) as GafcorePasswordGrantResponse;
+    if (!res.ok) {
+      return {
+        session: null,
+        user: null,
+        error: body.error_description || body.msg || body.message || body.error || "No se pudo iniciar sesion.",
+      };
+    }
+
+    if (!body.access_token || !body.refresh_token) {
+      return {
+        session: null,
+        user: body.user ?? null,
+        error: "Supabase respondio el inicio de sesion sin tokens de sesion.",
+      };
+    }
+
+    const supabase = await getGafcoreSupabaseBrowser();
+    const { data, error } = await supabase.auth.setSession({
+      access_token: body.access_token,
+      refresh_token: body.refresh_token,
+    });
+    if (error) {
+      return { session: null, user: body.user ?? null, error: error.message };
+    }
+    return { session: data.session, user: data.user ?? body.user ?? null };
+  } catch (err) {
+    const aborted = err instanceof DOMException && err.name === "AbortError";
+    return {
+      session: null,
+      user: null,
+      error: aborted
+        ? "No se recibio respuesta del servidor de autenticacion. Revisa tu conexion y vuelve a intentar."
+        : err instanceof Error
+          ? err.message
+          : "No se pudo contactar el servidor de autenticacion.",
+    };
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 
 /** Tras signIn, espera a que la sesión quede en storage (Chrome / red lenta). */
@@ -195,14 +279,14 @@ export async function gafcoreLoginWithPassword(input: {
   }
 
   const supabase = await getGafcoreSupabaseBrowser();
-  const { data, error } = await supabase.auth.signInWithPassword({ email: normalized, password });
+  const { session: grantSession, error } = await signInWithPasswordGrant(normalized, password);
   if (error) {
-    const base = formatGafcoreSignInError(error.message, input.email);
+    const base = formatGafcoreSignInError(error, input.email);
     return { ok: false, error: typoHint ? `${typoHint} ${base}` : base };
   }
 
   const session =
-    data.session ??
+    grantSession ??
     (await waitForGafcoreAuthSession(supabase, 5_000));
   if (session?.user) {
     void ensureGafcoreProfile(session.user).catch(() => {
