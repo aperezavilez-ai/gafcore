@@ -29,6 +29,9 @@ jobs:
         env:
           VERCEL: "1"
 
+      - name: Install Vercel CLI v47+
+        run: npm install -g vercel@47
+
       - name: Deploy prebuilt to Vercel Production
         uses: amondnet/vercel-action@v25
         with:
