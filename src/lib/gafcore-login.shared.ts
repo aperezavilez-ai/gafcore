@@ -4,7 +4,6 @@
  */
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import {
-  fetchGafcorePublicClientEnv,
   getGafcoreSupabaseBrowser,
   isSupabaseReadyOnClient,
 } from "@/lib/gafcore-supabase-browser";
@@ -12,6 +11,7 @@ import {
 const LOGIN_AUTH_TIMEOUT_MS = 30_000;
 
 type GafcorePasswordGrantResponse = {
+  ok?: boolean;
   access_token?: string;
   refresh_token?: string;
   user?: User;
@@ -25,31 +25,19 @@ async function signInWithPasswordGrant(
   email: string,
   password: string,
 ): Promise<{ session: Session | null; user: User | null; error?: string }> {
-  const env = await fetchGafcorePublicClientEnv();
-  if (!env?.url || !env.publishableKey) {
-    return {
-      session: null,
-      user: null,
-      error:
-        "Supabase no esta disponible en este sitio. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel.",
-    };
-  }
-
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), LOGIN_AUTH_TIMEOUT_MS);
   try {
-    const res = await fetch(`${env.url}/auth/v1/token?grant_type=password`, {
+    const res = await fetch("/api/gafcore/auth-login", {
       method: "POST",
       headers: {
-        apikey: env.publishableKey,
-        Authorization: `Bearer ${env.publishableKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ email, password }),
       signal: controller.signal,
     });
     const body = (await res.json().catch(() => ({}))) as GafcorePasswordGrantResponse;
-    if (!res.ok) {
+    if (!res.ok || body.ok === false) {
       return {
         session: null,
         user: null,

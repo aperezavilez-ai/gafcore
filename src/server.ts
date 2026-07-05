@@ -61,6 +61,104 @@ function isApiPath(pathname: string): boolean {
   return pathname.startsWith("/api/") || pathname.includes("/_serverFn/");
 }
 
+async function gafcoreAuthLogin(request: Request): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ ok: false, error: "method_not_allowed" }), {
+      status: 405,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: "invalid_json" }), {
+      status: 400,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  }
+
+  const input = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const password = typeof input.password === "string" ? input.password : "";
+  if (!email || !password || !email.includes("@")) {
+    return new Response(JSON.stringify({ ok: false, error: "invalid_body" }), {
+      status: 400,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  }
+
+  const { resolveServerSupabasePublicEnv } = await import("./lib/gafcore-supabase-env.server");
+  const pub = resolveServerSupabasePublicEnv();
+  if (!pub) {
+    return new Response(JSON.stringify({ ok: false, error: "server_misconfigured" }), {
+      status: 503,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(`${pub.url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: pub.publishableKey,
+        Authorization: `Bearer ${pub.publishableKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+    });
+    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error:
+            payload.error_description ||
+            payload.msg ||
+            payload.message ||
+            payload.error ||
+            "No se pudo iniciar sesion.",
+        }),
+        {
+          status: res.status,
+          headers: { "content-type": "application/json", "cache-control": "no-store" },
+        },
+      );
+    }
+
+    if (typeof payload.access_token !== "string" || typeof payload.refresh_token !== "string") {
+      return new Response(JSON.stringify({ ok: false, error: "missing_session_tokens" }), {
+        status: 502,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token,
+        expires_in: payload.expires_in,
+        token_type: payload.token_type,
+        user: payload.user,
+      }),
+      { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } },
+    );
+  } catch (err) {
+    const aborted = err instanceof DOMException && err.name === "AbortError";
+    return new Response(JSON.stringify({ ok: false, error: aborted ? "auth_timeout" : "auth_failed" }), {
+      status: 504,
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function normalizeCatastrophicSsrResponse(
   response: Response,
   request: Request,
@@ -185,6 +283,9 @@ export default {
     if (publicAsset) return publicAsset;
     if (path === "/api/__runtime-diag") {
       return runtimeEnvDiag();
+    }
+    if (path === "/api/gafcore/auth-login") {
+      return gafcoreAuthLogin(request);
     }
     if (request.method === "GET" && path === "/api/gafcore/client-env") {
       const { resolveServerSupabasePublicEnv } = await import("./lib/gafcore-supabase-env.server");

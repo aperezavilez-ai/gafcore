@@ -45,6 +45,7 @@ const password = (process.env.GAFCORE_TEST_PASSWORD || "").trim();
 
 const loginPage = readFileSync(resolve(root, "src/routes/gafcore_.login.tsx"), "utf8");
 const loginShared = readFileSync(resolve(root, "src/lib/gafcore-login.shared.ts"), "utf8");
+const serverEntry = readFileSync(resolve(root, "src/server.ts"), "utf8");
 
 for (const [label, cond] of [
   ["form POST + preventDefault", loginPage.includes('method="post"') && loginPage.includes("preventDefault")],
@@ -57,7 +58,8 @@ for (const [label, cond] of [
   ["login submit watchdog", loginPage.includes("LOGIN_SUBMIT_TIMEOUT_MS")],
   ["sin timeout artificial de cliente Supabase", !loginShared.includes("LOGIN_CLIENT_TIMEOUT_MS")],
   ["sin mensaje de timeout artificial Supabase", !loginShared.includes("La conexion con Supabase tardo demasiado")],
-  ["login usa password grant directo", loginShared.includes("grant_type=password")],
+  ["login usa API local de auth", loginShared.includes("/api/gafcore/auth-login")],
+  ["API local usa password grant", serverEntry.includes("grant_type=password")],
   ["login web no depende de signInWithPassword", !loginShared.includes(".signInWithPassword(")],
   ["sin gafcore_email legacy", !loginPage.includes("gafcore_email")],
   ["@locked login.shared", loginShared.includes("@locked")],
