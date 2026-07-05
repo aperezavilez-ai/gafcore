@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import { AiMonitorPanel } from "@/components/admin/AiMonitorPanel";
+import { AdminApisPanel } from "@/components/admin/AdminApisPanel";
 import { DiagnosticsOpsPanel } from "@/components/admin/DiagnosticsOpsPanel";
 import { FactoryMetricsPanel } from "@/components/admin/FactoryMetricsPanel";
 import { GovernanceOpsPanel } from "@/components/admin/GovernanceOpsPanel";
@@ -70,6 +71,7 @@ function AdminOpsPage() {
         </div>
       </header>
       <AiMonitorPanel />
+      <AdminApisPanel />
       <GovernanceOpsPanel />
       <div className="border-t border-border">
         <FactoryMetricsPanel />

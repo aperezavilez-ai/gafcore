@@ -15,7 +15,7 @@ import {
 } from "@/lib/gafcore-assistant-prompt.shared";
 import {
   resolveAiRoute,
-  resolveAllAiRoutes,
+  resolveAllAiRoutesForRequest,
   type ResolvedRoute,
 } from "@/lib/gafcore-model-routing.server";
 import { logDev } from "@/lib/gafcore-logger.server";
@@ -516,7 +516,7 @@ async function callRoute(route: ResolvedRoute, body: ChatCompletionsBody): Promi
  * OpenAI sí tiene, la app sigue funcionando sin que el usuario lo note.
  */
 export async function postChatCompletions(body: ChatCompletionsBody): Promise<Response> {
-  const routes = resolveAllAiRoutes(body.model);
+  const routes = await resolveAllAiRoutesForRequest(body.model);
   if (routes.length === 0) {
     return new Response(JSON.stringify({ error: "ai_not_configured" }), {
       status: 500,

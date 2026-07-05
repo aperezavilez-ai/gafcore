@@ -2,7 +2,6 @@ import { createFileRoute, getRouteApi, Link, useNavigate } from "@tanstack/react
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import { assignGafcoreAccountType } from "@/lib/gafcore-roles.functions";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,10 @@ import {
   GAFCORE_LANDING_TITLE,
   gafcoreSeoHeadLinks,
 } from "@/lib/gafcore-seo.shared";
-import { isSupabaseConfigured } from "@/lib/supabase-env.shared";
+import {
+  getGafcoreSupabaseBrowser,
+  isSupabaseReadyOnClient,
+} from "@/lib/gafcore-supabase-browser";
 
 type ThemeKey = "black" | "white" | "blue" | "gray";
 const THEME_KEY = "gafcore-theme";
@@ -176,18 +178,30 @@ function GafCoreLanding() {
   const { theme, setTheme } = useGafcoreTheme();
   const [checkoutPriceId, setCheckoutPriceId] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
+  const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null);
   const panelHref = user?.id ? "/gafcore/app" : "/gafcore/login";
 
   const resolveUserId = useCallback(async (): Promise<string | undefined> => {
     if (user?.id) return user.id;
-    if (!isSupabaseConfigured()) return undefined;
+    if (!(await isSupabaseReadyOnClient())) return undefined;
     try {
+      const supabase = await getGafcoreSupabaseBrowser();
       const { data } = await supabase.auth.getSession();
       return data.session?.user?.id;
     } catch {
       return undefined;
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    void isSupabaseReadyOnClient().then((ready) => {
+      if (active) setSupabaseReady(ready);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /** Entra al IDE (plan gratis): limpia bloqueo de «elegir plan» y navega. */
   const enterGafcoreApp = useCallback(
@@ -266,8 +280,9 @@ function GafCoreLanding() {
     if (!planFromUrl) return;
     void (async () => {
       let uid = user?.id;
-      if (!uid && isSupabaseConfigured()) {
+      if (!uid && (await isSupabaseReadyOnClient())) {
         try {
+          const supabase = await getGafcoreSupabaseBrowser();
           uid = (await supabase.auth.getSession()).data.session?.user?.id;
         } catch {
           return;
@@ -306,7 +321,7 @@ function GafCoreLanding() {
 
   return (
     <div className={`gafcore-theme-${theme} gc-surface min-h-screen`}>
-      {!isSupabaseConfigured() ? (
+      {supabaseReady === false ? (
         <div
           role="alert"
           className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-xs text-destructive"

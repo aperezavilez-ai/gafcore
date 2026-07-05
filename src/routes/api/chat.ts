@@ -3,7 +3,6 @@ import "@tanstack/react-start";
 import { requireUser } from "./elevenlabs/-_auth";
 import { GAFCORE_ASSISTANT_SYSTEM_PROMPT } from "@/lib/gafcore-assistant-prompt.shared";
 import { parseUpstreamFailure } from "@/lib/gafcore-ai-gateway.server";
-import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import { streamClaudeChat } from "@/services/claudeService";
 
 type Mode = "fast" | "reasoning" | "pro";
@@ -14,16 +13,6 @@ export const Route = createFileRoute("/api/chat")({
       POST: async ({ request }: { request: Request }) => {
         const auth = await requireUser(request);
         if (auth instanceof Response) return auth;
-
-        if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-          return new Response(
-            JSON.stringify({
-              error: "ai_not_configured",
-              detail: sanitizeUserFacingAiText("ai_not_configured"),
-            }),
-            { status: 500, headers: { "Content-Type": "application/json" } },
-          );
-        }
 
         let body: { messages?: Array<{ role: string; content: string }>; mode?: Mode };
         try {

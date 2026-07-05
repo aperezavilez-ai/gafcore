@@ -10,6 +10,7 @@ import {
   type ResolvedRoute,
 } from "@/lib/gafcore-model-routing.shared";
 import { GPTPRO4ALL_API_DEFAULT_MODEL } from "@/lib/gafcore-chat.shared";
+import { listActiveGafcoreAiProviderRoutes } from "@/lib/gafcore-ai-provider-configs.server";
 
 export type { ResolvedProvider, ResolvedRoute };
 
@@ -188,4 +189,11 @@ export function resolveAiRoute(modelHint?: string): ResolvedRoute {
     );
   }
   return all[0];
+}
+
+export async function resolveAllAiRoutesForRequest(modelHint?: string): Promise<ResolvedRoute[]> {
+  const configuredRoutes = await listActiveGafcoreAiProviderRoutes(modelHint);
+  const envRoutes = resolveAllAiRoutes(modelHint);
+  if (configuredRoutes.length === 0) return envRoutes;
+  return [...configuredRoutes, ...envRoutes];
 }
