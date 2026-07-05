@@ -9,6 +9,9 @@ export interface AuthState {
 }
 
 const AUTH_INIT_TIMEOUT_MS = 8_000;
+const AUTH_READY_TIMEOUT_MS = 4_000;
+const AUTH_CLIENT_TIMEOUT_MS = 4_000;
+const AUTH_RETRY_TIMEOUT_MS = 2_000;
 
 let authState: AuthState = { user: null, session: null, loading: true };
 let authInitPromise: Promise<void> | null = null;
@@ -57,14 +60,20 @@ export function initAuthOnce() {
 
   authInitPromise = (async () => {
     try {
-      if (!(await isSupabaseReadyOnClient())) {
+      const ready = await withTimeout(isSupabaseReadyOnClient(), AUTH_READY_TIMEOUT_MS);
+      if (ready !== true) {
         console.error(
           "[Auth] Supabase no disponible en el cliente (build sin VITE_* y /api/gafcore/client-env falló).",
         );
         applySession(null, false);
         return;
       }
-      const supabase = await getGafcoreSupabaseBrowser();
+      const supabase = await withTimeout(getGafcoreSupabaseBrowser(), AUTH_CLIENT_TIMEOUT_MS);
+      if (supabase === "timeout") {
+        console.warn("[Auth] Timeout inicializando Supabase en el cliente.");
+        applySession(null, false);
+        return;
+      }
       supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
           lastProfileUserId = null;
@@ -87,7 +96,12 @@ export function initAuthOnce() {
 
       const result = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
       if (result === "timeout") {
-        const retry = await supabase.auth.getSession();
+        const retry = await withTimeout(supabase.auth.getSession(), AUTH_RETRY_TIMEOUT_MS);
+        if (retry === "timeout") {
+          console.warn("[Auth] Timeout leyendo sesion inicial.");
+          applySession(null, false);
+          return;
+        }
         applySession(retry.data.session ?? null, false);
         return;
       }
@@ -157,6 +171,10 @@ export function useAuth() {
   }, []);
 
   return { ...state, signOut };
+}
+
+export function getAuthSnapshot(): AuthState {
+  return authState;
 }
 
 /** Si la verificación de sesión tarda demasiado, deja de bloquear la UI. */

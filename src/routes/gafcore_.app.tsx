@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   useAuth,
   forceAuthLoadingComplete,
+  getAuthSnapshot,
   hydrateAuthFromStorage,
   initAuthOnce,
 } from "@/hooks/useAuth";
@@ -30,6 +31,16 @@ import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
 
 /** Máximo tiempo mostrando «Verificando acceso…» antes de fallback de sesión. */
 const APP_BOOT_MAX_MS = 4_000;
+const APP_BOOT_SESSION_RECHECK_MS = 1_500;
+
+function withBootTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      window.setTimeout(() => resolve(fallback), ms);
+    }),
+  ]);
+}
 
 export const Route = createFileRoute("/gafcore_/app")({
   component: GafCoreAppPage,
@@ -90,12 +101,21 @@ function GafCoreAppPage() {
       if (cancelled || bootFinished) return;
       void (async () => {
         try {
-          await initAuthOnce();
-          const sb = await getGafcoreSupabaseBrowser();
-          const { data } = await sb.auth.getSession();
-          finishBoot(Boolean(data.session?.user));
+          const session = await withBootTimeout(
+            (async () => {
+              await initAuthOnce();
+              const snapshot = getAuthSnapshot();
+              if (snapshot.user?.id) return true;
+              const sb = await getGafcoreSupabaseBrowser();
+              const { data } = await sb.auth.getSession();
+              return Boolean(data.session?.user);
+            })(),
+            APP_BOOT_SESSION_RECHECK_MS,
+            Boolean(getAuthSnapshot().user?.id),
+          );
+          finishBoot(session);
         } catch {
-          finishBoot(false);
+          finishBoot(Boolean(getAuthSnapshot().user?.id));
         }
       })();
     }, APP_BOOT_MAX_MS);
