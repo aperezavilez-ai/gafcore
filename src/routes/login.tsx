@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getPasswordRecoveryRedirectTo } from "@/lib/auth-email-redirect";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { AuthCard } from "@/components/AuthCard";
 
 export const Route = createFileRoute("/login")({

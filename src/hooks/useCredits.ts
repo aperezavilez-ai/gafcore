@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { consumeCredits } from "@/lib/server-fns/credits.functions";
 
 export function useCredits(userId: string | undefined) {

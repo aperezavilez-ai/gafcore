@@ -146,7 +146,7 @@ import { NewProjectDialog } from "@/components/ide/NewProjectDialog";
 import { ImportProjectDialog } from "@/components/ide/ImportProjectDialog";
 import { getProjectDeployStatus } from "@/lib/gafcore-deploy.functions";
 import type { ProjectDeployStatus } from "@/lib/gafcore-deploy.shared";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { useAuth, getAuthAccessToken } from "@/hooks/useAuth";
 import { useCreateProject } from "@/hooks/useCreateProject";
 import {

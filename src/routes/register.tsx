@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { claimMasterAccess } from "@/lib/server-fns/admin.functions";
 import { AuthCard } from "@/components/AuthCard";
 import { GafcoreLogo } from "@/components/GafcoreLogo";

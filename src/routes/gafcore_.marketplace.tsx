@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { MarketplaceExtensionCheckout } from "@/components/gafcore/MarketplaceExtensionCheckout";
 import {

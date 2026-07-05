@@ -32,7 +32,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useCredits } from "@/hooks/useCredits";
 import { getCurrentProjectId, renameProject, listProjects } from "@/lib/userSupabase";
 import { getIdeConfig, setIdeConfig } from "@/lib/ideConfig";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { createStripeCustomerPortalSession } from "@/lib/server-fns/payments.functions";
 import { displayMonthlyAllowanceForUi } from "@/lib/gafcore-plan-credits.shared";

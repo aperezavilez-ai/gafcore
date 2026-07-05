@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { logClientWarn } from "@/lib/gafcore-client-logger";
 

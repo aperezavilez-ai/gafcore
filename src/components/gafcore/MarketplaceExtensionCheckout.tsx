@@ -6,7 +6,7 @@ import {
   getStripe,
   getStripeEnvironment,
 } from "@/lib/stripe";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 
 type Props = {
   listingId: string;

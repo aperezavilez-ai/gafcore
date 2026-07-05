@@ -16,7 +16,7 @@ import {
   isViteSupabaseConfigured,
   resolveSupabaseUrlFromViteEnv,
 } from "@/lib/gafcore-supabase-env.shared";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { cn } from "@/lib/utils";
 
 const PROJECT_TABLES = [

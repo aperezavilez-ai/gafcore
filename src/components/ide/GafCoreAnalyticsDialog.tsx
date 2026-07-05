@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { Loader2, FolderGit2, FileCode2, MessageSquare, Rocket, Camera, KeyRound, Clock } from "lucide-react";
 import {
   ResponsiveContainer,

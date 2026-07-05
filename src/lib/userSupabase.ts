@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { FileItem } from "@/components/ide/CodeEditor";
 import { normalizeSnapshotFiles } from "@/lib/gafcore-snapshot-restore.shared";
 import { logPipelineEvent } from "@/lib/gafcore-pipeline-telemetry.shared";
-import { supabase as defaultSupabase } from "@/integrations/supabase/client";
+import { supabase as defaultSupabase } from "@/lib/gafcore-supabase-client-proxy";
 
 export type SaveProjectFilesResult =
   | { ok: true }

@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { authAbsoluteUrl } from "@/lib/auth-email-redirect";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { signInWithOAuth } from "@/lib/supabase-oauth";
 import { AuthCard } from "./AuthCard";
 

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Stripe } from "@stripe/stripe-js";
 import { toast } from "sonner";
 import { assertCheckoutSecretMatchesPublishableKey, getStripe, getStripeEnvironment } from "@/lib/stripe";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 
 interface Props {
   priceId: string;

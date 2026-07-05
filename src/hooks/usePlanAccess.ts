@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 
 /**
  * Hook reutilizable: cualquier proyecto del ecosistema (GafCore, GafSuite,
