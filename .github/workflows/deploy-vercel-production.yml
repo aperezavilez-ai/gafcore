@@ -29,8 +29,8 @@ jobs:
         env:
           VERCEL: "1"
 
-      - name: Install Vercel CLI v47+
-        run: npm install -g vercel@47
+      - name: Install Vercel CLI latest
+        run: npm install -g vercel@latest
 
       - name: Deploy prebuilt to Vercel Production
         run: vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
