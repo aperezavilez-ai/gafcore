@@ -2,6 +2,10 @@ import { getGafcoreAiGateway, resolveGatewayModel } from "@/lib/gafcore-ai-gatew
 import { completeChatMessageViaWorkflowQueue } from "@/tasks/workflow-ai-queue.server";
 import { taskPlanSchema, type TaskPlan } from "@/tasks/artifacts.shared";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
+import {
+  buildPlannerAgentCatalogPrompt,
+  selectProfessionalSkills,
+} from "@/agents/registry.shared";
 
 const PLANNER_SYSTEM = `Eres el planificador de GafCore. Divide el trabajo en un DAG pequeño (3-8 tareas) según el pedido del usuario.
 Responde SOLO JSON válido con esta forma exacta:
@@ -26,7 +30,8 @@ Reglas:
 - Si el usuario menciona publicar, deploy, dominio, GitHub o Vercel, añade tarea "deployment" al final.
 - NO incluyas agentType "planner". "database" solo si pide migraciones/Supabase explícito.
 - ids únicos (t1, t2, …), sin ciclos en dependsOn.
-- Instrucciones concretas por tarea, no copiar el mensaje del usuario entero en cada una.`;
+- Instrucciones concretas por tarea, no copiar el mensaje del usuario entero en cada una.
+- Usa el catalogo profesional de agentes y skills cuando el pedido tenga UI, negocio, datos o deploy.`;
 
 function defaultPlan(instruction: string): TaskPlan {
   return {
@@ -58,8 +63,13 @@ export async function generateTaskPlan(
   files: ProjFile[],
 ): Promise<TaskPlan> {
   const names = files.slice(0, 40).map((f) => f.name.replace(/\\/g, "/"));
+  const skills = selectProfessionalSkills(instruction);
   const userPrompt = [
     `Pedido del usuario:\n${instruction.slice(0, 4000)}`,
+    `\n${buildPlannerAgentCatalogPrompt()}`,
+    skills.length > 0
+      ? `\nSkills detectadas:\n${skills.map((skill) => `- ${skill.id}: ${skill.label}`).join("\n")}`
+      : "",
     names.length > 0 ? `\nArchivos del proyecto (${files.length} total):\n${names.join("\n")}` : "",
   ].join("");
 

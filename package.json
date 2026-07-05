@@ -33,6 +33,7 @@
     "gafcore:smoke-all": "npm run gafcore:smoke-extensions && npm run gafcore:smoke-marketplace-install && npm run gafcore:smoke-projects && npm run gafcore:smoke-incremental && npm run gafcore:smoke-snapshot-restore && npm run gafcore:smoke-brain-v2 && npm run gafcore:smoke-extra",
     "gafcore:smoke-extra": "node scripts/smoke-gafcore-extra.mjs",
     "gafcore:smoke-routing": "npx tsx scripts/smoke-gafcore-routing.mjs",
+    "gafcore:smoke-agent-skills": "npx tsx scripts/smoke-gafcore-agent-skills.mjs",
     "gafcore:smoke-brain": "npx tsx scripts/smoke-gafcore-brain.mjs",
     "gafcore:smoke-images": "npx tsx scripts/smoke-gafcore-images.mjs",
     "gafcore:smoke-brand-wizard": "npx tsx scripts/smoke-gafcore-brand.mjs",

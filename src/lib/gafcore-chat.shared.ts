@@ -25,6 +25,7 @@ import {
 import { prepareIncrementalEditSession } from "@/lib/gafcore-incremental-edit.shared";
 import { buildIntegrityShieldPromptAppend, GAFCORE_INTEGRITY_SHIELD_RULE } from "@/lib/gafcore-integrity-shield.shared";
 import { GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
+import { buildProfessionalAgentPromptAppend } from "@/agents/registry.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -440,6 +441,9 @@ export function buildGafcoreMessages(
     ? '\n\n(Nota interna: solo se listan archivos de contexto seleccionados por tamaño/relevancia. Devuelve en "files" únicamente deltas: archivos nuevos o modificados.)'
     : "";
   const filesContext = JSON.stringify(filesContextForModel(ctxFiles));
+  const professionalAgentAppend = isSubstantiveBuildRequest(data.instruction)
+    ? buildProfessionalAgentPromptAppend(data.instruction)
+    : "";
   const textBlock = `Archivos de contexto:\n${filesContext}\n\nInstrucción:\n${data.instruction}${subsetNote}`;
 
   const userContent: GafcoreChatMessage["content"] =
@@ -463,6 +467,7 @@ export function buildGafcoreMessages(
       buildAgentProjectContext(ctxFiles),
       designLayer,
       designMotor,
+      professionalAgentAppend,
       buildAgentModeAppend(data.instruction),
       brandBlock,
       incrementalNote,
@@ -486,7 +491,7 @@ export function buildGafcoreMessages(
       isSubstantiveBuildRequest(data.instruction) && designMotor
         ? "\n[SAFE-BUILD] Validación automática post-generación.\n"
         : "";
-    legacyAppend = `${coreSystem}${designLayer}${designMotor}${safeBuildHint}${brandBlock}${incrementalNote}${memoryHints}`;
+    legacyAppend = `${coreSystem}${designLayer}${designMotor}${professionalAgentAppend}${safeBuildHint}${brandBlock}${incrementalNote}${memoryHints}`;
   }
   const systemContent = buildGafcoreBrainV2SystemContent({
     legacyAppend,

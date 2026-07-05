@@ -20,6 +20,7 @@ import { softenRoboticReply } from "@/lib/gafcore-chat-intent.shared";
 import { sanitizeUserFacingAiText } from "@/lib/gafcore-user-facing-errors";
 import type { AgentType } from "@/tasks/types";
 import { agentTypeLabel } from "@/tasks/artifacts.shared";
+import { buildAgentExecutionPrompt } from "@/agents/registry.shared";
 
 export type ChatExecutorResult = {
   reply: string;
@@ -38,10 +39,13 @@ export async function runGafcoreChatForUser(opts: {
   const agentPrefix = opts.agentType
     ? `[Agente ${agentTypeLabel(opts.agentType)}] Enfócate solo en tu ámbito. `
     : "";
+  const agentProfilePrefix = opts.agentType
+    ? `${buildAgentExecutionPrompt(opts.agentType)}\n`
+    : "";
   const goalPrefix = opts.workflowGoal
     ? `[Objetivo del workflow] ${opts.workflowGoal.slice(0, 500)}\n`
     : "";
-  const instruction = `${goalPrefix}${agentPrefix}${opts.instruction}`;
+  const instruction = `${goalPrefix}${agentPrefix}${agentProfilePrefix}${opts.instruction}`;
 
   const body = gafcoreChatBodySchema.parse({
     history: [],
