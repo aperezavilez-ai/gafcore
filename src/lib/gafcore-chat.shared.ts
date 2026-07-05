@@ -154,6 +154,9 @@ export const OPENAI_API_DEFAULT_FAST = "gpt-4o-mini";
 export const OPENAI_API_DEFAULT_DEEP = "gpt-4o";
 export const OPENAI_API_DEFAULT_UI = "gpt-4o";
 
+/** Defaults para GPTPRO4ALL / ChatGPTPro4All (endpoint OpenAI-compatible). */
+export const GPTPRO4ALL_API_DEFAULT_MODEL = "gpt-5.5";
+
 /**
  * Elige defaults de modelo según el host del endpoint.
  * Con el router multi-proveedor (ANTHROPIC_API_KEY + OPENROUTER_API_KEY) los
@@ -165,6 +168,28 @@ export function resolveGafcoreModelDefaults(chatCompletionsUrl?: string): {
   deep: string;
   ui: string;
 } {
+  const u = (chatCompletionsUrl ?? "").toLowerCase();
+  const isGptpro4All = u.includes("api.chatgptpro4all.com");
+  if (isGptpro4All) {
+    return {
+      fast: process.env.AI_MODEL_FAST?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL,
+      deep: process.env.AI_MODEL_DEEP?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL,
+      ui: process.env.AI_MODEL_UI?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL,
+    };
+  }
+
+  const isOpenAiNative =
+    u.includes("api.openai.com") && !u.includes("openrouter") && !u.includes("anthropic");
+  const isCustomOpenAiCompatible =
+    Boolean(u) && !u.includes("openrouter.ai") && !u.includes("anthropic.com");
+  if (isOpenAiNative || isCustomOpenAiCompatible) {
+    return {
+      fast: process.env.AI_MODEL_FAST?.trim() || OPENAI_API_DEFAULT_FAST,
+      deep: process.env.AI_MODEL_DEEP?.trim() || OPENAI_API_DEFAULT_DEEP,
+      ui: process.env.AI_MODEL_UI?.trim() || OPENAI_API_DEFAULT_UI,
+    };
+  }
+
   const hasAnthropic =
     typeof process !== "undefined" && Boolean(process.env.ANTHROPIC_API_KEY?.trim());
   if (hasAnthropic) {
@@ -175,9 +200,6 @@ export function resolveGafcoreModelDefaults(chatCompletionsUrl?: string): {
     };
   }
 
-  const u = (chatCompletionsUrl ?? "").toLowerCase();
-  const isOpenAiNative =
-    u.includes("api.openai.com") && !u.includes("openrouter") && !u.includes("anthropic");
   return {
     fast: isOpenAiNative ? OPENAI_API_DEFAULT_FAST : MODEL_FAST,
     deep: isOpenAiNative ? OPENAI_API_DEFAULT_DEEP : MODEL_DEEP,

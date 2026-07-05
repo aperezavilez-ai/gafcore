@@ -108,11 +108,26 @@ for (const k of [
   "SUPABASE_SERVICE_ROLE_KEY",
   "OPENAI_API_KEY",
   "OPENROUTER_API_KEY",
+  "AI_CHAT_COMPLETIONS_URL",
+  "AI_API_KEY",
   "AI_MODEL_FAST",
   "AI_MODEL_DEEP",
   "AI_MODEL_UI",
 ]) {
   console.log(`  ${k}: ${mask(k)}`);
+}
+
+if (has("AI_CHAT_COMPLETIONS_URL")) {
+  const url = env.AI_CHAT_COMPLETIONS_URL.trim();
+  if (/\/v1\/?$/i.test(url)) {
+    ok.push("AI_CHAT_COMPLETIONS_URL (base /v1; GafCore añadirá /chat/completions)");
+  } else if (/\/chat\/completions\/?$/i.test(url)) {
+    ok.push("AI_CHAT_COMPLETIONS_URL (/chat/completions)");
+  } else {
+    issues.push(
+      "AI_CHAT_COMPLETIONS_URL debe apuntar a /v1/chat/completions, o al menos terminar en /v1 para normalizarse.",
+    );
+  }
 }
 
 if (has("VITE_PUBLIC_SITE_URL")) ok.push("VITE_PUBLIC_SITE_URL");

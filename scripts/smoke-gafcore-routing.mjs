@@ -30,9 +30,11 @@ for (const name of [".env", ".env.local"]) {
 process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY?.trim() || "sk-ant-test-dummy";
 process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY?.trim() || "sk-or-v1-test-dummy";
 
-const { resolveAiRoute, normalizeModelSlug, detectModelFamily } = await import(
+const { normalizeModelSlug, detectModelFamily } = await import(
   "../src/lib/gafcore-model-routing.shared.ts"
 );
+const { resolveAiRoute } = await import("../src/lib/gafcore-model-routing.server.ts");
+const { resolveGafcoreModelDefaults } = await import("../src/lib/gafcore-chat.shared.ts");
 
 const cases = [
   { input: "anthropic/claude-sonnet-4.5", expectedFamily: "claude", expectedProvider: "anthropic" },
@@ -61,6 +63,36 @@ console.log("anthropic/claude-sonnet-4.5 → anthropic:", normalizeModelSlug("an
 console.log("claude-sonnet-4-5           → openrouter:", normalizeModelSlug("claude-sonnet-4-5", "openrouter"));
 console.log("gpt-4o-mini                 → openrouter:", normalizeModelSlug("gpt-4o-mini", "openrouter"));
 console.log("openai/gpt-4o-mini          → openai:", normalizeModelSlug("openai/gpt-4o-mini", "openai"));
+
+const previousEnv = {
+  AI_CHAT_COMPLETIONS_URL: process.env.AI_CHAT_COMPLETIONS_URL,
+  AI_API_KEY: process.env.AI_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  AI_MODEL_FAST: process.env.AI_MODEL_FAST,
+  AI_MODEL_DEEP: process.env.AI_MODEL_DEEP,
+  AI_MODEL_UI: process.env.AI_MODEL_UI,
+};
+for (const key of Object.keys(previousEnv)) delete process.env[key];
+process.env.AI_CHAT_COMPLETIONS_URL = "https://api.chatgptpro4all.com/v1";
+process.env.AI_API_KEY = "sk-test-gptpro4all";
+const customRoute = resolveAiRoute("gpt-5.5");
+const customDefaults = resolveGafcoreModelDefaults(customRoute.url);
+const okCustom =
+  customRoute.provider === "custom" &&
+  customRoute.url === "https://api.chatgptpro4all.com/v1/chat/completions" &&
+  customDefaults.fast === "gpt-5.5" &&
+  customDefaults.deep === "gpt-5.5" &&
+  customDefaults.ui === "gpt-5.5";
+if (!okCustom) fail += 1;
+console.log(
+  `\n${okCustom ? "OK " : "FAIL"} chatgptpro4all custom → url=${customRoute.url} model=${customDefaults.deep}`,
+);
+for (const [key, value] of Object.entries(previousEnv)) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}
 
 console.log(`\n${fail === 0 ? "[smoke-routing] OK" : `[smoke-routing] FAIL (${fail})`}`);
 process.exit(fail === 0 ? 0 : 1);

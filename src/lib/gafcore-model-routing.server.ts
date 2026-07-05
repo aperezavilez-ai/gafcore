@@ -12,6 +12,27 @@ import {
 
 export type { ResolvedProvider, ResolvedRoute };
 
+function normalizeChatCompletionsUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return trimmed;
+
+  try {
+    const url = new URL(trimmed);
+    const path = url.pathname.replace(/\/+$/g, "");
+    if (!path || path === "/") {
+      url.pathname = "/v1/chat/completions";
+      return url.toString();
+    }
+    if (path === "/v1") {
+      url.pathname = "/v1/chat/completions";
+      return url.toString();
+    }
+    return trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
 export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
   const routes: ResolvedRoute[] = [];
 
@@ -20,7 +41,7 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
   if (customUrl && customKey) {
     routes.push({
       provider: "custom",
-      url: customUrl,
+      url: normalizeChatCompletionsUrl(customUrl),
       apiKey: customKey,
       extraHeaders: {},
       modelSlug: modelHint?.trim() ?? "",
@@ -36,7 +57,8 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
       ? "claude"
       : "other";
 
-  if (anthropicKey) {
+  const shouldPreferAnthropic = anthropicKey && (!modelHint || family === "claude");
+  if (shouldPreferAnthropic) {
     const slug =
       family === "claude"
         ? normalizeModelSlug(modelHint?.trim() || GAFCORE_ANTHROPIC_MODEL_DEFAULT, "anthropic")
@@ -51,9 +73,10 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
   }
 
   if (openrouterKey) {
+    const openrouterUrl = process.env.OPENROUTER_CHAT_COMPLETIONS_URL?.trim() || "https://openrouter.ai/api/v1/chat/completions";
     routes.push({
       provider: "openrouter",
-      url: "https://openrouter.ai/api/v1/chat/completions",
+      url: openrouterUrl,
       apiKey: openrouterKey,
       extraHeaders: {
         "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER?.trim() || "https://gafcore.com",
@@ -79,6 +102,16 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
       apiKey: openaiKey,
       extraHeaders: {},
       modelSlug: openaiSlug,
+    });
+  }
+
+  if (anthropicKey && !shouldPreferAnthropic && routes.length === 0) {
+    routes.push({
+      provider: "anthropic",
+      url: "https://api.anthropic.com/v1/messages",
+      apiKey: anthropicKey,
+      extraHeaders: { "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION },
+      modelSlug: GAFCORE_ANTHROPIC_MODEL_DEFAULT,
     });
   }
 
