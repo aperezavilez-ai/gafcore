@@ -1,4 +1,3 @@
-import { auditJsxTagBalance } from "@/lib/gafcore-incremental-edit.shared";
 import { repairCommonJsxSyntaxErrors } from "@/lib/gafcore-media.shared";
 import {
   auditSyntaxClosure,
@@ -16,8 +15,7 @@ export type WorkspaceSyntaxHealResult<T extends SyntaxHealableFile> = {
 
 function fileNeedsSyntaxHeal(content: string): boolean {
   const closure = auditSyntaxClosure(content);
-  if (!closure.ok) return true;
-  return auditJsxTagBalance(content) !== 0;
+  return closure.braceDelta !== 0 || closure.parenDelta !== 0;
 }
 
 function healFileContent(content: string): { content: string; notes: string[] } {

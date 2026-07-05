@@ -123,6 +123,10 @@ export function auditJsxTagBalance(content: string): number {
   while ((m = tagRe.exec(code)) !== null) {
     const full = m[0];
     const name = m[1];
+    const prev = code.slice(0, m.index).match(/\S\s*$/)?.[0]?.trim() ?? "";
+    if (!full.startsWith("</") && /[A-Za-z0-9_$.)\]]/.test(prev)) {
+      continue;
+    }
     if (full.startsWith("</")) {
       close++;
       continue;

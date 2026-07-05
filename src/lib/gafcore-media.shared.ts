@@ -866,6 +866,10 @@ function repairCommonJsxSyntaxErrorsPass(source: string): string {
   let out = unwrapLegacySafeJsxWrappers(source);
   out = ensureReactImportInJsxSource(out);
   out = repairListaProcesadaMap(out);
+  out = out.replace(
+    /^\s*<\/(?:HTML[A-Za-z0-9]*Element|SVG[A-Za-z0-9]*Element|string|number|boolean|object|array|unknown|Record|Promise)>\s*;?\s*$/gim,
+    "",
+  );
   out = out.replace(/="([^"]*)"(https?:\/\/[^\s"'<>]+)\/?"?/g, '="$1" ');
   out = out.replace(/(\s)(https?:\/\/[^\s"'<>]+)\/?"(\s+[a-zA-Z_][\w-]*=)/g, "$1$3");
   out = out.replace(/\s+(https?:\/\/[^\s"'<>]+)(?=\s+[a-zA-Z_][\w-]*=)/g, " ");

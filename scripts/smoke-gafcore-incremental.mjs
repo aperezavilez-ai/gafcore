@@ -16,6 +16,7 @@ import {
   auditSyntaxClosure,
   runIntegrityShield,
 } from "../src/lib/gafcore-integrity-shield.shared.ts";
+import { healUntilStable } from "../src/core/pipeline/syntax-heal.shared.ts";
 
 const baseline = [
   {
@@ -123,6 +124,30 @@ const shield = runIntegrityShield(files, [{ name: "App.tsx", content: badSyntax 
 });
 if (!auditSyntaxClosure(shield.files.find((f) => f.name === "App.tsx")?.content ?? "").ok) {
   throw new Error("escudo: sintaxis App no sanada");
+}
+
+const formEventApp = `import React, { useState } from "react";
+
+export default function App() {
+  const [name, setName] = useState<string>("");
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setName("ok");
+  };
+  return (
+    <main>
+      <form onSubmit={onSubmit}>
+        <input value={name} onChange={(e) => setName(e.target.value)} />
+      </form>
+    </main>
+  );
+}`;
+const formHealed = healUntilStable([{ name: "App.tsx", content: formEventApp }]).files[0].content;
+if (formHealed.includes("</HTMLFormElement>")) {
+  throw new Error("FormEvent<HTMLFormElement> fue tratado como JSX y se agrego </HTMLFormElement>");
+}
+if (auditJsxTagBalance(formHealed) !== 0) {
+  throw new Error("FormEvent<HTMLFormElement> produjo balance JSX falso");
 }
 
 console.log("[smoke-incremental] OK — 3 deltas + escudo de integridad");

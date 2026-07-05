@@ -98,6 +98,11 @@ function stripForJsxFix(source: string): string {
     .replace(/`(?:\\.|[^`\\])*`/g, "``");
 }
 
+function isTypeArgumentOpening(code: string, index: number): boolean {
+  const prev = code.slice(0, index).match(/\S\s*$/)?.[0]?.trim() ?? "";
+  return /[A-Za-z0-9_$.)\]]/.test(prev);
+}
+
 /** Pila de tags JSX abiertos sin cerrar (orden de apertura). '' = fragmento <> */
 function collectUnclosedJsxTags(content: string): string[] {
   const code = stripForJsxFix(content);
@@ -122,6 +127,9 @@ function collectUnclosedJsxTags(content: string): string[] {
   while ((m = tagRe.exec(code)) !== null) {
     const full = m[0];
     const name = m[1];
+    if (!full.startsWith("</") && isTypeArgumentOpening(code, m.index)) {
+      continue;
+    }
     if (full.startsWith("</")) {
       const idx = stack.lastIndexOf(name);
       if (idx >= 0) stack.splice(idx, 1);
@@ -265,6 +273,9 @@ export function fixJsxSurplusClosers(content: string): { content: string; remove
     const name = m[1];
     const start = m.index;
     const end = start + full.length;
+    if (!full.startsWith("</") && isTypeArgumentOpening(content, start)) {
+      continue;
+    }
     if (full.startsWith("</")) {
       const idx = stack.lastIndexOf(name);
       if (idx >= 0) stack.splice(idx, 1);
