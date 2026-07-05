@@ -3,10 +3,7 @@
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
-import {
-  getGafcoreSupabaseBrowser,
-  isSupabaseReadyOnClient,
-} from "@/lib/gafcore-supabase-browser";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
 const LOGIN_AUTH_TIMEOUT_MS = 30_000;
 
@@ -14,12 +11,32 @@ type GafcorePasswordGrantResponse = {
   ok?: boolean;
   access_token?: string;
   refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  storage_key?: string;
   user?: User;
   error?: string;
   error_description?: string;
   msg?: string;
   message?: string;
 };
+
+function persistSupabaseSessionFromGrant(body: GafcorePasswordGrantResponse): Session | null {
+  if (typeof window === "undefined") return null;
+  if (!body.access_token || !body.refresh_token || !body.storage_key) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const expiresIn = typeof body.expires_in === "number" ? body.expires_in : 3600;
+  const session = {
+    access_token: body.access_token,
+    refresh_token: body.refresh_token,
+    expires_in: expiresIn,
+    expires_at: now + expiresIn,
+    token_type: body.token_type || "bearer",
+    user: body.user ?? null,
+  };
+  window.localStorage.setItem(body.storage_key, JSON.stringify(session));
+  return session as Session;
+}
 
 async function signInWithPasswordGrant(
   email: string,
@@ -45,7 +62,7 @@ async function signInWithPasswordGrant(
       };
     }
 
-    if (!body.access_token || !body.refresh_token) {
+    if (!body.access_token || !body.refresh_token || !body.storage_key) {
       return {
         session: null,
         user: body.user ?? null,
@@ -53,15 +70,15 @@ async function signInWithPasswordGrant(
       };
     }
 
-    const supabase = await getGafcoreSupabaseBrowser();
-    const { data, error } = await supabase.auth.setSession({
-      access_token: body.access_token,
-      refresh_token: body.refresh_token,
-    });
-    if (error) {
-      return { session: null, user: body.user ?? null, error: error.message };
+    const session = persistSupabaseSessionFromGrant(body);
+    if (!session) {
+      return {
+        session: null,
+        user: body.user ?? null,
+        error: "No se pudo guardar la sesion local del navegador.",
+      };
     }
-    return { session: data.session, user: data.user ?? body.user ?? null };
+    return { session, user: body.user ?? null };
   } catch (err) {
     const aborted = err instanceof DOMException && err.name === "AbortError";
     return {
@@ -252,14 +269,6 @@ export async function gafcoreLoginWithPassword(input: {
   password: string;
   redirectTo: string;
 }): Promise<GafcoreLoginResult> {
-  if (!(await isSupabaseReadyOnClient())) {
-    return {
-      ok: false,
-      error:
-        "Supabase no está disponible en este sitio. En Vercel añade VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY (o VITE_SUPABASE_ANON_KEY) en Production y Build, y redeploy.",
-    };
-  }
-
   const { email: normalized, typoHint } = normalizeGafcoreLoginEmail(input.email);
   const password = input.password;
   if (!normalized || !password) {
@@ -272,11 +281,8 @@ export async function gafcoreLoginWithPassword(input: {
     return { ok: false, error: typoHint ? `${typoHint} ${base}` : base };
   }
 
-  const session =
-    grantSession ??
-    (await waitForGafcoreAuthSession(await getGafcoreSupabaseBrowser(), 5_000));
-  if (session?.user) {
-    void ensureGafcoreProfile(session.user).catch(() => {
+  if (grantSession?.access_token) {
+    if (grantSession.user) void ensureGafcoreProfile(grantSession.user).catch(() => {
       /* el perfil no debe bloquear el redirect del login */
     });
     return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };

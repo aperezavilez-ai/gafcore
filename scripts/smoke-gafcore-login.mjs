@@ -61,6 +61,11 @@ for (const [label, cond] of [
   ["login usa API local de auth", loginShared.includes("/api/gafcore/auth-login")],
   ["API local usa password grant", serverEntry.includes("grant_type=password")],
   ["login web no depende de signInWithPassword", !loginShared.includes(".signInWithPassword(")],
+  ["login persiste storage directo", loginShared.includes("localStorage.setItem") && loginShared.includes("storage_key")],
+  [
+    "login no espera getSession post grant",
+    !loginShared.includes("waitForGafcoreAuthSession(await getGafcoreSupabaseBrowser()"),
+  ],
   ["sin gafcore_email legacy", !loginPage.includes("gafcore_email")],
   ["@locked login.shared", loginShared.includes("@locked")],
 ]) {

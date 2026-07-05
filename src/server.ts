@@ -61,6 +61,15 @@ function isApiPath(pathname: string): boolean {
   return pathname.startsWith("/api/") || pathname.includes("/_serverFn/");
 }
 
+function supabaseStorageKey(url: string): string {
+  try {
+    const ref = new URL(url).hostname.split(".")[0];
+    return `sb-${ref}-auth-token`;
+  } catch {
+    return "sb-auth-token";
+  }
+}
+
 async function gafcoreAuthLogin(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ ok: false, error: "method_not_allowed" }), {
@@ -144,6 +153,7 @@ async function gafcoreAuthLogin(request: Request): Promise<Response> {
         refresh_token: payload.refresh_token,
         expires_in: payload.expires_in,
         token_type: payload.token_type,
+        storage_key: supabaseStorageKey(pub.url),
         user: payload.user,
       }),
       { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } },
