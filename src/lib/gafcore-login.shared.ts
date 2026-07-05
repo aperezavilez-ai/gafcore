@@ -278,7 +278,6 @@ export async function gafcoreLoginWithPassword(input: {
     return { ok: false, error: "Escribe tu correo y contraseña para iniciar sesión." };
   }
 
-  const supabase = await getGafcoreSupabaseBrowser();
   const { session: grantSession, error } = await signInWithPasswordGrant(normalized, password);
   if (error) {
     const base = formatGafcoreSignInError(error, input.email);
@@ -287,7 +286,7 @@ export async function gafcoreLoginWithPassword(input: {
 
   const session =
     grantSession ??
-    (await waitForGafcoreAuthSession(supabase, 5_000));
+    (await waitForGafcoreAuthSession(await getGafcoreSupabaseBrowser(), 5_000));
   if (session?.user) {
     void ensureGafcoreProfile(session.user).catch(() => {
       /* el perfil no debe bloquear el redirect del login */

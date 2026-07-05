@@ -16,6 +16,8 @@ import { initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
+const LOGIN_SUBMIT_TIMEOUT_MS = 45_000;
+
 if (typeof window !== "undefined") {
   stripSecretsFromLoginUrl();
 }
@@ -171,10 +173,23 @@ function GafCoreLoginPage() {
     }
     setLoading(true);
     try {
-      const result = await gafcoreLoginWithPassword({
-        email: loginEmail,
-        password: loginPassword,
-        redirectTo,
+      let watchdog: ReturnType<typeof window.setTimeout> | undefined;
+      const result = await Promise.race([
+        gafcoreLoginWithPassword({
+          email: loginEmail,
+          password: loginPassword,
+          redirectTo,
+        }),
+        new Promise<{ ok: false; error: string }>((resolve) => {
+          watchdog = window.setTimeout(() => {
+            resolve({
+              ok: false,
+              error: "El inicio de sesion no recibio respuesta. Recarga la pagina e intenta de nuevo.",
+            });
+          }, LOGIN_SUBMIT_TIMEOUT_MS);
+        }),
+      ]).finally(() => {
+        if (watchdog) window.clearTimeout(watchdog);
       });
       if (!result.ok) {
         setError(result.error);
