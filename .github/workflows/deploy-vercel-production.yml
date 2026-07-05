@@ -22,15 +22,22 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - run: npm ci
-
-      - name: Build (Vercel preset → .vercel/output)
-        run: npm run build
-        env:
-          VERCEL: "1"
-
       - name: Install Vercel CLI latest
         run: npm install -g vercel@latest
+
+      - name: Pull Vercel Production environment
+        run: vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build with Vercel Production environment
+        run: vercel build --prod --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deploy prebuilt to Vercel Production
         run: vercel deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN"
