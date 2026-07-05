@@ -4,6 +4,8 @@ import {
   buildAgentExecutionPrompt,
   buildPlannerAgentCatalogPrompt,
   buildProfessionalAgentPromptAppend,
+  buildPromptMasterPromptAppend,
+  isPromptMasterRequest,
   selectProfessionalSkills,
 } from "../src/agents/registry.shared.ts";
 
@@ -36,6 +38,19 @@ if (!plannerCatalog.includes("Skills profesionales disponibles")) {
 const executionPrompt = buildAgentExecutionPrompt("validation");
 if (!executionPrompt.includes("Build Doctor") || !executionPrompt.includes("functional-audit")) {
   throw new Error("perfil de validation incompleto");
+}
+
+const promptMasterInstruction = "mejora este prompt para Lovable y agrega criterios de exito";
+const promptMasterSkills = selectProfessionalSkills(promptMasterInstruction).map((skill) => skill.id);
+if (!promptMasterSkills.includes("prompt-master")) {
+  throw new Error("prompt-master debe activarse para prompts de Lovable");
+}
+if (!isPromptMasterRequest(promptMasterInstruction)) {
+  throw new Error("isPromptMasterRequest no detecto prompt engineering");
+}
+const promptMasterAppend = buildPromptMasterPromptAppend(promptMasterInstruction);
+if (!promptMasterAppend.includes("PROMPT MASTER GAFCORE") || !promptMasterAppend.includes("files: []")) {
+  throw new Error("prompt-master append incompleto");
 }
 
 console.log("[smoke-agent-skills] OK");

@@ -12,8 +12,7 @@ import {
   buildSanitizedLoginUrl,
   clearLoginCredentialFieldsDom,
 } from "@/lib/gafcore-login.shared";
-import { clearPlanChoicePending } from "@/lib/gafcore-plan-choice";
-import { hydrateAuthFromStorage, initAuthOnce } from "@/hooks/useAuth";
+import { initAuthOnce } from "@/hooks/useAuth";
 import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
@@ -181,17 +180,6 @@ function GafCoreLoginPage() {
         setError(result.error);
         return;
       }
-      const hydrated = await hydrateAuthFromStorage(4_000);
-      const sb = await getGafcoreSupabaseBrowser();
-      const { data: sessionAfterLogin } = await sb.auth.getSession();
-      const uid = sessionAfterLogin.session?.user?.id;
-      if (!uid && !hydrated) {
-        setError(
-          "Inicio correcto pero la sesión no se guardó. Permite cookies para este sitio o prueba en ventana normal (no incógnito).",
-        );
-        return;
-      }
-      if (uid) clearPlanChoicePending(uid);
       gafcoreLoginRedirectNow(result.redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión. Intenta de nuevo.");

@@ -309,6 +309,21 @@ export const PROFESSIONAL_SKILLS: ProfessionalSkill[] = [
     ],
     deliverables: ["build verificado", "deploy verificado", "health check"],
   },
+  {
+    id: "prompt-master",
+    label: "Prompt Master",
+    category: "product",
+    trigger: /prompt[-\s]?master|prompt\s+para|mejora.*prompt|optimiza.*prompt|ingenier[ií]a\s+de\s+prompts|lovable|cursor|claude\s+code|chatgpt|gemini|midjourney|sora|v0|bolt/i,
+    agents: ["planner", "documentation", "validation"],
+    instructions: [
+      "Detectar la herramienta destino antes de escribir el prompt: GafCore, Lovable, Cursor, Claude, ChatGPT, Gemini, imagen/video o agente autonomo.",
+      "Extraer tarea, contexto, formato de salida, restricciones, criterios de exito, ejemplos y limites de alcance.",
+      "Producir prompts compactos: cada palabra debe cambiar el resultado; no rellenar con teoria.",
+      "Para agentes de codigo, incluir estado inicial, archivos permitidos, no tocar, criterios de terminado y stop conditions.",
+      "Para builds en GafCore, usar esta skill como brief interno; si el usuario pidio construir, seguir entregando codigo en files[].",
+    ],
+    deliverables: ["prompt listo para pegar", "criterios de exito", "restricciones y stop conditions"],
+  },
 ];
 
 export function selectProfessionalSkills(instruction: string): ProfessionalSkill[] {
@@ -319,6 +334,30 @@ export function selectProfessionalSkills(instruction: string): ProfessionalSkill
     ids.add(skill.id);
     return true;
   });
+}
+
+export function isPromptMasterRequest(instruction: string): boolean {
+  return /prompt[-\s]?master|prompt\s+para|mejora.*prompt|optimiza.*prompt|arregla.*prompt|hazme\s+un\s+prompt|escribe\s+un\s+prompt|ingenier[ií]a\s+de\s+prompts/i.test(
+    instruction,
+  );
+}
+
+export function buildPromptMasterPromptAppend(instruction: string): string {
+  const promptOnly = isPromptMasterRequest(instruction);
+  return [
+    "\n[PROMPT MASTER GAFCORE]",
+    "Aplica una capa de ingenieria de prompts antes de responder.",
+    "Pipeline:",
+    "1. Detecta herramienta destino. Si no esta clara y el usuario solo pidio un prompt, pregunta maximo 3 datos criticos.",
+    "2. Extrae: tarea, herramienta, formato de salida, restricciones, input, contexto, audiencia, criterios de exito y ejemplos.",
+    "3. Elige estructura simple: rol + tarea + contexto + restricciones + formato + done-when. Evita marcos complejos si no aportan.",
+    "4. Para Lovable/v0/Bolt/GafCore: especifica stack, pantallas, datos, interacciones, estilos, responsive y que NO debe agregar.",
+    "5. Para Cursor/Claude Code/agentes: incluye archivos permitidos, archivos prohibidos, pasos, pruebas, stop conditions y no tocar secretos.",
+    "6. Para modelos de razonamiento: no pidas chain-of-thought visible; solicita solo respuesta final.",
+    promptOnly
+      ? "Modo prompt: devuelve files: [] y en reply entrega un solo prompt copiable, sin teoria extensa."
+      : "Modo build: usa esto solo como brief interno; si el usuario pidio construir, files[] debe contener el codigo.",
+  ].join("\n");
 }
 
 export function buildProfessionalAgentPromptAppend(instruction: string): string {

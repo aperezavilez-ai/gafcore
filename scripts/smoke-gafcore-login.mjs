@@ -43,18 +43,6 @@ const key = (
 const email = (process.env.GAFCORE_TEST_EMAIL || "alfonsoavilery@icloud.com").trim().toLowerCase();
 const password = (process.env.GAFCORE_TEST_PASSWORD || "").trim();
 
-if (!url || !key) {
-  console.error("[smoke-login] FAIL: falta VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY");
-  process.exit(1);
-}
-
-if (!password) {
-  console.log(
-    "[smoke-login] SKIP: define GAFCORE_TEST_PASSWORD en .env.local para probar signIn real",
-  );
-  process.exit(0);
-}
-
 const loginPage = readFileSync(resolve(root, "src/routes/gafcore_.login.tsx"), "utf8");
 const loginShared = readFileSync(resolve(root, "src/lib/gafcore-login.shared.ts"), "utf8");
 
@@ -65,6 +53,8 @@ for (const [label, cond] of [
     loginPage.includes('name="gafcore_user"') && !loginPage.includes('name="password"'),
   ],
   ["gafcoreLoginWithPassword", loginPage.includes("gafcoreLoginWithPassword")],
+  ["login redirect sin polling duplicado", !loginPage.includes("hydrateAuthFromStorage(4_000)")],
+  ["login timeout guard", loginShared.includes("LOGIN_SIGN_IN_TIMEOUT_MS")],
   ["sin gafcore_email legacy", !loginPage.includes("gafcore_email")],
   ["@locked login.shared", loginShared.includes("@locked")],
 ]) {
@@ -73,6 +63,18 @@ for (const [label, cond] of [
     process.exit(1);
   }
   console.log(`[smoke-login] OK estático: ${label}`);
+}
+
+if (!url || !key) {
+  console.log("[smoke-login] SKIP signIn: falta VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY local");
+  process.exit(0);
+}
+
+if (!password) {
+  console.log(
+    "[smoke-login] SKIP signIn: define GAFCORE_TEST_PASSWORD en .env.local para probar signIn real",
+  );
+  process.exit(0);
 }
 
 const sb = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });

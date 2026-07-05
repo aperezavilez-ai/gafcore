@@ -25,7 +25,11 @@ import {
 import { prepareIncrementalEditSession } from "@/lib/gafcore-incremental-edit.shared";
 import { buildIntegrityShieldPromptAppend, GAFCORE_INTEGRITY_SHIELD_RULE } from "@/lib/gafcore-integrity-shield.shared";
 import { GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
-import { buildProfessionalAgentPromptAppend } from "@/agents/registry.shared";
+import {
+  buildProfessionalAgentPromptAppend,
+  buildPromptMasterPromptAppend,
+  isPromptMasterRequest,
+} from "@/agents/registry.shared";
 
 export const gafcoreChatBodySchema = z.object({
   history: z
@@ -444,6 +448,10 @@ export function buildGafcoreMessages(
   const professionalAgentAppend = isSubstantiveBuildRequest(data.instruction)
     ? buildProfessionalAgentPromptAppend(data.instruction)
     : "";
+  const promptMasterAppend =
+    isPromptMasterRequest(data.instruction) || /lovable|cursor|claude\s+code|v0|bolt/i.test(data.instruction)
+      ? buildPromptMasterPromptAppend(data.instruction)
+      : "";
   const textBlock = `Archivos de contexto:\n${filesContext}\n\nInstrucción:\n${data.instruction}${subsetNote}`;
 
   const userContent: GafcoreChatMessage["content"] =
@@ -468,6 +476,7 @@ export function buildGafcoreMessages(
       designLayer,
       designMotor,
       professionalAgentAppend,
+      promptMasterAppend,
       buildAgentModeAppend(data.instruction),
       brandBlock,
       incrementalNote,
@@ -491,7 +500,7 @@ export function buildGafcoreMessages(
       isSubstantiveBuildRequest(data.instruction) && designMotor
         ? "\n[SAFE-BUILD] Validación automática post-generación.\n"
         : "";
-    legacyAppend = `${coreSystem}${designLayer}${designMotor}${professionalAgentAppend}${safeBuildHint}${brandBlock}${incrementalNote}${memoryHints}`;
+    legacyAppend = `${coreSystem}${designLayer}${designMotor}${professionalAgentAppend}${promptMasterAppend}${safeBuildHint}${brandBlock}${incrementalNote}${memoryHints}`;
   }
   const systemContent = buildGafcoreBrainV2SystemContent({
     legacyAppend,
