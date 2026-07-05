@@ -5,15 +5,27 @@ export type PipelineFile = {
   content: string;
 };
 
+export function normalizeWorkspaceFileName(name: string): string {
+  const cleaned = name.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/\/+/g, "/");
+  if (cleaned.startsWith("src/")) return cleaned.slice(4);
+  return cleaned;
+}
+
 export function mergeGeneratedIntoWorkspace(
   currentFiles: PipelineFile[],
   generatedFiles: PipelineFile[],
 ): PipelineFile[] {
-  const byName = new Map(currentFiles.map((file) => [file.name, file]));
+  const byName = new Map(
+    currentFiles.map((file) => {
+      const name = normalizeWorkspaceFileName(file.name);
+      return [name, { ...file, name }];
+    }),
+  );
   for (const file of generatedFiles) {
-    byName.set(file.name, {
-      name: file.name,
-      language: file.language ?? byName.get(file.name)?.language ?? "typescript",
+    const name = normalizeWorkspaceFileName(file.name);
+    byName.set(name, {
+      name,
+      language: file.language ?? byName.get(name)?.language ?? "typescript",
       content: file.content,
     });
   }
