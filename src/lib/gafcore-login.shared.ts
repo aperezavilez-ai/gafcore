@@ -6,20 +6,6 @@ import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
 
-const LOGIN_READY_TIMEOUT_MS = 4_000;
-const LOGIN_CLIENT_TIMEOUT_MS = 4_000;
-const LOGIN_SIGN_IN_TIMEOUT_MS = 10_000;
-const LOGIN_SESSION_POLL_TIMEOUT_MS = 1_200;
-const LOGIN_PROFILE_TIMEOUT_MS = 1_500;
-
-function withLoginTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {
-  return Promise.race([
-    promise,
-    new Promise<"timeout">((resolve) => {
-      setTimeout(() => resolve("timeout"), ms);
-    }),
-  ]);
-}
 
 /** Tras signIn, espera a que la sesión quede en storage (Chrome / red lenta). */
 export async function waitForGafcoreAuthSession(
@@ -28,12 +14,7 @@ export async function waitForGafcoreAuthSession(
 ): Promise<Session | null> {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
-    const result = await withLoginTimeout(
-      supabase.auth.getSession(),
-      LOGIN_SESSION_POLL_TIMEOUT_MS,
-    );
-    if (result === "timeout") return null;
-    const { data } = result;
+    const { data } = await supabase.auth.getSession();
     if (data.session?.user) return data.session;
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -199,8 +180,7 @@ export async function gafcoreLoginWithPassword(input: {
   password: string;
   redirectTo: string;
 }): Promise<GafcoreLoginResult> {
-  const ready = await withLoginTimeout(isSupabaseReadyOnClient(), LOGIN_READY_TIMEOUT_MS);
-  if (ready !== true) {
+  if (!(await isSupabaseReadyOnClient())) {
     return {
       ok: false,
       error:
@@ -214,28 +194,8 @@ export async function gafcoreLoginWithPassword(input: {
     return { ok: false, error: "Escribe tu correo y contraseña para iniciar sesión." };
   }
 
-  const supabase = await withLoginTimeout(
-    getGafcoreSupabaseBrowser(),
-    LOGIN_CLIENT_TIMEOUT_MS,
-  );
-  if (supabase === "timeout") {
-    return {
-      ok: false,
-      error: "La conexion con Supabase tardo demasiado. Recarga la pagina e intenta de nuevo.",
-    };
-  }
-
-  const signIn = await withLoginTimeout(
-    supabase.auth.signInWithPassword({ email: normalized, password }),
-    LOGIN_SIGN_IN_TIMEOUT_MS,
-  );
-  if (signIn === "timeout") {
-    return {
-      ok: false,
-      error: "Supabase tardo demasiado en responder al inicio de sesion. Intenta de nuevo en unos segundos.",
-    };
-  }
-  const { data, error } = signIn;
+  const supabase = await getGafcoreSupabaseBrowser();
+  const { data, error } = await supabase.auth.signInWithPassword({ email: normalized, password });
   if (error) {
     const base = formatGafcoreSignInError(error.message, input.email);
     return { ok: false, error: typoHint ? `${typoHint} ${base}` : base };
@@ -245,7 +205,7 @@ export async function gafcoreLoginWithPassword(input: {
     data.session ??
     (await waitForGafcoreAuthSession(supabase, 5_000));
   if (session?.user) {
-    void withLoginTimeout(ensureGafcoreProfile(session.user), LOGIN_PROFILE_TIMEOUT_MS).catch(() => {
+    void ensureGafcoreProfile(session.user).catch(() => {
       /* el perfil no debe bloquear el redirect del login */
     });
     return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };

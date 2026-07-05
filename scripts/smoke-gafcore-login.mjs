@@ -54,7 +54,8 @@ for (const [label, cond] of [
   ],
   ["gafcoreLoginWithPassword", loginPage.includes("gafcoreLoginWithPassword")],
   ["login redirect sin polling duplicado", !loginPage.includes("hydrateAuthFromStorage(4_000)")],
-  ["login timeout guard", loginShared.includes("LOGIN_SIGN_IN_TIMEOUT_MS")],
+  ["sin timeout artificial de cliente Supabase", !loginShared.includes("LOGIN_CLIENT_TIMEOUT_MS")],
+  ["sin mensaje de timeout artificial Supabase", !loginShared.includes("La conexion con Supabase tardo demasiado")],
   ["sin gafcore_email legacy", !loginPage.includes("gafcore_email")],
   ["@locked login.shared", loginShared.includes("@locked")],
 ]) {
