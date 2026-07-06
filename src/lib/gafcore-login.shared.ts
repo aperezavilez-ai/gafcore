@@ -259,7 +259,7 @@ export type GafcoreStoredSessionInfo = {
   live: boolean;
 };
 
-export function readStoredGafcoreSessionInfo(): GafcoreStoredSessionInfo | null {
+export function readStoredGafcoreSession(): Session | null {
   if (typeof window === "undefined") return null;
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i) ?? "";
@@ -267,16 +267,31 @@ export function readStoredGafcoreSessionInfo(): GafcoreStoredSessionInfo | null 
     try {
       const raw = window.localStorage.getItem(key);
       if (!raw) continue;
-      const parsed = JSON.parse(raw) as { user?: { email?: string }; expires_at?: number };
-      const expiresAt = typeof parsed.expires_at === "number" ? parsed.expires_at : null;
-      const email = typeof parsed.user?.email === "string" ? parsed.user.email : null;
-      const live = Boolean(email && expiresAt && expiresAt * 1000 > Date.now() + 30_000);
-      if (email) return { email, expiresAt, live };
+      const parsed = JSON.parse(raw) as Partial<Session>;
+      const expiresAt = typeof parsed.expires_at === "number" ? parsed.expires_at : 0;
+      const live = expiresAt * 1000 > Date.now() + 30_000;
+      if (
+        live &&
+        typeof parsed.access_token === "string" &&
+        parsed.access_token &&
+        typeof parsed.refresh_token === "string" &&
+        parsed.refresh_token
+      ) {
+        return parsed as Session;
+      }
     } catch {
       /* ignore corrupt storage */
     }
   }
   return null;
+}
+
+export function readStoredGafcoreSessionInfo(): GafcoreStoredSessionInfo | null {
+  const session = readStoredGafcoreSession();
+  if (!session) return null;
+  const expiresAt = typeof session.expires_at === "number" ? session.expires_at : null;
+  const email = typeof session.user?.email === "string" ? session.user.email : null;
+  return { email, expiresAt, live: Boolean(email && expiresAt) };
 }
 
 export function clearStoredGafcoreSessions(): void {

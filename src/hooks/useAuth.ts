@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { getGafcoreSupabaseBrowser, isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
+import { readStoredGafcoreSession } from "@/lib/gafcore-login.shared";
 
 export interface AuthState {
   user: User | null;
@@ -60,18 +61,21 @@ export function initAuthOnce() {
 
   authInitPromise = (async () => {
     try {
+      const storedSession = readStoredGafcoreSession();
+      if (storedSession?.user) applySession(storedSession, false);
+
       const ready = await withTimeout(isSupabaseReadyOnClient(), AUTH_READY_TIMEOUT_MS);
       if (ready !== true) {
         console.error(
           "[Auth] Supabase no disponible en el cliente (build sin VITE_* y /api/gafcore/client-env falló).",
         );
-        applySession(null, false);
+        applySession(readStoredGafcoreSession(), false);
         return;
       }
       const supabase = await withTimeout(getGafcoreSupabaseBrowser(), AUTH_CLIENT_TIMEOUT_MS);
       if (supabase === "timeout") {
         console.warn("[Auth] Timeout inicializando Supabase en el cliente.");
-        applySession(null, false);
+        applySession(readStoredGafcoreSession(), false);
         return;
       }
       supabase.auth.onAuthStateChange((event, session) => {
@@ -84,14 +88,14 @@ export function initAuthOnce() {
           return;
         }
         if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
-          applySession(session ?? null, false);
+          applySession(session ?? readStoredGafcoreSession(), false);
           return;
         }
         if (session?.user) {
           emitAuthState({ user: session.user, session, loading: false });
           return;
         }
-        applySession(session ?? null, false);
+        applySession(session ?? readStoredGafcoreSession(), false);
       });
 
       const result = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
@@ -99,16 +103,16 @@ export function initAuthOnce() {
         const retry = await withTimeout(supabase.auth.getSession(), AUTH_RETRY_TIMEOUT_MS);
         if (retry === "timeout") {
           console.warn("[Auth] Timeout leyendo sesion inicial.");
-          applySession(null, false);
+          applySession(readStoredGafcoreSession(), false);
           return;
         }
-        applySession(retry.data.session ?? null, false);
+        applySession(retry.data.session ?? readStoredGafcoreSession(), false);
         return;
       }
-      applySession(result.data.session ?? null);
+      applySession(result.data.session ?? readStoredGafcoreSession(), false);
     } catch (e) {
       console.error("[Auth] No se pudo inicializar Supabase en el cliente", e);
-      applySession(null, false);
+      applySession(readStoredGafcoreSession(), false);
     }
   })();
 
@@ -118,6 +122,11 @@ export function initAuthOnce() {
 export async function getAuthAccessToken() {
   await initAuthOnce();
   if (authState.session?.access_token) return authState.session.access_token;
+  const storedSession = readStoredGafcoreSession();
+  if (storedSession?.access_token) {
+    applySession(storedSession, false);
+    return storedSession.access_token;
+  }
 
   try {
     const supabase = await getGafcoreSupabaseBrowser();
@@ -126,6 +135,11 @@ export async function getAuthAccessToken() {
       if (data.session?.access_token) {
         applySession(data.session, false);
         return data.session.access_token;
+      }
+      const stored = readStoredGafcoreSession();
+      if (stored?.access_token) {
+        applySession(stored, false);
+        return stored.access_token;
       }
       const { data: refreshed } = await supabase.auth.refreshSession();
       if (refreshed.session?.access_token) {
@@ -185,6 +199,11 @@ export function forceAuthLoadingComplete() {
 
 /** Tras login en /gafcore/login: sincroniza estado global antes del redirect. */
 export async function hydrateAuthFromStorage(maxMs = 5_000): Promise<boolean> {
+  const storedSession = readStoredGafcoreSession();
+  if (storedSession?.user) {
+    applySession(storedSession, false);
+    return true;
+  }
   if (!(await isSupabaseReadyOnClient())) return false;
   const supabase = await getGafcoreSupabaseBrowser();
   const deadline = Date.now() + maxMs;
@@ -192,6 +211,11 @@ export async function hydrateAuthFromStorage(maxMs = 5_000): Promise<boolean> {
     const { data } = await supabase.auth.getSession();
     if (data.session?.user) {
       applySession(data.session, false);
+      return true;
+    }
+    const stored = readStoredGafcoreSession();
+    if (stored?.user) {
+      applySession(stored, false);
       return true;
     }
     await new Promise((r) => setTimeout(r, 100));

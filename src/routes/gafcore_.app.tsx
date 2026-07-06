@@ -20,6 +20,7 @@ import {
   readGafcoreAdminBuilderView,
   setGafcoreAdminBuilderView,
 } from "@/lib/gafcore-admin-builder-view.shared";
+import { readStoredGafcoreSession } from "@/lib/gafcore-login.shared";
 
 const GafCoreIDE = lazy(() =>
   import("@/components/gafcore/GafCoreIDE").then((m) => ({ default: m.GafCoreIDE })),
@@ -80,6 +81,10 @@ function GafCoreAppPage() {
     void (async () => {
       try {
         await initAuthOnce();
+        if (getAuthSnapshot().user?.id || readStoredGafcoreSession()?.user) {
+          finishBoot(true);
+          return;
+        }
         const sb = await getGafcoreSupabaseBrowser();
         const { data } = await sb.auth.getSession();
         if (data.session?.user) {

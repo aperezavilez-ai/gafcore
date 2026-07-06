@@ -45,6 +45,8 @@ const password = (process.env.GAFCORE_TEST_PASSWORD || "").trim();
 
 const loginPage = readFileSync(resolve(root, "src/routes/gafcore_.login.tsx"), "utf8");
 const loginShared = readFileSync(resolve(root, "src/lib/gafcore-login.shared.ts"), "utf8");
+const appPage = readFileSync(resolve(root, "src/routes/gafcore_.app.tsx"), "utf8");
+const useAuth = readFileSync(resolve(root, "src/hooks/useAuth.ts"), "utf8");
 const serverEntry = readFileSync(resolve(root, "src/server.ts"), "utf8");
 
 for (const [label, cond] of [
@@ -64,6 +66,9 @@ for (const [label, cond] of [
   ["login page no inicializa SDK Supabase", !loginPage.includes("getGafcoreSupabaseBrowser") && !loginPage.includes("initAuthOnce")],
   ["login page usa readiness via API", loginPage.includes("isGafcoreAuthServerReady")],
   ["login persiste storage directo", loginShared.includes("localStorage.setItem") && loginShared.includes("storage_key")],
+  ["login puede leer sesion local directa", loginShared.includes("readStoredGafcoreSession")],
+  ["useAuth usa sesion local como fallback", useAuth.includes("readStoredGafcoreSession")],
+  ["app acepta sesion local al arrancar", appPage.includes("readStoredGafcoreSession")],
   [
     "login no espera getSession post grant",
     !loginShared.includes("waitForGafcoreAuthSession(await getGafcoreSupabaseBrowser()"),
