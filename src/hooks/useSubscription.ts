@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { supabase } from "@/lib/gafcore-supabase-client-proxy";
+import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { logClientWarn } from "@/lib/gafcore-client-logger";
 import { getMyGafcoreAccountStatus } from "@/lib/server-fns/admin.functions";
@@ -67,7 +69,10 @@ export function useSubscription(userId: string | undefined) {
 
     let cancelled = false;
 
-    async function resolveIsAdmin(uid: string): Promise<boolean> {
+    async function resolveIsAdmin(
+      sb: SupabaseClient<Database>,
+      uid: string,
+    ): Promise<boolean> {
       try {
         const status = await getAccountStatus();
         if (status?.isAdmin === true) return true;
@@ -78,13 +83,13 @@ export function useSubscription(userId: string | undefined) {
         );
       }
 
-      const { data: rpcAdmin, error: rpcErr } = await supabase.rpc("has_role", {
+      const { data: rpcAdmin, error: rpcErr } = await sb.rpc("has_role", {
         _user_id: uid,
         _role: "admin",
       });
       if (!rpcErr && typeof rpcAdmin === "boolean") return rpcAdmin;
       if (rpcErr) logClientWarn("useSubscription has_role", rpcErr.message);
-      const { data, error: roleErr } = await supabase
+      const { data, error: roleErr } = await sb
         .from("user_roles")
         .select("role")
         .eq("user_id", uid)
@@ -97,8 +102,9 @@ export function useSubscription(userId: string | undefined) {
     const load = async (opts?: { silent?: boolean }) => {
       if (!opts?.silent) setLoading(true);
       try {
+        const sb = await getGafcoreSupabaseBrowser();
         const [subRes, adminFlag] = await Promise.all([
-          supabase
+          sb
             .from("subscriptions")
             .select("*")
             .eq("user_id", userId)
@@ -106,7 +112,7 @@ export function useSubscription(userId: string | undefined) {
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
-          resolveIsAdmin(userId),
+          resolveIsAdmin(sb, userId),
         ]);
         if (cancelled) return;
         const { data: subData, error: subErr } = subRes;
@@ -117,6 +123,15 @@ export function useSubscription(userId: string | undefined) {
           setSubscription(subData as Subscription | null);
         }
         setIsAdmin(adminFlag);
+      } catch (err) {
+        if (!cancelled) {
+          logClientWarn(
+            "useSubscription load",
+            err instanceof Error ? err.message : String(err),
+          );
+          setSubscription(null);
+          setIsAdmin(false);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -126,30 +141,42 @@ export function useSubscription(userId: string | undefined) {
 
     // Realtime updates. Use a unique topic per hook instance because this hook
     // can be mounted more than once on dashboard pages.
-    const channelName = `sub-${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "subscriptions",
-          filter: `user_id=eq.${userId}`,
-        },
-        () => void load({ silent: true }),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "user_roles",
-          filter: `user_id=eq.${userId}`,
-        },
-        () => void load({ silent: true }),
-      )
-      .subscribe();
+    let channel: RealtimeChannel | null = null;
+    void (async () => {
+      try {
+        const sb = await getGafcoreSupabaseBrowser();
+        if (cancelled) return;
+        const channelName = `sub-${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        channel = sb
+          .channel(channelName)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "subscriptions",
+              filter: `user_id=eq.${userId}`,
+            },
+            () => void load({ silent: true }),
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "user_roles",
+              filter: `user_id=eq.${userId}`,
+            },
+            () => void load({ silent: true }),
+          )
+          .subscribe();
+      } catch (err) {
+        logClientWarn(
+          "useSubscription realtime",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    })();
 
     const onExternalRefresh = () => {
       void load({ silent: true });
@@ -159,7 +186,11 @@ export function useSubscription(userId: string | undefined) {
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      if (channel) {
+        void getGafcoreSupabaseBrowser()
+          .then((sb) => sb.removeChannel(channel as RealtimeChannel))
+          .catch(() => undefined);
+      }
       window.removeEventListener("gafcore:credits-applied", onExternalRefresh);
       window.removeEventListener("gafcore:credits-refresh", onExternalRefresh);
     };
