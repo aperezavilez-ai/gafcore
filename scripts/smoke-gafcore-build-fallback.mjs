@@ -74,4 +74,11 @@ if (
   throw new Error("ChatPanel does not retry with fallback when generated files fail to apply");
 }
 
+if (
+  !chatPanel.includes("La IA fallo temporalmente; aplicando build seguro de respaldo") ||
+  !chatPanel.includes("fallback-error:")
+) {
+  throw new Error("ChatPanel does not fallback when the AI request fails before returning files");
+}
+
 console.log("[smoke-build-fallback] OK");

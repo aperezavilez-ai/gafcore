@@ -3440,6 +3440,52 @@ export function ChatPanel({
             duration: 8000,
           });
         } else {
+          const fallbackInstruction = raw || coreText || instruction;
+          if (
+            effectiveBuild &&
+            !reviewOnly &&
+            errMsg !== "no_session" &&
+            isSubstantiveBuildRequest(fallbackInstruction)
+          ) {
+            try {
+              toast.message("La IA fallo temporalmente; aplicando build seguro de respaldo.", {
+                duration: 6000,
+              });
+              const fallbackBatch = await applyGenerationFiles(
+                buildContextFiles,
+                createDeterministicBuildFallbackFiles(fallbackInstruction),
+                instruction,
+                raw,
+                {
+                  runFunctionalAudit: effectiveBuild && !visualEditOn && !fastWelcomeBuild,
+                  snapshotLabel: `fallback-error: ${raw.slice(0, 60)}`,
+                  serverDelivered: true,
+                },
+              );
+
+              if (!fallbackBatch.blocked) {
+                const fallbackReply =
+                  "La IA tuvo un error temporal, pero aplique un build seguro de respaldo para que puedas avanzar.";
+                appendMessageDeduped("ai", fallbackReply);
+                scrollChatToBottomSoon("auto");
+                void persistMessage("assistant", fallbackReply);
+                setLastError(
+                  fallbackBatch.issues.some((i) => i.severity === "error")
+                    ? formatValidationForUser(
+                        fallbackBatch.issues.filter((i) => i.severity === "error"),
+                      )
+                    : null,
+                );
+                toast.success("Build seguro aplicado al preview", { duration: 6000 });
+                const buildLabel = (userFacingRaw || raw || coreText || instruction).trim().slice(0, 200);
+                if (buildLabel) onBuildSucceeded?.({ label: buildLabel });
+                return;
+              }
+            } catch (fallbackError) {
+              logClientWarn("gafcore-chat error fallback failed", fallbackError);
+            }
+          }
+
           const aiCfg =
             errMsg === "AI_NO_CONFIGURADA" ||
             errMsg.includes("ai_not_configured") ||
