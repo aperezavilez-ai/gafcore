@@ -2,6 +2,7 @@
 /**
  * Smoke: build fallback must turn a plan-only/invalid AI result into compilable files.
  */
+import { readFileSync } from "node:fs";
 import { finalizeGafcoreBuildDelivery } from "../src/lib/gafcore-chat-delivery.shared.ts";
 import { repairCommonJsxSyntaxErrors } from "../src/lib/gafcore-media.shared.ts";
 import { validateGafcoreProjectCore } from "../src/lib/gafcore-validate.server.ts";
@@ -51,6 +52,26 @@ if (!validation.ok) {
     "fallback files did not compile: " +
       validation.issues.map((issue) => `${issue.file}: ${issue.message}`).join(" | "),
   );
+}
+
+const chatPanel = readFileSync("src/components/ide/ChatPanel.tsx", "utf8");
+
+if (!chatPanel.includes("createDeterministicBuildFallbackFiles")) {
+  throw new Error("ChatPanel is not wired to the deterministic build fallback");
+}
+
+if (
+  !chatPanel.includes("filesToApply.length === 0") ||
+  !chatPanel.includes("Aplicando build seguro porque la IA no entrego archivos validos")
+) {
+  throw new Error("ChatPanel does not fallback when the AI delivers zero files");
+}
+
+if (
+  !chatPanel.includes("applyBlocked &&") ||
+  !chatPanel.includes("El build de la IA fallo; aplicando build seguro de respaldo")
+) {
+  throw new Error("ChatPanel does not retry with fallback when generated files fail to apply");
 }
 
 console.log("[smoke-build-fallback] OK");

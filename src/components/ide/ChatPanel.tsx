@@ -180,6 +180,7 @@ import {
   prepareFilesForEditorRestore,
 } from "@/lib/gafcore-snapshot-restore.shared";
 import {
+  createDeterministicBuildFallbackFiles,
   GAFCORE_CUSTOMIZE_AFTER_BOOTSTRAP_PREFIX,
   GAFCORE_FORCE_FILES_BUILD_PREFIX,
   outputReplacesWelcome,
@@ -3125,14 +3126,30 @@ export function ChatPanel({
 
       let filesToApply: Array<{ name: string; language?: string; content: string }> = [];
       let generationValidationBlocked = result.validationBlocked === true;
-      const serverDeliveredBuild =
+      let serverDeliveredBuild =
         !factoryMode && !multiAgentMode && (result.files?.length ?? 0) > 0;
+      let usedClientBuildFallback = false;
 
       if (effectiveBuild) {
         filesToApply = Array.isArray(result.files) ? result.files : [];
         if (fastWelcomeBuild && filesToApply.length > 0) {
           const appOnly = filesToApply.filter((f) => /^app\.(tsx|jsx)$/i.test(f.name));
           if (appOnly.length > 0) filesToApply = appOnly;
+        }
+
+        const fallbackInstruction = raw || coreText || instruction;
+        if (
+          filesToApply.length === 0 &&
+          !reviewOnly &&
+          isSubstantiveBuildRequest(fallbackInstruction)
+        ) {
+          filesToApply = createDeterministicBuildFallbackFiles(fallbackInstruction);
+          generationValidationBlocked = false;
+          serverDeliveredBuild = true;
+          usedClientBuildFallback = true;
+          toast.message("Aplicando build seguro porque la IA no entrego archivos validos.", {
+            duration: 6000,
+          });
         }
 
         if (filesToApply.length === 0) {
@@ -3170,6 +3187,34 @@ export function ChatPanel({
             serverDelivered: serverDeliveredBuild,
           },
         );
+
+        if (
+          applyBlocked &&
+          !usedClientBuildFallback &&
+          effectiveBuild &&
+          isSubstantiveBuildRequest(raw || coreText || instruction)
+        ) {
+          toast.message("El build de la IA fallo; aplicando build seguro de respaldo.", {
+            duration: 6000,
+          });
+          const fallbackBatch = await applyGenerationFiles(
+            buildContextFiles,
+            createDeterministicBuildFallbackFiles(raw || coreText || instruction),
+            instruction,
+            raw,
+            {
+              runFunctionalAudit: runFunctional,
+              snapshotLabel: `fallback: ${raw.slice(0, 60)}`,
+              serverDelivered: true,
+            },
+          );
+          merged = fallbackBatch.merged;
+          issues = fallbackBatch.issues;
+          applyBlocked = fallbackBatch.blocked;
+          generationValidationBlocked = false;
+          usedClientBuildFallback = true;
+          serverDeliveredBuild = true;
+        }
 
         if (applyBlocked) {
           toast.error(
