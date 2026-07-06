@@ -34,7 +34,7 @@ process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY?.trim() || "sk-o
 const { normalizeModelSlug, detectModelFamily } = await import(
   "../src/lib/gafcore-model-routing.shared.ts"
 );
-const { resolveAiRoute } = await import("../src/lib/gafcore-model-routing.server.ts");
+const { resolveAiRoute, resolveAllAiRoutes } = await import("../src/lib/gafcore-model-routing.server.ts");
 const { resolveGafcoreModelDefaults } = await import("../src/lib/gafcore-chat.shared.ts");
 
 const cases = [
@@ -82,6 +82,8 @@ for (const key of Object.keys(previousEnv)) delete process.env[key];
 process.env.AI_CHAT_COMPLETIONS_URL = "https://api.chatgptpro4all.com/v1";
 process.env.AI_API_KEY = "sk-test-gptpro4all";
 process.env.ANTHROPIC_API_KEY = "sk-ant-test-dummy";
+process.env.OPENROUTER_API_KEY = "sk-or-test-dummy";
+process.env.OPENAI_API_KEY = "sk-openai-test-dummy";
 
 const customRoute = resolveAiRoute("gpt-5.5");
 const defaultRoute = resolveAiRoute();
@@ -109,6 +111,17 @@ const okClaudePriority =
 if (!okClaudePriority) fail += 1;
 console.log(
   `${okClaudePriority ? "OK " : "FAIL"} claude with GPTPRO4ALL configured -> provider=${claudeRoute.provider} slug=${claudeRoute.modelSlug}`,
+);
+
+const fallbackRoutes = resolveAllAiRoutes("gpt-5.5");
+const openRouterFallback = fallbackRoutes.find((route) => route.provider === "openrouter");
+const openAiFallback = fallbackRoutes.find((route) => route.provider === "openai");
+const okSafeFallback =
+  openRouterFallback?.modelSlug === "openai/gpt-4o-mini" &&
+  openAiFallback?.modelSlug === "gpt-4o-mini";
+if (!okSafeFallback) fail += 1;
+console.log(
+  `${okSafeFallback ? "OK " : "FAIL"} gptpro4all model fallback -> openrouter=${openRouterFallback?.modelSlug} openai=${openAiFallback?.modelSlug}`,
 );
 
 for (const [key, value] of Object.entries(previousEnv)) {

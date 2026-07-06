@@ -56,6 +56,61 @@ function isGptpro4AllUrl(rawUrl: string | undefined): boolean {
   return Boolean(rawUrl?.toLowerCase().includes("api.chatgptpro4all.com"));
 }
 
+function isGptpro4AllModel(model: string | undefined): boolean {
+  const m = model?.trim().toLowerCase();
+  return Boolean(
+    m &&
+      (m === GPTPRO4ALL_API_DEFAULT_MODEL.toLowerCase() ||
+        m.startsWith("gptpro4all/") ||
+        /^gpt-5(?:\.|-)5\b/.test(m)),
+  );
+}
+
+function providerDefaultModel(provider: ResolvedProvider): string {
+  if (provider === "anthropic") return GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+  if (provider === "openai") return "gpt-4o-mini";
+  if (provider === "openrouter") return "openai/gpt-4o-mini";
+  if (provider === "gptpro4all") return GPTPRO4ALL_API_DEFAULT_MODEL;
+  return "";
+}
+
+function modelForFallbackProvider(
+  provider: ResolvedProvider,
+  modelHint: string | undefined,
+  configuredDefault?: string,
+): string {
+  const requested = modelHint?.trim();
+  const fallback = configuredDefault?.trim() || providerDefaultModel(provider);
+  if (!requested) return fallback;
+
+  const family = detectModelFamily(requested);
+
+  if (provider === "gptpro4all") {
+    return family === "claude" ? fallback : normalizeModelSlug(requested, "gptpro4all");
+  }
+
+  if (provider === "anthropic") {
+    return family === "claude" ? normalizeModelSlug(requested, "anthropic") : fallback;
+  }
+
+  if (provider === "openai") {
+    if (family === "openai" && !isGptpro4AllModel(requested)) {
+      return normalizeModelSlug(requested, "openai");
+    }
+    return fallback || "gpt-4o-mini";
+  }
+
+  if (provider === "openrouter") {
+    if (isGptpro4AllModel(requested)) return fallback || "openai/gpt-4o-mini";
+    if (family === "openai" || family === "claude" || family === "gemini") {
+      return normalizeModelSlug(requested, "openrouter");
+    }
+    return fallback || "openai/gpt-4o-mini";
+  }
+
+  return fallback || requested;
+}
+
 function resolveGptpro4AllRoute(
   modelHint: string | undefined,
   family: ReturnType<typeof detectModelFamily>,
@@ -75,7 +130,7 @@ function resolveGptpro4AllRoute(
   const requested = modelHint?.trim();
   const modelSlug =
     requested && family !== "claude"
-      ? normalizeModelSlug(requested, "gptpro4all")
+      ? modelForFallbackProvider("gptpro4all", requested, process.env.AI_MODEL_DEEP)
       : (process.env.AI_MODEL_DEEP?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL);
 
   return {
@@ -119,7 +174,7 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
       url: normalizeChatCompletionsUrl(customUrl),
       apiKey: customKey,
       extraHeaders: {},
-      modelSlug: modelHint?.trim() ?? "",
+      modelSlug: modelForFallbackProvider("custom", modelHint, process.env.AI_MODEL_DEEP),
       wireApi: "chat_completions",
     });
   }
@@ -149,21 +204,14 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
         "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER?.trim() || "https://gafcore.com",
         "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() || "GafCore",
       },
-      modelSlug: modelHint ? normalizeModelSlug(modelHint, "openrouter") : "",
+      modelSlug: modelForFallbackProvider("openrouter", modelHint),
       wireApi: "chat_completions",
     });
   }
 
   if (openaiKey) {
     const openaiUrl = process.env.OPENAI_CHAT_COMPLETIONS_URL?.trim() || "https://api.openai.com/v1/chat/completions";
-    let openaiSlug: string;
-    if (family === "claude") {
-      openaiSlug = /haiku|fast/i.test(modelHint ?? "") ? "gpt-4o-mini" : "gpt-4o";
-    } else if (family === "gemini") {
-      openaiSlug = "gpt-4o";
-    } else {
-      openaiSlug = normalizeModelSlug(modelHint ?? "gpt-4o-mini", "openai");
-    }
+    const openaiSlug = modelForFallbackProvider("openai", modelHint);
     routes.push({
       provider: "openai",
       url: openaiUrl,

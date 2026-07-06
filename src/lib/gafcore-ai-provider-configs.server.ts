@@ -121,17 +121,48 @@ function normalizeResponsesUrl(rawUrl: string): string {
   }
 }
 
+function isGptpro4AllModel(model: string | undefined): boolean {
+  const m = model?.trim().toLowerCase();
+  return Boolean(
+    m &&
+      (m === GPTPRO4ALL_API_DEFAULT_MODEL.toLowerCase() ||
+        m.startsWith("gptpro4all/") ||
+        /^gpt-5(?:\.|-)5\b/.test(m)),
+  );
+}
+
 function modelForProvider(row: ProviderConfigRow, modelHint?: string): string {
   const provider = row.provider;
   const family = modelHint ? detectModelFamily(modelHint) : "other";
   const configured = row.default_model?.trim();
-  if (modelHint?.trim() && provider !== "anthropic") {
-    return normalizeModelSlug(modelHint, provider);
+  const fallback = configured || providerDefaults[provider].model;
+  const requested = modelHint?.trim();
+  if (!requested) return fallback;
+
+  if (provider === "gptpro4all") {
+    return family === "claude" ? fallback : normalizeModelSlug(requested, "gptpro4all");
   }
-  if (modelHint?.trim() && provider === "anthropic" && family === "claude") {
-    return normalizeModelSlug(modelHint, "anthropic");
+
+  if (provider === "anthropic") {
+    return family === "claude" ? normalizeModelSlug(requested, "anthropic") : fallback;
   }
-  return configured || providerDefaults[provider].model;
+
+  if (provider === "openai") {
+    if (family === "openai" && !isGptpro4AllModel(requested)) {
+      return normalizeModelSlug(requested, "openai");
+    }
+    return fallback || "gpt-4o-mini";
+  }
+
+  if (provider === "openrouter") {
+    if (isGptpro4AllModel(requested)) return fallback || "openai/gpt-4o-mini";
+    if (family === "openai" || family === "claude" || family === "gemini") {
+      return normalizeModelSlug(requested, "openrouter");
+    }
+    return fallback || "openai/gpt-4o-mini";
+  }
+
+  return fallback || requested;
 }
 
 function routeUrlForProvider(row: ProviderConfigRow): string {
