@@ -57,6 +57,10 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
+function countAny(text: string, patterns: RegExp[]): number {
+  return patterns.reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
+}
+
 export function auditGafcoreDeliveryQuality(
   files: GafcoreDeliveredFile[],
   originalInstruction: string,
@@ -129,6 +133,124 @@ export function auditGafcoreDeliveryQuality(
   ]);
   if (needsCta && !hasCta) {
     add("Falta una accion principal clara; la experiencia debe tener CTA o flujo visible.");
+  }
+
+  if (intent.projectType === "saas") {
+    const score = countAny(text, [
+      /\bfeature/, /\bpricing|precio|plan/, /\bmockup|demo|dashboard|preview/,
+      /\btestimonio|cliente|social proof/, /\bfaq\b|preguntas/,
+    ]);
+    if (score < 3 || !hasInteractiveCode) {
+      add("Un SaaS profesional necesita hero, features, mockup/demo del producto, pricing/testimonios/FAQ y CTAs interactivos.");
+    }
+  }
+
+  if (intent.projectType === "dashboard" || intent.projectType === "analytics") {
+    const score = countAny(text, [
+      /\bkpi\b|metrica|metricas|analytics/, /\btabla|table|lista/,
+      /\bfiltro|filter|periodo/, /\bgrafica|chart|barra|linea/,
+      /\bestado|status|export/,
+    ]);
+    if (score < 3 || !hasInteractiveCode) {
+      add("Un dashboard/analytics debe incluir KPIs, tablas/listas, filtros, estados/graficas y acciones operativas reales.");
+    }
+  }
+
+  if (intent.projectType === "booking") {
+    const score = countAny(text, [
+      /\bservicio|servicios/, /\bfecha|dia|hora|slot|agenda/,
+      /\bnombre|telefono|email|correo/, /\bconfirmacion|confirmado|reserva recibida/,
+      /\breserv/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un flujo de reservas necesita servicio, fecha/hora, datos del cliente, validacion y confirmacion visible.");
+    }
+  }
+
+  if (intent.projectType === "restaurant") {
+    const score = countAny(text, [
+      /\bmenu|platillo|plato|combo/, /\bprecio|\$\s?\d/,
+      /\breserva|pedido|orden/, /\bubicacion|direccion|horario|telefono/,
+      /\breview|testimonio|estrella/,
+    ]);
+    if (score < 4) {
+      add("Un restaurante debe incluir menu con precios, pedido/reserva, ubicacion/horarios/contacto y confianza/reviews.");
+    }
+  }
+
+  if (intent.projectType === "marketplace" || intent.projectType === "directory") {
+    const score = countAny(text, [
+      /\bbuscar|busqueda|search/, /\bfiltro|categoria/,
+      /\bperfil|vendedor|proveedor|profesional|negocio/,
+      /\brating|review|verificado/, /\bcontacto|solicitar|guardar/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un marketplace/directorio necesita busqueda, filtros, cards de perfiles/productos, detalle/contacto y senales de confianza.");
+    }
+  }
+
+  if (intent.projectType === "education") {
+    const score = countAny(text, [
+      /\bcurso|clase|modulo|leccion/, /\binstructor|mentor|profesor/,
+      /\bprogreso|avance|completado/, /\binscripcion|registr/,
+      /\btestimonio|certificado/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un proyecto educativo necesita cursos/modulos, instructor, progreso/demo, inscripcion y confianza/certificacion.");
+    }
+  }
+
+  if (intent.projectType === "events") {
+    const score = countAny(text, [
+      /\bagenda|programa|horario/, /\bspeaker|invitado|artista/,
+      /\bticket|boleto|rsvp|registro/, /\bubicacion|lugar|mapa/,
+      /\bfaq|contacto/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un evento necesita agenda, invitados/speakers, tickets o RSVP, ubicacion y confirmacion/contacto.");
+    }
+  }
+
+  if (intent.projectType === "real-estate") {
+    const score = countAny(text, [
+      /\bpropiedad|casa|departamento|inmueble/, /\bprecio|\$\s?\d/,
+      /\brecamara|habitacion|m2|metros/, /\bfiltro|zona|ubicacion/,
+      /\bagente|visita|contacto/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un proyecto inmobiliario necesita propiedades con precio/datos, filtros, zonas/ubicacion, agente y agenda/contacto.");
+    }
+  }
+
+  if (intent.projectType === "pos") {
+    const score = countAny(text, [
+      /\bproducto|sku|stock|inventario/, /\bcaja|venta|orden/,
+      /\btotal|\$\s?\d/, /\bcantidad|qty/, /\brecibo|ticket|registrar/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un POS/inventario necesita productos/stock, orden o carrito, cantidades, totales y registro de venta demo.");
+    }
+  }
+
+  if (intent.projectType === "ai-tool") {
+    const score = countAny(text, [
+      /\bprompt|input|mensaje/, /\bgenerar|resultado|respuesta/,
+      /\bhistorial|history/, /\bmodelo|configuracion|tono/,
+      /\bfeature|pricing|demo/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Una herramienta de IA necesita input de prompt, resultado generado demo, historial/configuracion y CTA o pricing/features.");
+    }
+  }
+
+  if (intent.projectType === "multi-step-form") {
+    const score = countAny(text, [
+      /\bpaso|step/, /\bsiguiente|anterior|continuar/,
+      /\bresumen|summary/, /\bvalid/, /\bconfirmacion|enviado/,
+    ]);
+    if (score < 4 || !hasInteractiveCode) {
+      add("Un formulario multipaso necesita pasos visibles, navegacion, validacion, resumen y confirmacion.");
+    }
   }
 
   if (!intent.commerce) return issues;
@@ -246,6 +368,7 @@ export function buildQualityFixInstruction(
     "Entrega una experiencia profesional completa segun el tipo de proyecto: industria clara, layout premium, copy especifico, interacciones reales, responsive y feedback visible.",
     "Si es e-commerce/producto: catalogo especifico, precios, variantes, filtros, carrito/seleccion, confianza comercial e imagenes coherentes con el producto.",
     "Si es dashboard/app operativa: navegacion, datos demo, filtros/formularios, estado, handlers y acciones repetibles.",
+    "Si es SaaS, booking, restaurante, directorio, educacion, evento, inmobiliaria, POS, IA o formulario multipaso: cumple sus secciones, datos e interacciones obligatorias antes de entregar.",
     "Prohibido Producto A/Modelo A/Servicio 1/Feature 1, placeholders, Acme, Lorem ipsum, picsum.photos, paisajes o imagenes aleatorias.",
     'Responde SOLO JSON { "reply": "...", "files": [...] } con App.tsx completo y archivos necesarios.',
   ].join("\n");

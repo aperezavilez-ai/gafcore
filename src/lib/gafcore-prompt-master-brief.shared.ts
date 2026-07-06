@@ -6,6 +6,19 @@ export type GafcoreBriefType =
   | "restaurant"
   | "landing"
   | "marketplace"
+  | "directory"
+  | "education"
+  | "events"
+  | "real-estate"
+  | "logistics"
+  | "pos"
+  | "analytics"
+  | "ai-tool"
+  | "community"
+  | "nonprofit"
+  | "government"
+  | "multi-step-form"
+  | "map-app"
   | "portfolio"
   | "blog"
   | "mobile-app"
@@ -74,7 +87,20 @@ function normalizeText(value: string): string {
 
 function detectProjectType(text: string): GafcoreBriefType {
   const t = normalizeText(text);
+  if (/\b(directorio|directory|listado|catalogo\s+de\s+(negocios|medicos|proveedores|profesionales)|proveedores|profesionales)\b/.test(t)) return "directory";
   if (/\b(marketplace|multi\s*vendedor|vendedores|proveedores)\b/.test(t)) return "marketplace";
+  if (/\b(curso|cursos|academia|escuela|clases|lms|learning|educacion|elearning)\b/.test(t)) return "education";
+  if (/\b(evento|eventos|boda|concierto|conferencia|boletos|tickets|rsvp|invitacion)\b/.test(t)) return "events";
+  if (/\b(inmobiliaria|real estate|propiedad|propiedades|departamento|casa|renta|venta de casas|agente inmobiliario)\b/.test(t)) return "real-estate";
+  if (/\b(logistica|envios|paqueteria|tracking|rastreo|rutas|transporte|delivery)\b/.test(t)) return "logistics";
+  if (/\b(pos|punto de venta|inventario|stock|caja|ordenes|ventas)\b/.test(t)) return "pos";
+  if (/\b(analytics|analitica|reporting|graficas|bi|exportacion)\b/.test(t)) return "analytics";
+  if (/\b(chatbot|generador|prompts|ai tool|herramienta ia|ia para|asistente ia)\b/.test(t)) return "ai-tool";
+  if (/\b(comunidad|social|feed|perfiles|posts|grupos|mensajes|foro)\b/.test(t)) return "community";
+  if (/\b(donacion|donaciones|fundacion|ong|nonprofit|voluntariado|campana social)\b/.test(t)) return "nonprofit";
+  if (/\b(gobierno|municipal|ayuntamiento|tramites|ciudadano|servicios publicos)\b/.test(t)) return "government";
+  if (/\b(cotizador|wizard|multi paso|multipaso|formulario multipaso|onboarding|encuesta)\b/.test(t)) return "multi-step-form";
+  if (/\b(mapa|mapas|ubicaciones|sucursales|zonas|rutas|geolocalizacion)\b/.test(t)) return "map-app";
   if (/\b(tienda|ecommerce|e-commerce|catalogo|carrito|checkout|venta|vender|producto|productos|precio|shop)\b/.test(t)) {
     return "ecommerce";
   }
@@ -105,8 +131,13 @@ function detectVertical(text: string, projectType: GafcoreBriefType): string {
     [/\b(fitness|gym|yoga|pilates|crossfit|deporte)\b/, "fitness"],
     [/\b(auto|carro|vehiculo|taller|refaccion|mecanico)\b/, "automotriz"],
     [/\b(viaje|turismo|hotel|airbnb|vuelo|playa)\b/, "viajes"],
+    [/\b(evento|boda|concierto|conferencia|boletos|rsvp)\b/, "eventos"],
     [/\b(construccion|arquitectura|remodelacion|pintura|contratista)\b/, "construccion"],
     [/\b(logistica|envio|paqueteria|delivery|transporte)\b/, "logistica"],
+    [/\b(mascota|veterinaria|pet|perro|gato)\b/, "mascotas"],
+    [/\b(fundacion|ong|donacion|voluntariado)\b/, "impacto social"],
+    [/\b(gobierno|municipal|tramites|ciudadano)\b/, "gobierno"],
+    [/\b(rrhh|recursos humanos|empleados|nomina|talento)\b/, "recursos humanos"],
     [/\b(ia|ai|software|saas|dashboard|crm|analytics)\b/, "software"],
   ];
   return verticals.find(([pattern]) => pattern.test(t))?.[1] ?? projectType;
@@ -167,6 +198,19 @@ function requiredSections(projectType: GafcoreBriefType, vertical: string): stri
   const baseByType: Record<GafcoreBriefType, string[]> = {
     ecommerce: ["header con marca y carrito", "hero comercial", "catalogo amplio", "ofertas/descuentos", "colecciones/categorias", "beneficios de compra", "newsletter/contacto", "footer completo"],
     marketplace: ["header con busqueda", "hero marketplace", "categorias", "cards de vendedores/productos", "filtros", "flujo de contacto/compra", "confianza"],
+    directory: ["header con busqueda", "hero de directorio", "categorias", "listado de perfiles/negocios", "filtros", "detalle/contacto", "confianza"],
+    education: ["hero del curso/academia", "programas o modulos", "instructores", "progreso/demo", "testimonios", "CTA de inscripcion"],
+    events: ["hero del evento", "agenda", "speakers/invitados", "tickets o RSVP", "ubicacion", "FAQ/contacto"],
+    "real-estate": ["hero con busqueda", "filtros de propiedades", "cards de propiedades", "detalle/agente", "mapa o zonas", "formulario de cita"],
+    logistics: ["hero operativo", "cotizador/tracking", "rutas o estados", "servicios", "beneficios", "contacto"],
+    pos: ["sidebar/nav", "catalogo/stock", "carrito/orden", "caja/totales", "tabla de ventas", "estado de inventario"],
+    analytics: ["sidebar/nav", "KPIs", "graficas", "filtros de periodo", "tabla de datos", "export/demo action"],
+    "ai-tool": ["hero del producto IA", "input/prompt demo", "resultado generado", "historial", "features", "pricing o CTA"],
+    community: ["feed", "perfiles", "composer/publicacion", "grupos o categorias", "mensajes/notificaciones", "acciones sociales"],
+    nonprofit: ["hero de causa", "impacto con metricas", "campanas", "donacion/demo", "voluntariado", "transparencia/contacto"],
+    government: ["hero ciudadano", "tramites", "busqueda", "estado de solicitud", "noticias/avisos", "contacto institucional"],
+    "multi-step-form": ["hero o intro", "pasos visibles", "formulario por etapas", "resumen", "validacion", "confirmacion"],
+    "map-app": ["header con busqueda", "mapa o panel de ubicaciones", "filtros", "lista de lugares", "detalle", "ruta/contacto"],
     restaurant: ["hero gastronomico", "menu destacado", "combos/populares", "reservas o pedido", "ubicacion/contacto", "reviews"],
     booking: ["hero de servicio", "selector de servicio", "fecha/hora", "datos del cliente", "confirmacion", "listado de citas demo"],
     dashboard: ["sidebar/nav", "KPIs", "tabla o lista operativa", "filtros", "detalle/acciones", "estados vacio/loading"],
@@ -188,6 +232,19 @@ function requiredInteractions(projectType: GafcoreBriefType): string[] {
   const map: Record<GafcoreBriefType, string[]> = {
     ecommerce: ["agregar/quitar del carrito", "total en vivo", "filtros", "persistencia localStorage"],
     marketplace: ["buscar/filtrar", "seleccionar vendedor/producto", "solicitar contacto", "estado visible"],
+    directory: ["buscar/filtrar", "seleccionar perfil", "guardar/contactar", "estado visible"],
+    education: ["seleccionar curso/modulo", "progreso demo", "inscripcion o lead", "feedback visible"],
+    events: ["seleccionar ticket/RSVP", "filtrar agenda", "guardar registro demo", "confirmacion"],
+    "real-estate": ["filtrar propiedades", "seleccionar propiedad", "agendar visita", "favoritos demo"],
+    logistics: ["calcular cotizacion o tracking", "actualizar estado", "filtrar rutas", "feedback"],
+    pos: ["agregar producto", "actualizar cantidad", "calcular total", "registrar venta demo"],
+    analytics: ["filtrar periodo", "cambiar metrica", "seleccionar fila", "export demo"],
+    "ai-tool": ["enviar prompt", "generar resultado demo", "guardar historial", "limpiar"],
+    community: ["crear post demo", "like/guardar", "filtrar feed", "seleccionar perfil"],
+    nonprofit: ["seleccionar monto/causa", "registrar donacion demo", "voluntariado lead", "confirmacion"],
+    government: ["buscar tramite", "iniciar solicitud demo", "consultar estado", "feedback"],
+    "multi-step-form": ["navegar pasos", "validar campos", "calcular/resumir", "confirmar"],
+    "map-app": ["filtrar lugares", "seleccionar marcador/lista", "calcular ruta demo", "contactar"],
     restaurant: ["filtrar menu", "agregar pedido o reservar", "confirmacion visible"],
     booking: ["seleccionar servicio/fecha/hora", "validar formulario", "guardar demo en localStorage", "confirmacion"],
     dashboard: ["filtrar tabla", "seleccionar fila", "actualizar estado", "metricas derivadas"],
@@ -204,6 +261,19 @@ function requiredInteractions(projectType: GafcoreBriefType): string[] {
 
 function dataModel(projectType: GafcoreBriefType, vertical: string): string[] {
   if (projectType === "ecommerce") return ["productos con nombre, precio, categoria, imagen, variantes", "carrito", "totales"];
+  if (projectType === "directory") return ["perfiles/listados", "categorias", "ubicacion/contacto", "ratings"];
+  if (projectType === "education") return ["cursos", "modulos", "instructores", "progreso"];
+  if (projectType === "events") return ["agenda", "tickets", "invitados", "registros RSVP"];
+  if (projectType === "real-estate") return ["propiedades", "precios", "zonas", "agentes", "visitas"];
+  if (projectType === "logistics") return ["envios", "rutas", "estados", "cotizaciones"];
+  if (projectType === "pos") return ["productos", "stock", "orden", "ventas", "totales"];
+  if (projectType === "analytics") return ["KPIs", "series", "filtros", "registros", "export"];
+  if (projectType === "ai-tool") return ["prompts", "respuestas demo", "historial", "configuracion"];
+  if (projectType === "community") return ["usuarios", "posts", "grupos", "notificaciones"];
+  if (projectType === "nonprofit") return ["campanas", "donaciones demo", "impacto", "voluntarios"];
+  if (projectType === "government") return ["tramites", "solicitudes", "estados", "avisos"];
+  if (projectType === "multi-step-form") return ["pasos", "campos", "resumen", "confirmacion"];
+  if (projectType === "map-app") return ["lugares", "categorias", "coordenadas demo", "rutas"];
   if (projectType === "booking") return ["servicios", "slots de agenda", "cliente", "reservas"];
   if (projectType === "dashboard") return ["KPIs", "registros", "estados", "filtros"];
   if (projectType === "restaurant") return ["platillos", "categorias", "precios", "pedido/reserva"];
@@ -281,6 +351,7 @@ export function buildGafcorePromptMasterBriefAppend(instruction: string): string
     `Datos demo/modelo local: ${brief.dataModel.join(" | ")}`,
     `Reglas de media/imagenes: ${brief.mediaRules.join(" | ")}`,
     "Restricciones:",
+    "- Matriz obligatoria: detectar formato (landing/app/dashboard/marketplace/booking/etc.), vertical (salud/legal/comida/educacion/logistica/etc.) y flujo principal (vender/reservar/cotizar/administrar/publicar/aprender/contactar/reportar).",
     "- Construir una experiencia completa en el preview, no una maqueta decorativa.",
     "- No usar GafCore, el logo de GafCore ni branding de la plataforma dentro del proyecto generado; inventa una marca coherente con el negocio del usuario si no dio una.",
     "- Si el pedido es ecommerce/producto, construir una pagina completa tipo marketplace profesional: navbar, hero comercial, catalogo amplio, ofertas/descuentos, colecciones/categorias, beneficios, newsletter/contacto, footer y carrito/acciones reales.",
