@@ -11,12 +11,13 @@ import {
   loginUrlHasForbiddenParams,
   buildSanitizedLoginUrl,
   clearLoginCredentialFieldsDom,
+  clearStoredGafcoreSessions,
+  isGafcoreAuthServerReady,
+  readStoredGafcoreSessionInfo,
+  sendGafcorePasswordReset,
 } from "@/lib/gafcore-login.shared";
-import { initAuthOnce } from "@/hooks/useAuth";
-import { isSupabaseReadyOnClient } from "@/lib/gafcore-supabase-browser";
-import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
-const LOGIN_SUBMIT_TIMEOUT_MS = 45_000;
+const LOGIN_SUBMIT_TIMEOUT_MS = 20_000;
 
 if (typeof window !== "undefined") {
   stripSecretsFromLoginUrl();
@@ -108,8 +109,7 @@ function GafCoreLoginPage() {
 
   useEffect(() => {
     void (async () => {
-      setSupabaseReady(await isSupabaseReadyOnClient());
-      await initAuthOnce();
+      setSupabaseReady(await isGafcoreAuthServerReady());
     })();
   }, []);
 
@@ -129,31 +129,13 @@ function GafCoreLoginPage() {
   }, [signedOut, redirect, navigate]);
 
   useEffect(() => {
-    let active = true;
-    void getGafcoreSupabaseBrowser()
-      .then((sb) => sb.auth.getSession())
-      .then(({ data }) => {
-        if (!active) return;
-        const session = data.session;
-        const sessionEmail = session?.user?.email;
-        const expiresAt = session?.expires_at ?? 0;
-        const sessionLive = Boolean(sessionEmail && expiresAt * 1000 > Date.now() + 30_000);
-        if (sessionEmail && sessionLive) {
-          setActiveSessionEmail(sessionEmail);
-        }
-      })
-      .catch(() => {
-        /* sin sesión o Supabase aún no listo */
-      });
-    return () => {
-      active = false;
-    };
+    const session = readStoredGafcoreSessionInfo();
+    setActiveSessionEmail(session?.live ? session.email : null);
   }, [redirectTo, signedOut, redirect]);
 
   const switchAccount = async () => {
     setSwitching(true);
-    const sb = await getGafcoreSupabaseBrowser();
-    await sb.auth.signOut();
+    clearStoredGafcoreSessions();
     setActiveSessionEmail(null);
     setEmail("");
     setPassword("");
@@ -212,13 +194,13 @@ function GafCoreLoginPage() {
     setError("");
     setMessage("");
     setResetLoading(true);
-    const sb = await getGafcoreSupabaseBrowser();
-    const { error: resetError } = await sb.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: getPasswordRecoveryRedirectTo(),
-    });
+    const resetError = await sendGafcorePasswordReset(
+      normalizedEmail,
+      getPasswordRecoveryRedirectTo(),
+    );
     setResetLoading(false);
     if (resetError) {
-      setError(resetError.message);
+      setError(resetError);
       return;
     }
     setMessage("Te envié un enlace para crear una contraseña nueva.");

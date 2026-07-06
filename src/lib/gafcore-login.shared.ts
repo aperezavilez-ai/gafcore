@@ -2,10 +2,10 @@
  * @locked Flujo de inicio de sesión GafCore (email + contraseña).
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
-import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
-import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
+import type { Session, User } from "@supabase/supabase-js";
 
 const LOGIN_AUTH_TIMEOUT_MS = 30_000;
+const LOGIN_CLIENT_ENV_TIMEOUT_MS = 8_000;
 
 type GafcorePasswordGrantResponse = {
   ok?: boolean;
@@ -20,6 +20,21 @@ type GafcorePasswordGrantResponse = {
   msg?: string;
   message?: string;
 };
+
+type GafcoreClientEnvResponse = {
+  ok?: boolean;
+  url?: string;
+  publishableKey?: string;
+};
+
+function withAbortTimeout(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timeout),
+  };
+}
 
 function persistSupabaseSessionFromGrant(body: GafcorePasswordGrantResponse): Session | null {
   if (typeof window === "undefined") return null;
@@ -95,31 +110,6 @@ async function signInWithPasswordGrant(
   }
 }
 
-
-/** Tras signIn, espera a que la sesión quede en storage (Chrome / red lenta). */
-export async function waitForGafcoreAuthSession(
-  supabase: SupabaseClient,
-  maxMs = 5_000,
-): Promise<Session | null> {
-  const deadline = Date.now() + maxMs;
-  while (Date.now() < deadline) {
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.user) return data.session;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return null;
-}
-
-async function ensureGafcoreProfile(user: User): Promise<void> {
-  const supabase = await getGafcoreSupabaseBrowser();
-  await supabase.from("profiles").upsert(
-    {
-      user_id: user.id,
-      email: user.email ?? null,
-    },
-    { onConflict: "user_id", ignoreDuplicates: true },
-  );
-}
 
 /** Correos que se confunden en el panel (avilez vs avilery). La cuenta real en Auth es avilery. */
 const KNOWN_EMAIL_TYPOS: Record<string, string> = {
@@ -263,6 +253,95 @@ export function resolveGafcoreLoginRedirect(redirectTo: string): string {
   return `${window.location.origin}${path}`;
 }
 
+export type GafcoreStoredSessionInfo = {
+  email: string | null;
+  expiresAt: number | null;
+  live: boolean;
+};
+
+export function readStoredGafcoreSessionInfo(): GafcoreStoredSessionInfo | null {
+  if (typeof window === "undefined") return null;
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i) ?? "";
+    if (!/^sb-.+-auth-token$/.test(key)) continue;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as { user?: { email?: string }; expires_at?: number };
+      const expiresAt = typeof parsed.expires_at === "number" ? parsed.expires_at : null;
+      const email = typeof parsed.user?.email === "string" ? parsed.user.email : null;
+      const live = Boolean(email && expiresAt && expiresAt * 1000 > Date.now() + 30_000);
+      if (email) return { email, expiresAt, live };
+    } catch {
+      /* ignore corrupt storage */
+    }
+  }
+  return null;
+}
+
+export function clearStoredGafcoreSessions(): void {
+  if (typeof window === "undefined") return;
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i) ?? "";
+    if (/^sb-.+-auth-token$/.test(key)) keys.push(key);
+  }
+  for (const key of keys) window.localStorage.removeItem(key);
+}
+
+export async function isGafcoreAuthServerReady(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const timer = withAbortTimeout(LOGIN_CLIENT_ENV_TIMEOUT_MS);
+  try {
+    const res = await fetch("/api/gafcore/client-env", {
+      cache: "no-store",
+      signal: timer.signal,
+    });
+    const body = (await res.json().catch(() => ({}))) as GafcoreClientEnvResponse;
+    return Boolean(res.ok && body.ok && body.url && body.publishableKey);
+  } catch {
+    return false;
+  } finally {
+    timer.clear();
+  }
+}
+
+export async function sendGafcorePasswordReset(email: string, redirectTo: string): Promise<string | null> {
+  if (typeof window === "undefined") return "No se pudo preparar el enlace en este navegador.";
+  const timer = withAbortTimeout(LOGIN_CLIENT_ENV_TIMEOUT_MS);
+  try {
+    const envRes = await fetch("/api/gafcore/client-env", {
+      cache: "no-store",
+      signal: timer.signal,
+    });
+    const env = (await envRes.json().catch(() => ({}))) as GafcoreClientEnvResponse;
+    if (!envRes.ok || !env.ok || !env.url || !env.publishableKey) {
+      return "Supabase no esta disponible para enviar el enlace.";
+    }
+    const res = await fetch(`${env.url}/auth/v1/recover`, {
+      method: "POST",
+      headers: {
+        apikey: env.publishableKey,
+        Authorization: `Bearer ${env.publishableKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, redirect_to: redirectTo }),
+    });
+    if (res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as {
+      msg?: string;
+      message?: string;
+      error_description?: string;
+    };
+    return body.error_description || body.msg || body.message || "No se pudo enviar el enlace.";
+  } catch (err) {
+    const aborted = err instanceof DOMException && err.name === "AbortError";
+    return aborted ? "El servidor tardo demasiado en responder." : "No se pudo contactar el servidor.";
+  } finally {
+    timer.clear();
+  }
+}
+
 /** Inicio de sesión estable: signIn → redirect. Sin timeouts ni polling innecesario. */
 export async function gafcoreLoginWithPassword(input: {
   email: string;
@@ -282,9 +361,6 @@ export async function gafcoreLoginWithPassword(input: {
   }
 
   if (grantSession?.access_token) {
-    if (grantSession.user) void ensureGafcoreProfile(grantSession.user).catch(() => {
-      /* el perfil no debe bloquear el redirect del login */
-    });
     return { ok: true, redirectTo: resolveGafcoreLoginRedirect(input.redirectTo) };
   }
 
@@ -296,5 +372,8 @@ export async function gafcoreLoginWithPassword(input: {
 }
 
 export function gafcoreLoginRedirectNow(url: string): void {
-  window.location.assign(url);
+  window.location.replace(url);
+  window.setTimeout(() => {
+    window.location.href = url;
+  }, 500);
 }
