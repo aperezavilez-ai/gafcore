@@ -39,6 +39,7 @@
     "gafcore:smoke-brand-wizard": "npx tsx scripts/smoke-gafcore-brand.mjs",
     "gafcore:smoke-critique": "npx tsx scripts/smoke-gafcore-critique.mjs",
     "gafcore:smoke-json-loose": "npx tsx scripts/smoke-gafcore-json-loose.mjs",
+    "gafcore:smoke-build-fallback": "npx tsx scripts/smoke-gafcore-build-fallback.mjs",
     "gafcore:smoke-incremental": "npx tsx scripts/smoke-gafcore-incremental.mjs",
     "gafcore:smoke-snapshot-restore": "npx tsx scripts/smoke-gafcore-snapshot-restore.mjs",
     "gafcore:smoke-brain-v2": "npx tsx scripts/smoke-gafcore-brain-v2.mjs",

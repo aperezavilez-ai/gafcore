@@ -10,7 +10,10 @@
  */
 import type { GafcoreChatMessage } from "@/lib/gafcore-media.shared";
 import { completeChatMessage } from "@/lib/gafcore-ai-gateway.server";
-import { finalizeGafcoreBuildDelivery } from "@/lib/gafcore-chat-delivery.shared";
+import {
+  createDeterministicBuildFallbackFiles,
+  finalizeGafcoreBuildDelivery,
+} from "@/lib/gafcore-chat-delivery.shared";
 import { gateDeliveredFiles } from "@/lib/gafcore-chat-delivery-gate.shared";
 import type { ProjFile } from "@/lib/gafcore-chat.shared";
 import { buildValidationFixInstruction } from "@/lib/gafcore-ai-validation.shared";
@@ -64,6 +67,24 @@ export type AgentChatRunResult = {
   attempts: number;
   validationBlocked: boolean;
 };
+
+async function tryFallbackBuild(input: {
+  instruction: string;
+  contextFiles: ProjFile[];
+  attempts: number;
+}): Promise<AgentChatRunResult | null> {
+  if (!isSubstantiveBuildRequest(input.instruction)) return null;
+  const fallbackFiles = createDeterministicBuildFallbackFiles(input.instruction);
+  const gate = await gateDeliveredFiles(input.contextFiles, fallbackFiles, input.instruction);
+  if (!gate.ok) return null;
+  return {
+    reply:
+      "Construi una base funcional para tu pedido. La IA principal devolvio codigo invalido, asi que aplique un build seguro para que el preview no se quede sin cambios.",
+    files: gate.files,
+    attempts: input.attempts,
+    validationBlocked: false,
+  };
+}
 
 export async function runGafcoreAgentChatCompletion(input: {
   model: string;
@@ -160,6 +181,12 @@ export async function runGafcoreAgentChatCompletion(input: {
           [{ name: "__raw_ai_content__", content: content }],
           [{ severity: "error", category: "build", file: "-", message: `parseFailed=${parseFailed} rawFilesCount=${rawFilesCount} source=${delivery.source}` }],
         );
+        const fallback = await tryFallbackBuild({
+          instruction: input.instruction,
+          contextFiles: input.contextFiles,
+          attempts: attempt,
+        });
+        if (fallback) return fallback;
         const reason = parseFailed
           ? "la respuesta de la IA no era JSON válido con archivos"
           : rawFilesCount > 0
@@ -201,6 +228,12 @@ export async function runGafcoreAgentChatCompletion(input: {
             mergedForTranspile.map((f) => ({ name: f.name, content: f.content })),
             syntaxBlocking,
           );
+          const fallback = await tryFallbackBuild({
+            instruction: input.instruction,
+            contextFiles: input.contextFiles,
+            attempts: attempt,
+          });
+          if (fallback) return fallback;
           return {
             reply: `${replyRaw}\n\nNo se aplicaron cambios: el código no compila.`,
             files: [],
@@ -248,6 +281,12 @@ export async function runGafcoreAgentChatCompletion(input: {
         safeFiles.map((f) => ({ name: f.name, content: f.content })),
         gate.issues,
       );
+      const fallback = await tryFallbackBuild({
+        instruction: input.instruction,
+        contextFiles: input.contextFiles,
+        attempts: attempt,
+      });
+      if (fallback) return fallback;
       return {
         reply: `${replyRaw}\n\nNo se aplicaron cambios: ${gate.userMessage}`,
         files: [],
@@ -261,6 +300,13 @@ export async function runGafcoreAgentChatCompletion(input: {
       { role: "user", content: gate.fixInstruction },
     );
   }
+
+  const fallback = await tryFallbackBuild({
+    instruction: input.instruction,
+    contextFiles: input.contextFiles,
+    attempts: MAX_ATTEMPTS,
+  });
+  if (fallback) return fallback;
 
   return {
     reply: "No se pudo completar la generación.",
