@@ -328,6 +328,12 @@ export const PROFESSIONAL_SKILLS: ProfessionalSkill[] = [
 
 export function selectProfessionalSkills(instruction: string): ProfessionalSkill[] {
   const picked = PROFESSIONAL_SKILLS.filter((skill) => skill.trigger.test(instruction));
+  if (/\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/i.test(instruction)) {
+    const ecommerce = PROFESSIONAL_SKILLS.find((skill) => skill.id === "ecommerce");
+    if (ecommerce && !picked.some((skill) => skill.id === ecommerce.id)) {
+      picked.push(ecommerce);
+    }
+  }
   const ids = new Set<string>();
   return picked.filter((skill) => {
     if (ids.has(skill.id)) return false;
@@ -362,6 +368,9 @@ export function buildPromptMasterPromptAppend(instruction: string): string {
 
 export function buildProfessionalAgentPromptAppend(instruction: string): string {
   const skills = selectProfessionalSkills(instruction);
+  const shoeCommerce = /\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/i.test(
+    instruction,
+  );
   const activeAgentTypes = new Set<AgentType>([
     "planner",
     "frontend",
@@ -392,6 +401,16 @@ export function buildProfessionalAgentPromptAppend(instruction: string): string 
         "  Entregables: App funcional, responsive, con handlers reales y sin errores de build.",
       ];
 
+  const contextualQualityLines = shoeCommerce
+    ? [
+        "Reglas especificas para tienda de tenis/calzado:",
+        "- La primera pantalla debe vender tenis/sneakers de forma evidente: hero comercial, colecciones, beneficios y CTA de compra.",
+        "- Productos con nombres reales y diferenciados; prohibido Modelo A, Producto A, Item 1 o copy de relleno.",
+        "- Debe incluir tallas, colores, precios, filtros/categorias, reviews o rating, envio/devoluciones y carrito con total.",
+        "- Imagenes/mockups de producto deben coincidir con tenis/calzado; prohibido picsum, paisajes, montanas, waterfalls o imagenes aleatorias.",
+      ]
+    : [];
+
   return [
     "\n[ORQUESTADOR PROFESIONAL GAFCORE]",
     "Actua como un equipo de agentes especializados antes de escribir archivos. No expliques el debate interno; aplicalo en el codigo final.",
@@ -405,6 +424,7 @@ export function buildProfessionalAgentPromptAppend(instruction: string): string 
     "3. Frontend/Backend/Datos: implementa solo lo necesario, con handlers reales y persistencia local o Supabase segun contexto.",
     "4. QA/Build Doctor: revisa sintaxis TSX, imports, botones, formularios, responsive y estados vacios antes de responder.",
     "5. Entrega solo JSON con archivos delta completos; si el usuario pidio construir, files no puede quedar vacio.",
+    ...contextualQualityLines,
   ].join("\n");
 }
 

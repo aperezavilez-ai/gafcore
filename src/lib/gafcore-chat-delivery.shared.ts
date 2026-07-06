@@ -64,9 +64,261 @@ function fallbackServices(instruction: string): string[] {
   return ["Diseno profesional", "Conversion clara", "Contacto directo"];
 }
 
+function isShoeCommerceInstruction(instruction: string): boolean {
+  return /\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/i.test(
+    instruction,
+  );
+}
+
+function createShoeCommerceFallbackFiles(): GafcoreDeliveredFile[] {
+  const title = "SneakerLab Pro";
+  const app = `import React, { useEffect, useMemo, useState } from "react";
+
+const products = [
+  {
+    id: "urban-runner-pro",
+    name: "Urban Runner Pro",
+    category: "Running urbano",
+    price: 1899,
+    color: "Negro / lima",
+    sizes: ["25", "26", "27", "28", "29"],
+    rating: 4.9,
+    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "court-elite-low",
+    name: "Court Elite Low",
+    category: "Casual premium",
+    price: 1599,
+    color: "Blanco / azul",
+    sizes: ["24", "25", "26", "27", "28"],
+    rating: 4.8,
+    image: "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "trail-flex-knit",
+    name: "Trail Flex Knit",
+    category: "Outdoor ligero",
+    price: 2199,
+    color: "Arena / negro",
+    sizes: ["26", "27", "28", "29", "30"],
+    rating: 4.7,
+    image: "https://images.unsplash.com/photo-1543508282-6319a3e2621f?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "street-classic-90",
+    name: "Street Classic 90",
+    category: "Lifestyle",
+    price: 1399,
+    color: "Rojo / blanco",
+    sizes: ["24", "25", "26", "27", "28", "29"],
+    rating: 4.8,
+    image: "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=900&q=80",
+  },
+];
+
+const categories = ["Todos", "Running urbano", "Casual premium", "Outdoor ligero", "Lifestyle"];
+
+export default function App() {
+  const [category, setCategory] = useState("Todos");
+  const [cart, setCart] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("sneakerlab-cart") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [selectedSize, setSelectedSize] = useState("27");
+
+  useEffect(() => {
+    localStorage.setItem("sneakerlab-cart", JSON.stringify(cart));
+  }, [cart]);
+
+  const visibleProducts = useMemo(
+    () => products.filter((product) => category === "Todos" || product.category === category),
+    [category],
+  );
+
+  const totalItems = useMemo(() => Object.values(cart).reduce((sum, qty) => sum + qty, 0), [cart]);
+  const total = useMemo(
+    () =>
+      products.reduce((sum, product) => {
+        return sum + product.price * (cart[product.id] || 0);
+      }, 0),
+    [cart],
+  );
+
+  const addToCart = (id) => {
+    setCart((current) => ({ ...current, [id]: (current[id] || 0) + 1 }));
+  };
+
+  const clearCart = () => setCart({});
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-white">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-lime-300">Tienda de tenis</p>
+            <h1 className="text-xl font-black">SneakerLab Pro</h1>
+          </div>
+          <div className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold">
+            Carrito: {totalItems} pares · \${total.toLocaleString("es-MX")} MXN
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-7xl gap-10 px-5 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-lime-300">Nueva temporada</p>
+          <h2 className="mt-4 max-w-3xl text-5xl font-black leading-tight md:text-7xl">
+            Tenis listos para vender desde el primer clic.
+          </h2>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
+            Catalogo premium con tallas, colores, reviews, envio rapido y carrito persistente para una experiencia de compra real.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a href="#catalogo" className="rounded-full bg-lime-300 px-6 py-3 font-black text-zinc-950 hover:bg-lime-200">
+              Comprar tenis
+            </a>
+            <a href="#garantia" className="rounded-full border border-white/15 px-6 py-3 font-bold hover:bg-white/10">
+              Envio y devoluciones
+            </a>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/5 shadow-2xl">
+          <img
+            src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1400&q=80"
+            alt="Tenis rojos premium para tienda online"
+            className="h-[28rem] w-full object-cover"
+          />
+        </div>
+      </section>
+
+      <section id="catalogo" className="border-y border-white/10 bg-white/[0.03] px-5 py-12">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.24em] text-lime-300">Catalogo</p>
+              <h2 className="mt-2 text-3xl font-black md:text-5xl">Colecciones de tenis</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setCategory(item)}
+                  className={"rounded-full px-4 py-2 text-sm font-bold transition " + (category === item ? "bg-white text-zinc-950" : "border border-white/15 text-zinc-200 hover:bg-white/10")}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {visibleProducts.map((product) => (
+              <article key={product.id} className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-xl">
+                <img src={product.image} alt={product.name + " tenis " + product.color} className="h-56 w-full object-cover" />
+                <div className="space-y-4 p-5">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime-300">{product.category}</p>
+                    <h3 className="mt-2 text-xl font-black">{product.name}</h3>
+                    <p className="mt-1 text-sm text-zinc-400">Color: {product.color} · Rating {product.rating}/5</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {product.sizes.map((size) => (
+                      <button
+                        key={product.id + size}
+                        type="button"
+                        onClick={() => setSelectedSize(size)}
+                        className={"h-9 w-11 rounded-lg text-sm font-bold " + (selectedSize === size ? "bg-lime-300 text-zinc-950" : "bg-white/10 text-white hover:bg-white/20")}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-2xl font-black">\${product.price.toLocaleString("es-MX")} MXN</span>
+                    <button
+                      type="button"
+                      onClick={() => addToCart(product.id)}
+                      className="rounded-full bg-white px-4 py-2 text-sm font-black text-zinc-950 hover:bg-lime-200"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="garantia" className="mx-auto grid max-w-7xl gap-4 px-5 py-12 md:grid-cols-3">
+        {["Envio express 24/48h", "Cambios y devoluciones 30 dias", "Reviews verificadas 4.8/5"].map((item) => (
+          <div key={item} className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h3 className="text-xl font-black">{item}</h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-300">Confianza comercial visible para que el comprador se anime a finalizar la compra.</p>
+          </div>
+        ))}
+      </section>
+
+      {totalItems > 0 ? (
+        <aside className="fixed bottom-4 left-1/2 z-30 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-lime-300/40 bg-zinc-900 p-4 shadow-2xl">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="font-bold">{totalItems} producto(s) en carrito · Total \${total.toLocaleString("es-MX")} MXN · talla seleccionada {selectedSize}</p>
+            <button type="button" onClick={clearCart} className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">
+              Vaciar carrito
+            </button>
+          </div>
+        </aside>
+      ) : null}
+    </main>
+  );
+}
+`;
+
+  return [
+    {
+      name: "index.html",
+      language: "html",
+      content: `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>`,
+    },
+    {
+      name: "main.tsx",
+      language: "typescript",
+      content:
+        'import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "./App";\nimport "./styles.css";\n\ncreateRoot(document.getElementById("root")!).render(<App />);\n',
+    },
+    { name: "App.tsx", language: "typescript", content: app },
+    {
+      name: "styles.css",
+      language: "css",
+      content:
+        ":root { color-scheme: dark; }\nhtml, body, #root { min-height: 100%; margin: 0; }\nbody { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }\n* { box-sizing: border-box; }\n",
+    },
+  ];
+}
+
 export function createDeterministicBuildFallbackFiles(
   instruction: string,
 ): GafcoreDeliveredFile[] {
+  if (isShoeCommerceInstruction(instruction)) {
+    return createShoeCommerceFallbackFiles();
+  }
   const title = fallbackTitle(instruction);
   const services = fallbackServices(instruction);
   const app = `import React, { useMemo, useState } from "react";

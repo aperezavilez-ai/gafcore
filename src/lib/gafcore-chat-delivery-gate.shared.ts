@@ -13,6 +13,10 @@ import type { GafcoreDeliveredFile } from "@/lib/gafcore-chat-delivery.shared";
 import { detectCorruptJsxInFiles } from "@/lib/gafcore-jsx-corrupt.shared";
 import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 import { validateGafcoreProjectCore } from "@/lib/gafcore-validate.server";
+import {
+  auditGafcoreDeliveryQuality,
+  buildQualityFixInstruction,
+} from "@/lib/gafcore-quality-gate.shared";
 
 export type DeliveryGateResult = {
   ok: boolean;
@@ -31,9 +35,18 @@ export async function gateDeliveredFiles(
     return { ok: true, files: [], issues: [], userMessage: "", fixInstruction: "" };
   }
 
-  const healedDelta = healUntilStable(deltaFiles);
-  const merged = mergeContextWithDelta(contextFiles, healedDelta.files);
-  const healedMerged = healUntilStable(merged);
+  const rawMerged = mergeContextWithDelta(contextFiles, deltaFiles);
+  const rawTranspile = await validateGafcoreProjectCore(
+    rawMerged.map((f) => ({ name: f.name, content: f.content })),
+  );
+  const rawSyntaxBlocking = rawTranspile.issues.filter(
+    (i) => i.severity === "error" && i.category === "syntax",
+  );
+  const skipSyntaxHeal = rawSyntaxBlocking.length === 0;
+
+  const healedDelta = skipSyntaxHeal ? { files: deltaFiles } : healUntilStable(deltaFiles);
+  const merged = skipSyntaxHeal ? rawMerged : mergeContextWithDelta(contextFiles, healedDelta.files);
+  const healedMerged = skipSyntaxHeal ? { files: merged } : healUntilStable(merged);
   const corrupt = detectCorruptJsxInFiles(healedMerged.files);
   if (corrupt.length > 0) {
     const blocking = corrupt.map((c) => ({
@@ -58,9 +71,11 @@ export async function gateDeliveredFiles(
   // Babel standalone = mismo motor que el preview del navegador → paridad real.
   // Autoridad única de error de sintaxis TS/JSX (entiende genéricos, evita el
   // falso positivo de useState<string> que el contador de tags marcaba).
-  const transpile = await validateGafcoreProjectCore(
-    healedMerged.files.map((f) => ({ name: f.name, content: f.content })),
-  );
+  const transpile = skipSyntaxHeal
+    ? rawTranspile
+    : await validateGafcoreProjectCore(
+        healedMerged.files.map((f) => ({ name: f.name, content: f.content })),
+      );
   const syntaxBlocking = transpile.issues.filter(
     (i) => i.severity === "error" && i.category === "syntax",
   );
@@ -77,7 +92,9 @@ export async function gateDeliveredFiles(
     return m ? { ...d, content: m.content } : d;
   });
 
-  if (blocking.length === 0) {
+  const qualityBlocking = auditGafcoreDeliveryQuality(deliverFiles, originalInstruction);
+
+  if (blocking.length === 0 && qualityBlocking.length === 0) {
     return {
       ok: true,
       files: deliverFiles,
@@ -87,13 +104,17 @@ export async function gateDeliveredFiles(
     };
   }
 
-  const fixInstruction = buildValidationFixInstruction(blocking, originalInstruction);
+  const finalBlocking = [...blocking, ...qualityBlocking];
+  const fixInstruction =
+    qualityBlocking.length > 0 && blocking.length === 0
+      ? buildQualityFixInstruction(qualityBlocking, originalInstruction)
+      : buildValidationFixInstruction(finalBlocking, originalInstruction);
 
   return {
     ok: false,
     files: [],
-    issues: blocking,
-    userMessage: formatValidationForUser(blocking),
+    issues: finalBlocking,
+    userMessage: formatValidationForUser(finalBlocking),
     fixInstruction,
   };
 }

@@ -44,6 +44,26 @@ const PAINTING_SEEDS = [
   "gafcore-paint-interior",
 ];
 
+const SHOE_IMAGE_URLS = [
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1543508282-6319a3e2621f?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?auto=format&fit=crop&w=900&q=80",
+  "https://images.unsplash.com/photo-1491553895911-0055eca6402d?auto=format&fit=crop&w=900&q=80",
+];
+
+export function isShoeThemedInstruction(text: string): boolean {
+  return /\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/i.test(
+    text,
+  );
+}
+
+function shoeImageUrl(slot = 0, hero = false): string {
+  const base = SHOE_IMAGE_URLS[slot % SHOE_IMAGE_URLS.length];
+  if (!hero) return base;
+  return base.replace(/w=\d+/, "w=1400");
+}
+
 export function themedPicsumUrl(
   label: string,
   instruction: string,
@@ -59,6 +79,9 @@ export function themedPicsumUrl(
   if (paint) {
     const seed = PAINTING_SEEDS[slot % PAINTING_SEEDS.length];
     return picsumFallbackUrl(seed, w, h);
+  }
+  if (isShoeThemedInstruction(ctx)) {
+    return shoeImageUrl(slot, label === "hero" || /hero|banner|fondo/i.test(ctx));
   }
   if (label === "hero" || /hero|banner|fondo|cielo|avion|avión|viaje|vuelo/i.test(ctx)) {
     const theme = resolveHeroImageFromInstruction(instruction);
@@ -129,7 +152,22 @@ export function isPaintThemedInstruction(text: string): boolean {
   );
 }
 
-/** Sustituye Picsum/Unsplash genéricos por semillas gafcore-paint-* (hero + productos). */
+/** Sustituye imagenes genericas por tenis/calzado cuando el pedido lo exige. */
+export function rewriteShoeThemeMediaUrls(source: string, instruction = ""): string {
+  if (!isShoeThemedInstruction(`${instruction}\n${source}`)) return source;
+  let slot = 0;
+  const nextUrl = () => {
+    const url = shoeImageUrl(slot, slot === 0);
+    slot += 1;
+    return url;
+  };
+  return source
+    .replace(/https:\/\/picsum\.photos\/seed\/[^"'`)\s]+(?:\/\d+)?(?:\/\d+)?/g, nextUrl)
+    .replace(/https:\/\/(?:placehold\.co|via\.placeholder\.com)\/[^"'`)\s]+/g, nextUrl)
+    .replace(/https:\/\/source\.unsplash\.com\/[^"'`)\s]+/g, nextUrl);
+}
+
+/** Sustituye Picsum/Unsplash genericos por semillas gafcore-paint-* (hero + productos). */
 export function rewritePaintThemeMediaUrls(source: string, instruction = ""): string {
   if (!isPaintThemedInstruction(`${instruction}\n${source}`)) return source;
   let slot = 0;
@@ -159,6 +197,7 @@ export function applyPicsumFallbacksInSource(
   // SaaS / apps digitales: no inyectar fotos stock; el hero debe ser mockup JSX.
   if (
     prefersProductMockupHero(instruction) &&
+    !isShoeThemedInstruction(`${instruction}\n${source}`) &&
     !isPaintThemedInstruction(`${instruction}\n${source}`)
   ) {
     return source;
@@ -199,6 +238,7 @@ export function applyPicsumFallbacksInSource(
       return `${pre}${q}${url}${q})`;
     },
   );
+  out = rewriteShoeThemeMediaUrls(out, instruction);
   out = rewritePaintThemeMediaUrls(out, instruction);
   return out;
 }
@@ -206,6 +246,9 @@ export function applyPicsumFallbacksInSource(
 /** Reparación completa para preview / post-proceso. */
 export function applyAllMediaRepairs(source: string, contextHint = ""): string {
   const repaired = repairCommonJsxSyntaxErrors(source);
+  if (isShoeThemedInstruction(`${contextHint}\n${repaired}`)) {
+    return applyPicsumFallbacksInSource(repaired, contextHint);
+  }
   if (
     prefersProductMockupHero(contextHint) &&
     !isPaintThemedInstruction(`${contextHint}\n${repaired}`)
