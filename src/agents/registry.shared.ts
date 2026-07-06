@@ -1,4 +1,5 @@
 import type { AgentType } from "@/tasks/types";
+import { buildGafcorePromptMasterBriefAppend } from "@/lib/gafcore-prompt-master-brief.shared";
 
 export type AgentCapability = {
   type: AgentType;
@@ -368,6 +369,7 @@ export function buildPromptMasterPromptAppend(instruction: string): string {
 
 export function buildProfessionalAgentPromptAppend(instruction: string): string {
   const skills = selectProfessionalSkills(instruction);
+  const promptMasterBrief = buildGafcorePromptMasterBriefAppend(instruction);
   const shoeCommerce = /\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/i.test(
     instruction,
   );
@@ -418,6 +420,7 @@ export function buildProfessionalAgentPromptAppend(instruction: string): string 
     ...agentLines,
     "Skills activas:",
     ...skillLines,
+    promptMasterBrief,
     "Protocolo obligatorio:",
     "1. Arquitecto: define pantallas, datos y flujo del usuario.",
     "2. UX/UI: convierte el brief en una experiencia visual especifica de la industria.",

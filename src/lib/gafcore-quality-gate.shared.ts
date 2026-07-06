@@ -1,9 +1,13 @@
 import type { ProjectValidationIssue } from "@/lib/gafcore-ai-validation.shared";
 import type { GafcoreDeliveredFile } from "@/lib/gafcore-chat-delivery.shared";
+import { buildGafcorePromptMasterBrief } from "@/lib/gafcore-prompt-master-brief.shared";
 
 type QualityIntent = {
+  buildQuality: boolean;
   commerce: boolean;
   shoes: boolean;
+  physicalProduct: boolean;
+  projectType: string;
 };
 
 function normalizeText(value: string): string {
@@ -15,6 +19,7 @@ function normalizeText(value: string): string {
 
 function detectQualityIntent(instruction: string): QualityIntent {
   const text = normalizeText(instruction);
+  const brief = buildGafcorePromptMasterBrief(instruction);
   const shoes = /\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/.test(
     text,
   );
@@ -23,7 +28,18 @@ function detectQualityIntent(instruction: string): QualityIntent {
     /\b(tienda|venta|vender|catalogo|producto|productos|carrito|checkout|precio|ecommerce|e-commerce|shop)\b/.test(
       text,
     );
-  return { commerce, shoes };
+  const buildQuality =
+    brief.projectType !== "generic" ||
+    /\b(haz|hazme|crea|crear|construye|construir|genera|generar|pagina|web|sitio|app|aplicacion|landing|dashboard|tienda|sistema|proyecto)\b/.test(
+      text,
+    );
+  return {
+    buildQuality,
+    commerce,
+    shoes,
+    physicalProduct: brief.physicalProduct,
+    projectType: brief.projectType,
+  };
 }
 
 function qualitySource(files: GafcoreDeliveredFile[]): string {
@@ -46,7 +62,7 @@ export function auditGafcoreDeliveryQuality(
   originalInstruction: string,
 ): ProjectValidationIssue[] {
   const intent = detectQualityIntent(originalInstruction);
-  if (!intent.commerce || files.length === 0) return [];
+  if (!intent.buildQuality || files.length === 0) return [];
 
   const source = qualitySource(files);
   const text = normalizeText(source);
@@ -56,13 +72,62 @@ export function auditGafcoreDeliveryQuality(
     issues.push({ severity: "error", category: "functional", file, message });
   };
 
-  if (/\b(producto|modelo|item|articulo|articulo)\s+[a-d1-9]\b/i.test(source)) {
-    add("La tienda usa productos genericos tipo Producto A/Modelo A; necesita nombres comerciales reales del pedido.");
+  if (/\b(producto|modelo|item|articulo|feature|servicio|service|card|plan|proyecto)\s+[a-d1-9]\b/i.test(source)) {
+    add("La entrega usa nombres genericos tipo Producto A/Servicio 1/Feature 1; necesita nombres reales y especificos del pedido.");
   }
 
-  if (/lorem ipsum|placeholder|coming soon|imagen pendiente|nombre del producto/i.test(text)) {
+  if (/lorem ipsum|placeholder|coming soon|imagen pendiente|nombre del producto|your company|acme|demo company|example company/i.test(text)) {
     add("La entrega contiene placeholders visibles; debe parecer un negocio listo, no una demo.");
   }
+
+  const hasRandomImages = /picsum\.photos|placehold\.co|via\.placeholder|unsplash\.it|source\.unsplash\.com/i.test(
+    source,
+  );
+  const hasLandscapeTerms = hasAny(text, [
+    /\bpaisaje/,
+    /\blandscape/,
+    /\bmontana/,
+    /\bmountain/,
+    /\bwaterfall/,
+    /\bcascada/,
+    /\bplaya\b/,
+    /\bbeach\b/,
+  ]);
+
+  if ((intent.physicalProduct || intent.commerce || intent.projectType === "restaurant") && (hasRandomImages || hasLandscapeTerms)) {
+    add("Las imagenes no corresponden al producto/industria; elimina placeholders, picsum o paisajes aleatorios.");
+  }
+
+  const needsOperation = /dashboard|business-app|mobile-app|booking|marketplace/.test(intent.projectType);
+  const hasInteractiveCode = hasAny(source, [
+    /\bonClick\s*=/,
+    /\bonSubmit\s*=/,
+    /\buseState\b/,
+    /\blocalStorage\b/,
+    /\bfilter\s*\(/,
+    /\bset[A-Z][A-Za-z0-9_]*\s*\(/,
+  ]);
+  if (needsOperation && !hasInteractiveCode) {
+    add("El proyecto operativo no tiene interacciones reales; necesita estado, handlers, filtros/formularios o persistencia demo.");
+  }
+
+  const needsCta = /landing|saas|restaurant|ecommerce|marketplace|portfolio/.test(intent.projectType);
+  const hasCta = hasAny(text, [
+    /\bcta\b/,
+    /\bcontacto\b/,
+    /\breserv/,
+    /\bcompr/,
+    /\bagregar/,
+    /\bsolicitar/,
+    /\bempezar/,
+    /\bbutton\b/,
+    /\bhref=/,
+  ]);
+  if (needsCta && !hasCta) {
+    add("Falta una accion principal clara; la experiencia debe tener CTA o flujo visible.");
+  }
+
+  if (!intent.commerce) return issues;
 
   const hasCart = hasAny(text, [
     /\bcarrito\b/,
@@ -103,20 +168,6 @@ export function auditGafcoreDeliveryQuality(
     /\brating/,
     /\bestrella/,
   ]);
-  const hasRandomImages = /picsum\.photos|placehold\.co|via\.placeholder|unsplash\.it|source\.unsplash\.com/i.test(
-    source,
-  );
-  const hasLandscapeTerms = hasAny(text, [
-    /\bpaisaje/,
-    /\blandscape/,
-    /\bmontana/,
-    /\bmountain/,
-    /\bwaterfall/,
-    /\bcascada/,
-    /\bplaya\b/,
-    /\bbeach\b/,
-  ]);
-
   if (!hasShoeCopy) {
     add("El contenido no habla claramente de tenis/calzado aunque el pedido lo exige.");
   }
@@ -143,8 +194,10 @@ export function buildQualityFixInstruction(
     "Tu entrega compila, pero no cumple la calidad visual/operativa solicitada.",
     "Corrige estos puntos antes de responder con files completos:",
     ...issues.map((issue) => `- ${issue.file}: ${issue.message}`),
-    "Para tienda de tenis/calzado entrega una experiencia tipo e-commerce profesional: hero especifico, productos reales, tallas, colores, filtros, carrito con total, reviews/rating, envio/devoluciones y responsive.",
-    "Prohibido Producto A/Modelo A/Item 1, placeholders, picsum.photos, paisajes o imagenes aleatorias.",
+    "Entrega una experiencia profesional completa segun el tipo de proyecto: industria clara, layout premium, copy especifico, interacciones reales, responsive y feedback visible.",
+    "Si es e-commerce/producto: catalogo especifico, precios, variantes, filtros, carrito/seleccion, confianza comercial e imagenes coherentes con el producto.",
+    "Si es dashboard/app operativa: navegacion, datos demo, filtros/formularios, estado, handlers y acciones repetibles.",
+    "Prohibido Producto A/Modelo A/Servicio 1/Feature 1, placeholders, Acme, Lorem ipsum, picsum.photos, paisajes o imagenes aleatorias.",
     'Responde SOLO JSON { "reply": "...", "files": [...] } con App.tsx completo y archivos necesarios.',
   ].join("\n");
 }
