@@ -12,6 +12,9 @@ import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 import { repairCommonJsxSyntaxErrors } from "@/lib/gafcore-media.shared";
 import { autoFixSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace } from "@/core/pipeline/file-merge.shared";
+import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
+import { createDeterministicBuildFallbackFiles } from "@/lib/gafcore-chat-delivery.shared";
+import { isSubstantiveBuildRequest } from "@/lib/gafcore-chat-intent.shared";
 import { enrichGafcoreMedia } from "@/lib/enrich-gafcore-media.functions";
 import { validateGafcoreSources } from "@/lib/gafcore-validate.functions";
 import { logClientWarn, logPipelineEvent, pipelineTraceMeta } from "@/lib/gafcore-client-logger";
@@ -157,7 +160,7 @@ export function useGafcoreFilePipeline({
       baseFiles: FileItem[],
       generated: Array<{ name: string; language?: string; content: string }>,
       userInstruction: string,
-      _userRaw: string,
+      userRaw: string,
       options: ApplyGenerationOptions,
     ): Promise<ApplyGenerationResult> => {
       const genProjectId = activeProjectIdRef.current ?? projectId ?? null;
@@ -260,6 +263,50 @@ export function useGafcoreFilePipeline({
           language: f.language ?? "typescript",
         }));
         transpile = await transpileValidate(merged);
+      }
+
+      if (!transpile.ok) {
+        const fallbackInstruction = (userRaw || userInstruction).trim();
+        if (isSubstantiveBuildRequest(fallbackInstruction)) {
+          const originalErrorCount = transpile.errors.length;
+          const fallbackFiles = ensureReactPackageJson(
+            createDeterministicBuildFallbackFiles(fallbackInstruction),
+          );
+          const healedFallback = healUntilStable(
+            fallbackFiles.map((f) => ({
+              name: f.name,
+              content: f.content,
+              language: f.language ?? "typescript",
+            })),
+          );
+          const fallbackMerged: FileItem[] = healedFallback.files.map((f) => ({
+            name: f.name,
+            content: f.content,
+            language: f.language ?? "typescript",
+          }));
+          const fallbackTranspile = await transpileValidate(fallbackMerged);
+          if (fallbackTranspile.ok) {
+            merged = fallbackMerged;
+            transpile = fallbackTranspile;
+            logPipelineEvent(
+              "warn",
+              "apply.clean-fallback",
+              pipelineTraceMeta(
+                {
+                  traceId: requestEpochRef.current,
+                  projectId: genProjectId,
+                  phase: "apply",
+                  pipelineRunId: pipelineRunIdRef.current,
+                },
+                {
+                  reason: "transpile_failed",
+                  originalErrors: originalErrorCount,
+                  fileCount: fallbackMerged.length,
+                },
+              ),
+            );
+          }
+        }
       }
 
       const applyBlocked = !transpile.ok;

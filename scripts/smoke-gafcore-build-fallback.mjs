@@ -55,6 +55,7 @@ if (!validation.ok) {
 }
 
 const chatPanel = readFileSync("src/components/ide/ChatPanel.tsx", "utf8");
+const filePipeline = readFileSync("src/hooks/useGafcoreFilePipeline.ts", "utf8");
 
 if (!chatPanel.includes("createDeterministicBuildFallbackFiles")) {
   throw new Error("ChatPanel is not wired to the deterministic build fallback");
@@ -79,6 +80,14 @@ if (
   !chatPanel.includes("fallback-error:")
 ) {
   throw new Error("ChatPanel does not fallback when the AI request fails before returning files");
+}
+
+if (
+  !filePipeline.includes("apply.clean-fallback") ||
+  !filePipeline.includes("ensureReactPackageJson(") ||
+  !filePipeline.includes("createDeterministicBuildFallbackFiles(fallbackInstruction)")
+) {
+  throw new Error("file pipeline does not rebuild a clean fallback workspace after transpile failure");
 }
 
 console.log("[smoke-build-fallback] OK");
