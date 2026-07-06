@@ -64,9 +64,19 @@ function fallbackServices(instruction: string): string[] {
   return ["Diseno profesional", "Conversion clara", "Contacto directo"];
 }
 
-function isShoeCommerceInstruction(instruction: string): boolean {
+function fallbackContextSource(contextFiles?: ProjFile[]): string {
+  if (!contextFiles?.length) return "";
+  return contextFiles
+    .filter((file) => /\.(tsx|jsx|ts|js|html|css)$/i.test(file.name))
+    .map((file) => `\n/* ${file.name} */\n${file.content}`)
+    .join("\n")
+    .slice(0, 60_000);
+}
+
+function isShoeCommerceInstruction(instruction: string, contextFiles?: ProjFile[]): boolean {
+  const source = `${instruction}\n${fallbackContextSource(contextFiles)}`;
   return /\b(calzado|tenis|zapato|zapatos|zapatilla|zapatillas|sneaker|sneakers|shoe|shoes)\b/i.test(
-    instruction,
+    source,
   );
 }
 
@@ -397,8 +407,9 @@ export default function App() {
 
 export function createDeterministicBuildFallbackFiles(
   instruction: string,
+  contextFiles: ProjFile[] = [],
 ): GafcoreDeliveredFile[] {
-  if (isShoeCommerceInstruction(instruction)) {
+  if (isShoeCommerceInstruction(instruction, contextFiles)) {
     return createShoeCommerceFallbackFiles();
   }
   const title = fallbackTitle(instruction);
@@ -626,7 +637,7 @@ export function finalizeGafcoreBuildDelivery(
   }
 
   if (shouldBootstrapBuildDelivery(instruction, contextFiles, files, unwrapped.reply)) {
-    files = createDeterministicBuildFallbackFiles(instruction);
+    files = createDeterministicBuildFallbackFiles(instruction, contextFiles);
     source = "template_bootstrap";
     usedFallback = true;
     files = ensureReactPackageJson(files);

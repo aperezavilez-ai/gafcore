@@ -67,6 +67,29 @@ if (!goodGate.ok) {
   );
 }
 
+const contextualFallbackFiles = createDeterministicBuildFallbackFiles(
+  "Agrega beneficios, registro y una hero mas profesional",
+  badFiles,
+);
+const contextualApp = contextualFallbackFiles.find((file) => /^app\.tsx$/i.test(file.name))?.content ?? "";
+if (!/SneakerLab Pro|Registro VIP|Carrito activo|Datos del negocio/.test(contextualApp)) {
+  throw new Error("fallback contextual no reconstruyo una tienda de tenis completa");
+}
+if (/GafCore|Modelo A|Modelo B|picsum/i.test(contextualApp)) {
+  throw new Error("fallback contextual conservo branding/placeholders del proyecto malo");
+}
+const contextualGate = await gateDeliveredFiles(
+  badFiles,
+  contextualFallbackFiles,
+  "Agrega beneficios, registro y una hero mas profesional",
+);
+if (!contextualGate.ok) {
+  throw new Error(
+    "fallback contextual de tenis no paso quality gate: " +
+      contextualGate.issues.map((issue) => issue.message).join(" | "),
+  );
+}
+
 const build = await validateGafcoreProjectCore(
   goodGate.files.map((file) => ({ name: file.name, content: file.content })),
 );

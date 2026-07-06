@@ -3144,7 +3144,10 @@ export function ChatPanel({
           !reviewOnly &&
           isSubstantiveBuildRequest(fallbackInstruction)
         ) {
-          filesToApply = createDeterministicBuildFallbackFiles(fallbackInstruction);
+          filesToApply = createDeterministicBuildFallbackFiles(
+            fallbackInstruction,
+            buildContextFiles,
+          );
           generationValidationBlocked = false;
           serverDeliveredBuild = true;
           usedClientBuildFallback = true;
@@ -3200,7 +3203,10 @@ export function ChatPanel({
           });
           const fallbackBatch = await applyGenerationFiles(
             buildContextFiles,
-            createDeterministicBuildFallbackFiles(raw || coreText || instruction),
+            createDeterministicBuildFallbackFiles(
+              raw || coreText || instruction,
+              buildContextFiles,
+            ),
             instruction,
             raw,
             {
@@ -3454,7 +3460,10 @@ export function ChatPanel({
               });
               const fallbackBatch = await applyGenerationFiles(
                 buildContextFiles,
-                createDeterministicBuildFallbackFiles(fallbackInstruction),
+                createDeterministicBuildFallbackFiles(
+                  fallbackInstruction,
+                  buildContextFiles,
+                ),
                 instruction,
                 raw,
                 {

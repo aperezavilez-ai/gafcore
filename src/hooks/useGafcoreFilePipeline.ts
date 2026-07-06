@@ -270,7 +270,7 @@ export function useGafcoreFilePipeline({
         if (isSubstantiveBuildRequest(fallbackInstruction)) {
           const originalErrorCount = transpile.errors.length;
           const fallbackFiles = ensureReactPackageJson(
-            createDeterministicBuildFallbackFiles(fallbackInstruction),
+            createDeterministicBuildFallbackFiles(fallbackInstruction, baseFiles),
           );
           const healedFallback = healUntilStable(
             fallbackFiles.map((f) => ({

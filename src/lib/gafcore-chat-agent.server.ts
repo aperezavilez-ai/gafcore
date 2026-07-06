@@ -74,7 +74,10 @@ async function tryFallbackBuild(input: {
   attempts: number;
 }): Promise<AgentChatRunResult | null> {
   if (!isSubstantiveBuildRequest(input.instruction)) return null;
-  const fallbackFiles = createDeterministicBuildFallbackFiles(input.instruction);
+  const fallbackFiles = createDeterministicBuildFallbackFiles(
+    input.instruction,
+    input.contextFiles,
+  );
   const gate = await gateDeliveredFiles(input.contextFiles, fallbackFiles, input.instruction);
   if (!gate.ok) return null;
   return {

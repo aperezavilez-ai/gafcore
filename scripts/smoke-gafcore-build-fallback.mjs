@@ -85,7 +85,7 @@ if (
 if (
   !filePipeline.includes("apply.clean-fallback") ||
   !filePipeline.includes("ensureReactPackageJson(") ||
-  !filePipeline.includes("createDeterministicBuildFallbackFiles(fallbackInstruction)")
+  !filePipeline.includes("createDeterministicBuildFallbackFiles(fallbackInstruction, baseFiles)")
 ) {
   throw new Error("file pipeline does not rebuild a clean fallback workspace after transpile failure");
 }
