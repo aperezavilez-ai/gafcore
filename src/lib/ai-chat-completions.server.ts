@@ -517,6 +517,13 @@ async function callRoute(route: ResolvedRoute, body: ChatCompletionsBody): Promi
  */
 export async function postChatCompletions(body: ChatCompletionsBody): Promise<Response> {
   const routes = await resolveAllAiRoutesForRequest(body.model);
+  console.error(
+    "GAFCORE_DEBUG_ROUTES",
+    JSON.stringify({
+      requestedModel: body.model,
+      routes: routes.map((r) => ({ provider: r.provider, url: r.url, model: r.modelSlug })),
+    }),
+  );
   if (routes.length === 0) {
     return new Response(JSON.stringify({ error: "ai_not_configured" }), {
       status: 500,
@@ -528,6 +535,10 @@ export async function postChatCompletions(body: ChatCompletionsBody): Promise<Re
   for (let i = 0; i < routes.length; i++) {
     const route = routes[i];
     const res = await callRoute(route, body);
+    console.error(
+      "GAFCORE_DEBUG_ATTEMPT",
+      JSON.stringify({ index: i, provider: route.provider, url: route.url, status: res.status, ok: res.ok }),
+    );
     if (res.ok) {
       // En el primer intento exitoso devolvemos directo (preserva stream).
       return res;

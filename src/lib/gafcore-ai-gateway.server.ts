@@ -43,6 +43,14 @@ export function getGafcoreAiGateway(): GafcoreAiGateway {
   const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
   const ui = process.env.AI_MODEL_UI?.trim() || defaults.ui;
   const support = process.env.AI_SUPPORT_MODEL?.trim() || fast;
+  console.error(
+    "GAFCORE_DEBUG_GATEWAY",
+    JSON.stringify({
+      defaultConfigUrl: config.url,
+      envAiModelDeep: process.env.AI_MODEL_DEEP ?? null,
+      resolvedModels: { fast, deep, ui, support },
+    }),
+  );
   return { config, models: { fast, deep, support, ui } };
 }
 
