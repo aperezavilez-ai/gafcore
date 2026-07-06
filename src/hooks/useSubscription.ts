@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/lib/gafcore-supabase-client-proxy";
 import { getStripeEnvironment } from "@/lib/stripe";
 import { logClientWarn } from "@/lib/gafcore-client-logger";
+import { getMyGafcoreAccountStatus } from "@/lib/server-fns/admin.functions";
 
 export interface Subscription {
   id: string;
@@ -51,6 +53,7 @@ export function useSubscription(userId: string | undefined) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const getAccountStatus = useServerFn(getMyGafcoreAccountStatus);
 
   const env = getStripeEnvironment();
 
@@ -65,6 +68,16 @@ export function useSubscription(userId: string | undefined) {
     let cancelled = false;
 
     async function resolveIsAdmin(uid: string): Promise<boolean> {
+      try {
+        const status = await getAccountStatus();
+        if (status?.isAdmin === true) return true;
+      } catch (err) {
+        logClientWarn(
+          "useSubscription account-status",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+
       const { data: rpcAdmin, error: rpcErr } = await supabase.rpc("has_role", {
         _user_id: uid,
         _role: "admin",
@@ -150,7 +163,7 @@ export function useSubscription(userId: string | undefined) {
       window.removeEventListener("gafcore:credits-applied", onExternalRefresh);
       window.removeEventListener("gafcore:credits-refresh", onExternalRefresh);
     };
-  }, [userId, env]);
+  }, [userId, env, getAccountStatus]);
 
   const subActive = !!subscription && (
     (["active", "trialing", "past_due"].includes(subscription.status) &&

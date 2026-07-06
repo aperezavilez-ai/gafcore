@@ -327,22 +327,23 @@ function describeGafcoreStreamFailure(message: string): string | null {
   return null;
 }
 
-const CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-/** Data URL en `project_files`; debe caber en el presupuesto de contexto del modelo (truncado por archivo ~14k). */
-const CHAT_IMAGE_DATA_URL_MAX_CHARS = 11_000;
+const CHAT_IMAGE_MAX_BYTES = 16 * 1024 * 1024;
+/** Data URL de referencia visual. `extractVisionImageParts` procesa hasta ~280k chars. */
+const CHAT_IMAGE_DATA_URL_MAX_CHARS = 180_000;
+const CHAT_IMAGE_DATA_URL_HARD_MAX_CHARS = 260_000;
 
 function isProbablyImageFile(f: File): boolean {
   if (f.type.startsWith("image/")) return true;
   return /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(f.name);
 }
 
-/** PNG/WebP/GIF/SVG suelen llevar transparencia — no convertir a JPEG. */
+/** Solo preservamos alpha en formatos donde convertir rompe demasiado el recurso. Capturas PNG se optimizan como JPG. */
 function fileLikelyHasAlpha(file: File): boolean {
   const t = (file.type || "").toLowerCase();
-  if (t === "image/png" || t === "image/webp" || t === "image/gif" || t === "image/svg+xml") {
+  if (t === "image/gif" || t === "image/svg+xml") {
     return true;
   }
-  return /\.(png|webp|gif|svg)$/i.test(file.name);
+  return /\.(gif|svg)$/i.test(file.name);
 }
 
 function dataUrlFromImageFileViaCanvas(
@@ -413,15 +414,15 @@ async function compressChatImageFile(
     return { dataUrl, ext: "png" };
   }
 
-  let q = 0.82;
-  let edge = 1280;
-  for (let attempt = 0; attempt < 7; attempt++) {
+  let q = 0.78;
+  let edge = 1600;
+  for (let attempt = 0; attempt < 10; attempt++) {
     const dataUrl = await dataUrlFromImageFileViaCanvas(file, edge, q);
     if (dataUrl.length <= CHAT_IMAGE_DATA_URL_MAX_CHARS) return { dataUrl, ext: "jpg" };
-    q = Math.max(0.38, q - 0.1);
-    edge = Math.round(edge * 0.78);
+    q = Math.max(0.3, q - 0.08);
+    edge = Math.round(edge * 0.72);
   }
-  const dataUrl = await dataUrlFromImageFileViaCanvas(file, 512, 0.38);
+  const dataUrl = await dataUrlFromImageFileViaCanvas(file, 360, 0.3);
   return { dataUrl, ext: "jpg" };
 }
 
@@ -1042,12 +1043,12 @@ export function ChatPanel({
       return;
     }
     if (file.size > CHAT_IMAGE_MAX_BYTES) {
-      toast.error("La imagen supera 8 MB. Reduce el tamaño o comprímela.");
+      toast.error("La imagen supera 16 MB. Reduce el tamaño o comprímela.");
       return;
     }
     try {
       const { dataUrl, ext } = await compressChatImageFile(file);
-      if (dataUrl.length > CHAT_IMAGE_DATA_URL_MAX_CHARS + 500) {
+      if (dataUrl.length > CHAT_IMAGE_DATA_URL_HARD_MAX_CHARS) {
         toast.error(
           "La imagen sigue siendo demasiado grande tras comprimir. Prueba otra más pequeña.",
         );

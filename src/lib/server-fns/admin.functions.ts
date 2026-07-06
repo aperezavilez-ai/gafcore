@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { isGafcoreAdminUser } from "@/lib/gafcore-admin-role.server";
 
 export const claimMasterAccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -34,4 +35,22 @@ export const getMyRoles = createServerFn({ method: "GET" })
     const { data, error } = await supabase.from("user_roles").select("role");
     if (error) throw new Error(error.message);
     return { roles: (data ?? []).map((r) => r.role as string) };
+  });
+
+export const getMyGafcoreAccountStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const isAdmin = await isGafcoreAdminUser(context.userId);
+    const { data: credits } = await supabaseAdmin
+      .from("user_credits")
+      .select("balance, monthly_allowance, daily_limit")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+
+    return {
+      isAdmin,
+      balance: Number(credits?.balance ?? 0),
+      monthlyAllowance: Number(credits?.monthly_allowance ?? 0),
+      dailyLimit: Number(credits?.daily_limit ?? 0),
+    };
   });
