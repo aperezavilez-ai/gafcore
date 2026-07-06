@@ -282,6 +282,8 @@ export function buildGafcorePromptMasterBriefAppend(instruction: string): string
     `Reglas de media/imagenes: ${brief.mediaRules.join(" | ")}`,
     "Restricciones:",
     "- Construir una experiencia completa en el preview, no una maqueta decorativa.",
+    "- No usar GafCore, el logo de GafCore ni branding de la plataforma dentro del proyecto generado; inventa una marca coherente con el negocio del usuario si no dio una.",
+    "- Si el pedido es una pagina de venta o producto, construir pagina completa: hero comercial, propuesta de valor, catalogo/servicios, confianza, datos del negocio/contacto, registro o captura de lead, footer y acciones reales.",
     "- No agregar auth, base de datos, pagos reales ni integraciones externas salvo que el usuario lo pida explicitamente.",
     "- No tocar Supabase, variables, login, deploy ni infraestructura para un build visual/funcional normal.",
     "- Si falta un dato, asumir una opcion profesional coherente y seguir construyendo.",

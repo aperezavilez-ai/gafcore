@@ -61,10 +61,10 @@ export function auditGafcoreDeliveryQuality(
   files: GafcoreDeliveredFile[],
   originalInstruction: string,
 ): ProjectValidationIssue[] {
-  const intent = detectQualityIntent(originalInstruction);
+  const source = qualitySource(files);
+  const intent = detectQualityIntent(`${originalInstruction}\n${source}`);
   if (!intent.buildQuality || files.length === 0) return [];
 
-  const source = qualitySource(files);
   const text = normalizeText(source);
   const file = primaryFile(files);
   const issues: ProjectValidationIssue[] = [];
@@ -76,8 +76,12 @@ export function auditGafcoreDeliveryQuality(
     add("La entrega usa nombres genericos tipo Producto A/Servicio 1/Feature 1; necesita nombres reales y especificos del pedido.");
   }
 
-  if (/lorem ipsum|placeholder|coming soon|imagen pendiente|nombre del producto|your company|acme|demo company|example company/i.test(text)) {
+  if (/lorem ipsum|coming soon|imagen pendiente|nombre del producto|your company|acme|demo company|example company/i.test(text)) {
     add("La entrega contiene placeholders visibles; debe parecer un negocio listo, no una demo.");
+  }
+
+  if (/\bgafcore\b|gafcore-logo|GafCoreLogo/i.test(source)) {
+    add("El proyecto generado no debe usar el logo o marca GafCore como marca del negocio del cliente.");
   }
 
   const hasRandomImages = /picsum\.photos|placehold\.co|via\.placeholder|unsplash\.it|source\.unsplash\.com/i.test(
@@ -142,6 +146,43 @@ export function auditGafcoreDeliveryQuality(
 
   if (!hasCatalog || !hasPrice || !hasCart) {
     add("El e-commerce no esta completo: debe incluir catalogo, precios y carrito/acciones de compra funcionales.");
+  }
+
+  const hasHero = hasAny(text, [
+    /\bhero\b/,
+    /\bnueva temporada\b/,
+    /\bcoleccion/,
+    /\boferta\b/,
+    /\bcompra/,
+    /\btienda\b/,
+    /\bventa\b/,
+  ]);
+  const hasBusinessInfo = hasAny(text, [
+    /\bcontacto\b/,
+    /\btelefono\b/,
+    /\btel\b/,
+    /\bemail\b/,
+    /\bcorreo\b/,
+    /\bdireccion\b/,
+    /\bubicacion\b/,
+    /\bhorario\b/,
+    /\bwhatsapp\b/,
+  ]);
+  const hasTrustOrRegister = hasAny(text, [
+    /\benvio/,
+    /\bdevolucion/,
+    /\bgarantia/,
+    /\breview/,
+    /\brating/,
+    /\bestrella/,
+    /\bnewsletter/,
+    /\bregistro\b/,
+    /\bcupon\b/,
+    /\bdescuento\b/,
+  ]);
+
+  if (!hasHero || !hasBusinessInfo || !hasTrustOrRegister) {
+    add("La pagina de venta esta incompleta: necesita hero comercial, datos del negocio/contacto y seccion de confianza o registro.");
   }
 
   if (!intent.shoes) return issues;

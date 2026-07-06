@@ -129,6 +129,8 @@ export default function App() {
     }
   });
   const [selectedSize, setSelectedSize] = useState("27");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [registered, setRegistered] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("sneakerlab-cart", JSON.stringify(cart));
@@ -154,6 +156,12 @@ export default function App() {
 
   const clearCart = () => setCart({});
 
+  const registerLead = (event) => {
+    event.preventDefault();
+    if (!leadEmail.trim()) return;
+    setRegistered(true);
+  };
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/90 backdrop-blur">
@@ -162,28 +170,47 @@ export default function App() {
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-lime-300">Tienda de tenis</p>
             <h1 className="text-xl font-black">SneakerLab Pro</h1>
           </div>
+          <nav className="hidden items-center gap-6 text-sm font-bold text-zinc-300 md:flex">
+            <a href="#catalogo" className="hover:text-white">Catalogo</a>
+            <a href="#registro" className="hover:text-white">Registro VIP</a>
+            <a href="#contacto" className="hover:text-white">Contacto</a>
+          </nav>
           <div className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold">
             Carrito: {totalItems} pares · \${total.toLocaleString("es-MX")} MXN
           </div>
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-7xl gap-10 px-5 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+      <section className="mx-auto grid min-h-[calc(100vh-76px)] max-w-7xl gap-10 px-5 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-lime-300">Nueva temporada</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.28em] text-lime-300">Nueva temporada 2026</p>
           <h2 className="mt-4 max-w-3xl text-5xl font-black leading-tight md:text-7xl">
-            Tenis listos para vender desde el primer clic.
+            Tenis premium para correr, vender y conquistar la calle.
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-300">
-            Catalogo premium con tallas, colores, reviews, envio rapido y carrito persistente para una experiencia de compra real.
+            SneakerLab Pro combina colecciones urbanas, tallas reales, envio express y una compra rapida para clientes que buscan estilo sin complicaciones.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a href="#catalogo" className="rounded-full bg-lime-300 px-6 py-3 font-black text-zinc-950 hover:bg-lime-200">
               Comprar tenis
             </a>
-            <a href="#garantia" className="rounded-full border border-white/15 px-6 py-3 font-bold hover:bg-white/10">
-              Envio y devoluciones
+            <a href="#registro" className="rounded-full border border-white/15 px-6 py-3 font-bold hover:bg-white/10">
+              Obtener cupon VIP
             </a>
+          </div>
+          <div className="mt-10 grid max-w-xl grid-cols-3 gap-3 text-center">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <strong className="text-2xl text-lime-300">24h</strong>
+              <p className="mt-1 text-xs text-zinc-400">envio local</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <strong className="text-2xl text-lime-300">4.8</strong>
+              <p className="mt-1 text-xs text-zinc-400">rating promedio</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <strong className="text-2xl text-lime-300">30d</strong>
+              <p className="mt-1 text-xs text-zinc-400">devoluciones</p>
+            </div>
           </div>
         </div>
         <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/5 shadow-2xl">
@@ -263,6 +290,61 @@ export default function App() {
           </div>
         ))}
       </section>
+
+      <section id="registro" className="border-y border-white/10 bg-lime-300 px-5 py-14 text-zinc-950">
+        <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1fr_0.9fr] md:items-center">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.24em]">Registro VIP</p>
+            <h2 className="mt-3 text-4xl font-black md:text-6xl">Recibe drops, tallas nuevas y cupones antes que todos.</h2>
+            <p className="mt-4 max-w-2xl text-lg font-semibold text-zinc-800">
+              Frase de marca: pisa fuerte, compra rapido y estrena sin esperar.
+            </p>
+          </div>
+          <form onSubmit={registerLead} className="rounded-2xl bg-zinc-950 p-5 text-white shadow-2xl">
+            <label className="text-sm font-bold text-zinc-300" htmlFor="vip-email">Correo para promociones</label>
+            <input
+              id="vip-email"
+              value={leadEmail}
+              onChange={(event) => setLeadEmail(event.target.value)}
+              placeholder="cliente@email.com"
+              className="mt-3 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-zinc-950"
+            />
+            <button type="submit" className="mt-4 w-full rounded-xl bg-lime-300 px-5 py-3 font-black text-zinc-950 hover:bg-lime-200">
+              Guardar registro
+            </button>
+            {registered ? <p className="mt-3 text-sm font-bold text-lime-300">Registro guardado. Tu cupon VIP esta activo.</p> : null}
+          </form>
+        </div>
+      </section>
+
+      <section id="contacto" className="mx-auto grid max-w-7xl gap-5 px-5 py-14 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 md:col-span-2">
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-lime-300">Datos del negocio</p>
+          <h2 className="mt-3 text-3xl font-black">SneakerLab Pro Store</h2>
+          <p className="mt-3 max-w-2xl leading-7 text-zinc-300">
+            Showroom urbano con asesoria de talla, cambios sencillos y seleccion curada para running, lifestyle y streetwear.
+          </p>
+          <div className="mt-6 grid gap-3 text-sm text-zinc-300 md:grid-cols-2">
+            <p><strong className="text-white">Direccion:</strong> Av. Central 248, Zona Centro</p>
+            <p><strong className="text-white">Telefono:</strong> +52 614 123 4567</p>
+            <p><strong className="text-white">Email:</strong> ventas@sneakerlab.mx</p>
+            <p><strong className="text-white">Horario:</strong> Lun-Sab 10:00 a 20:00</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-lime-300">Carrito activo</p>
+          <p className="mt-4 text-4xl font-black">{totalItems}</p>
+          <p className="mt-2 text-zinc-300">pares seleccionados</p>
+          <p className="mt-4 text-xl font-black">\${total.toLocaleString("es-MX")} MXN</p>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/10 px-5 py-8 text-sm text-zinc-400">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p className="font-bold text-white">SneakerLab Pro</p>
+          <p>Tenis premium, envio rapido y compras con confianza.</p>
+        </div>
+      </footer>
 
       {totalItems > 0 ? (
         <aside className="fixed bottom-4 left-1/2 z-30 w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-lime-300/40 bg-zinc-900 p-4 shadow-2xl">

@@ -35,9 +35,11 @@ const badFiles = [
     content: `export default function App() {
   const products = [
     { name: "Tenis Modelo A", price: 1200, image: "https://picsum.photos/seed/mountain/600/400" },
-    { name: "Tenis Modelo B", price: 1500, image: "https://picsum.photos/seed/waterfall/600/400" }
+    { name: "Tenis Modelo B", price: 1500, image: "https://picsum.photos/seed/waterfall/600/400" },
+    { name: "Tenis Modelo C", price: 1800, image: "https://picsum.photos/seed/shoe/600/400" },
+    { name: "Tenis Modelo D", price: 1600, image: "https://picsum.photos/seed/sneaker/600/400" }
   ];
-  return <main><h1>Catalogo de Tenis</h1>{products.map((p) => <article key={p.name}><img src={p.image} alt="paisaje" /><h2>{p.name}</h2><p>$ {p.price}</p></article>)}</main>;
+  return <main><img src="/gafcore-logo.png" alt="GafCore" /><h1>Catalogo de Tenis</h1>{products.map((p) => <article key={p.name}><img src={p.image} alt="paisaje" /><h2>{p.name}</h2><p>$ {p.price}</p><button>Añadir al carrito</button></article>)}</main>;
 }
 `,
   },
@@ -48,8 +50,13 @@ if (badGate.ok) {
   throw new Error("quality gate acepto una tienda de tenis generica con picsum");
 }
 const badText = badGate.issues.map((issue) => issue.message).join("\n");
-if (!/Producto A|Modelo A|picsum|imagenes/i.test(badText)) {
+if (!/Producto A|Modelo A|picsum|imagenes|GafCore|negocio/i.test(badText)) {
   throw new Error("quality gate no explico el problema de productos/imagenes genericas");
+}
+
+const editGate = await gateDeliveredFiles([], badFiles, "Diseña una hero section impactante");
+if (editGate.ok) {
+  throw new Error("quality gate acepto catalogo pobre cuando el prompt secundario era solo hero");
 }
 
 const fallbackFiles = createDeterministicBuildFallbackFiles(instruction);
