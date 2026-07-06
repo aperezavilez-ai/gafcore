@@ -11,6 +11,20 @@ const GREETING_RE =
 
 const THANKS_RE = /^(muchas\s+gracias|gracias|thanks)[\s!.?]*$/i;
 
+function normalizeIntentText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/aÃ±/gi, "an")
+    .replace(/Ã±/gi, "n")
+    .replace(/Ã¡/gi, "a")
+    .replace(/Ã©/gi, "e")
+    .replace(/Ã­/gi, "i")
+    .replace(/Ã³/gi, "o")
+    .replace(/Ãº/gi, "u")
+    .toLowerCase();
+}
+
 /** Saludo, agradecimiento o mensaje social sin pedido de código. */
 export function isConversationalOnly(text: string): boolean {
   const t = text.trim();
@@ -63,6 +77,12 @@ export function isSubstantiveBuildRequest(text: string): boolean {
   if (isReviewOrAnalysisRequest(text)) return false;
   const t = text.trim();
   if (t.length < 8) return false;
+  const n = normalizeIntentText(t);
+  if (
+    /\b(crea|crear|genera|generar|haz|hazme|monta|levanta|anade|agrega|modifica|cambia|mejora|optimiza|reconstruye|rehaz|aplica|construye|construir|desarrolla|implementa|landing|tienda|app|aplicacion|pagina|sitio|web|disena|imagen|hero|seccion|section|features|beneficios|iconos|grid|responsive|copy|persuasivo|catalogo|ofertas|colecciones|carrito|footer|newsletter|contacto|formulario|registro|proyecto|estudio|tatu|modulo|sistema|dashboard|saas|negocio|empresa|marca|restaurante|hotel|clinica|profesional)\b/i.test(n)
+  ) {
+    return true;
+  }
   return /crea|genera|haz|hazme|monta|levanta|añade|agrega|modifica|cambia|construye|construir|desarrolla|implementa|landing|tienda|app|aplicaci[oó]n|p[aá]gina|pagina|sitio|web|dise[ñn]|imagen|vuelo|viaje|formulario|registro|proyecto|estudio|tatu|m[oó]dulo|sistema|dashboard|saas|negocio|empresa|marca|restaurante|hotel|cl[ií]nica|profesional/i.test(
     t,
   );

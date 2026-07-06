@@ -222,6 +222,14 @@ export function auditGafcoreDeliveryQuality(
     add("Las imagenes no corresponden a calzado; elimina picsum/placeholders/paisajes y usa mockups o fotos de tenis.");
   }
 
+  const productNameMatches = source.match(/\b(Air|Street|Urban|Court|Retro|Skate|Cloud|Zoom|Suede|Superstar|Old Skool|Runner|Classic|Boost|Vapor)\b/gi) ?? [];
+  const hasOffers = hasAny(text, [/\boferta/, /\bdescuento/, /\btemporada/, /\bpromo/, /-\s?\d+\s?%/]);
+  const hasCollections = hasAny(text, [/\bcoleccion/, /\bcolecciones/, /\brunning\b/, /\bstreet/, /\bbasketball/, /\blifestyle/]);
+  const hasNewsletterFooter = hasAny(text, [/\bnewsletter/, /\bsuscrib/, /\bfooter\b/, /\bderechos reservados/, /\benlaces\b/]);
+  if (productNameMatches.length < 6 || !hasOffers || !hasCollections || !hasNewsletterFooter) {
+    add("Una tienda de tenis profesional debe parecer pagina completa tipo marketplace: catalogo amplio, ofertas, colecciones, beneficios, newsletter/contacto y footer.");
+  }
+
   return issues;
 }
 

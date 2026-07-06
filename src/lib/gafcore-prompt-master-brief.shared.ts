@@ -165,7 +165,7 @@ function detectEffects(text: string, projectType: GafcoreBriefType): string[] {
 
 function requiredSections(projectType: GafcoreBriefType, vertical: string): string[] {
   const baseByType: Record<GafcoreBriefType, string[]> = {
-    ecommerce: ["header con marca y carrito", "hero comercial", "catalogo/grid", "filtros/categorias", "beneficios de compra", "reviews", "CTA final"],
+    ecommerce: ["header con marca y carrito", "hero comercial", "catalogo amplio", "ofertas/descuentos", "colecciones/categorias", "beneficios de compra", "newsletter/contacto", "footer completo"],
     marketplace: ["header con busqueda", "hero marketplace", "categorias", "cards de vendedores/productos", "filtros", "flujo de contacto/compra", "confianza"],
     restaurant: ["hero gastronomico", "menu destacado", "combos/populares", "reservas o pedido", "ubicacion/contacto", "reviews"],
     booking: ["hero de servicio", "selector de servicio", "fecha/hora", "datos del cliente", "confirmacion", "listado de citas demo"],
@@ -235,7 +235,7 @@ function qualityChecks(projectType: GafcoreBriefType, physicalProduct: boolean):
     "todos los CTAs principales hacen algo visible",
   ];
   if (projectType === "ecommerce" || physicalProduct) {
-    checks.push("catalogo con productos especificos, precios, variantes y accion de compra");
+    checks.push("catalogo amplio con productos especificos, precios, descuentos/ofertas, colecciones, beneficios, newsletter/contacto, footer y accion de compra");
   }
   if (projectType === "dashboard" || projectType === "business-app") {
     checks.push("flujo operativo repetible con tablas/listas, filtros y estados");
@@ -283,7 +283,8 @@ export function buildGafcorePromptMasterBriefAppend(instruction: string): string
     "Restricciones:",
     "- Construir una experiencia completa en el preview, no una maqueta decorativa.",
     "- No usar GafCore, el logo de GafCore ni branding de la plataforma dentro del proyecto generado; inventa una marca coherente con el negocio del usuario si no dio una.",
-    "- Si el pedido es una pagina de venta o producto, construir pagina completa: hero comercial, propuesta de valor, catalogo/servicios, confianza, datos del negocio/contacto, registro o captura de lead, footer y acciones reales.",
+    "- Si el pedido es ecommerce/producto, construir una pagina completa tipo marketplace profesional: navbar, hero comercial, catalogo amplio, ofertas/descuentos, colecciones/categorias, beneficios, newsletter/contacto, footer y carrito/acciones reales.",
+    "- Para tiendas de tenis/calzado, el minimo aceptable es estilo SneakerZone/EditCore: productos con marca/nombre/precio/descuento/rating, fotos coherentes, secciones de ofertas, colecciones, beneficios, newsletter y footer.",
     "- No agregar auth, base de datos, pagos reales ni integraciones externas salvo que el usuario lo pida explicitamente.",
     "- No tocar Supabase, variables, login, deploy ni infraestructura para un build visual/funcional normal.",
     "- Si falta un dato, asumir una opcion profesional coherente y seguir construyendo.",

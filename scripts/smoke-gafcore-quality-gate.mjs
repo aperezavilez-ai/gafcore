@@ -2,6 +2,7 @@
 import { selectProfessionalSkills, buildProfessionalAgentPromptAppend } from "../src/agents/registry.shared.ts";
 import { gateDeliveredFiles } from "../src/lib/gafcore-chat-delivery-gate.shared.ts";
 import { createDeterministicBuildFallbackFiles } from "../src/lib/gafcore-chat-delivery.shared.ts";
+import { isSubstantiveBuildRequest } from "../src/lib/gafcore-chat-intent.shared.ts";
 import { validateGafcoreProjectCore } from "../src/lib/gafcore-validate.server.ts";
 
 const instruction = "hazme una pagina de venta de tenis";
@@ -59,6 +60,10 @@ if (editGate.ok) {
   throw new Error("quality gate acepto catalogo pobre cuando el prompt secundario era solo hero");
 }
 
+if (!isSubstantiveBuildRequest("Añade sección de features/beneficios con iconos, grid responsive y copy persuasivo.")) {
+  throw new Error("intent no reconocio pedido secundario con Añade/features/beneficios como build real");
+}
+
 const fallbackFiles = createDeterministicBuildFallbackFiles(instruction);
 const goodGate = await gateDeliveredFiles([], fallbackFiles, instruction);
 if (!goodGate.ok) {
@@ -68,12 +73,12 @@ if (!goodGate.ok) {
 }
 
 const contextualFallbackFiles = createDeterministicBuildFallbackFiles(
-  "Agrega beneficios, registro y una hero mas profesional",
+  "Añade sección de features/beneficios con iconos, grid responsive y copy persuasivo.",
   badFiles,
 );
 const contextualApp = contextualFallbackFiles.find((file) => /^app\.tsx$/i.test(file.name))?.content ?? "";
-if (!/SneakerLab Pro|Registro VIP|Carrito activo|Datos del negocio/.test(contextualApp)) {
-  throw new Error("fallback contextual no reconstruyo una tienda de tenis completa");
+if (!/SneakerZone|Ofertas de la semana|Colecciones|Envio Gratis|Suscribirme|Carrito/.test(contextualApp)) {
+  throw new Error("fallback contextual no reconstruyo una tienda de tenis completa tipo EditCore");
 }
 if (/GafCore|Modelo A|Modelo B|picsum/i.test(contextualApp)) {
   throw new Error("fallback contextual conservo branding/placeholders del proyecto malo");
@@ -81,7 +86,7 @@ if (/GafCore|Modelo A|Modelo B|picsum/i.test(contextualApp)) {
 const contextualGate = await gateDeliveredFiles(
   badFiles,
   contextualFallbackFiles,
-  "Agrega beneficios, registro y una hero mas profesional",
+  "Añade sección de features/beneficios con iconos, grid responsive y copy persuasivo.",
 );
 if (!contextualGate.ok) {
   throw new Error(
