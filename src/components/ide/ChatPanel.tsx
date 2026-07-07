@@ -612,6 +612,12 @@ export function ChatPanel({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [streamChars, setStreamChars] = useState<number | null>(null);
   const [streamProgress, setStreamProgress] = useState<string | null>(null);
+  const setBuildProgress = useCallback((message: string | null) => {
+    setStreamProgress(message?.trim() || null);
+    if (message?.trim()) {
+      setPipelineStatus(message.trim());
+    }
+  }, []);
   const [pinConventionOpen, setPinConventionOpen] = useState(false);
   const [pinConventionBody, setPinConventionBody] = useState("");
   /** Invalida respuestas tardías si el usuario envía otra cosa o pulsa detener. */
@@ -2146,7 +2152,7 @@ export function ChatPanel({
         ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
         deepMode: opts?.forceFastModel ? false : deepModel,
       }),
-      signal: ac.signal,
+      signal: ac,
     });
     const ct = res.headers.get("content-type") || "";
     if (!res.ok || ct.includes("text/html")) {
@@ -2226,7 +2232,7 @@ export function ChatPanel({
         ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
         deepMode: opts?.forceFastModel ? false : deepModel,
       }),
-      signal: ac.signal,
+      signal: ac,
     });
     const ct = res.headers.get("content-type") || "";
     if (!res.ok || ct.includes("text/html")) {
@@ -2261,16 +2267,19 @@ export function ChatPanel({
     try {
       finalEvent = await readGafcoreChatStream(
         res,
-        ac.signal,
+        ac,
         (charLen) => {
           setStreamChars(charLen);
-          setStreamProgress((current) => describeStreamingProgress(charLen, current));
+          setStreamProgress((current) => {
+            const next = describeStreamingProgress(charLen, current);
+            setPipelineStatus(next);
+            return next;
+          });
         },
-        (message) => setStreamProgress(message),
+        (message) => setBuildProgress(message),
       );
     } finally {
       setStreamChars(null);
-      setStreamProgress(null);
     }
 
     if (!finalEvent || finalEvent.error) {
@@ -3240,7 +3249,11 @@ export function ChatPanel({
       })();
     }
     setStreamChars(null);
-    setStreamProgress(null);
+    setBuildProgress(
+      effectiveBuild
+        ? "Leyendo tu idea y preparando la estructura"
+        : "Preparando respuesta",
+    );
     const ac = new AbortController();
     abortControllerRef.current = ac;
     const requestTimeoutMs = fastWelcomeBuild ? 90_000 : CHAT_REQUEST_TIMEOUT_MS;
@@ -3374,9 +3387,13 @@ export function ChatPanel({
       scrollChatToBottomSoon("auto");
       void persistMessage("assistant", replyText);
       chatReplyDelivered = true;
-      setLoading(false);
       setStreamChars(null);
-      setStreamProgress(null);
+      if (effectiveBuild) {
+        setBuildProgress("Preparando archivos para el area de trabajo");
+      } else {
+        setBuildProgress(null);
+        setLoading(false);
+      }
 
       if (effectiveBuild) {
         const sbPhase = result.safeBuild?.phase;
@@ -3439,6 +3456,7 @@ export function ChatPanel({
       }
 
       if (filesToApply.length > 0 && effectiveBuild) {
+        setBuildProgress("Aplicando el diseno generado al preview");
         const runFunctional = effectiveBuild && !visualEditOn && !fastWelcomeBuild;
         let { merged, issues, blocked: applyBlocked } = await applyGenerationFiles(
           buildContextFiles,
@@ -3484,6 +3502,7 @@ export function ChatPanel({
         }
 
         if (applyBlocked) {
+          setBuildProgress("El build necesita otra correccion");
           toast.error(
             "El código generado no compiló. Pulsa Construir de nuevo o pide una versión más simple.",
             { duration: 12_000 },
@@ -3507,6 +3526,7 @@ export function ChatPanel({
             offerGenerationRollback("El build no reemplazó la plantilla de bienvenida.");
           }
         } else if (!applyBlocked) {
+          setBuildProgress("Proyecto aplicado al area de trabajo");
           toast.success("Proyecto aplicado al preview", { duration: 5000 });
           setLastError(null);
         }
@@ -3779,11 +3799,13 @@ export function ChatPanel({
       window.clearTimeout(chatTimeoutId);
       abortControllerRef.current = null;
       setStreamChars(null);
-      setStreamProgress(null);
       sendInFlightRef.current = false;
       if (myEpoch === requestEpochRef.current) {
         setLoading(false);
         setHealthPhase(null);
+        window.setTimeout(() => {
+          if (requestEpochRef.current === myEpoch) setBuildProgress(null);
+        }, 1800);
         if (scheduleGuideAfterBuild && effectiveBuild && !guideAutopilotRef.current.paused) {
           const advanceGate = evaluateCoreOrchestrationGate({
             blockingError: lastErrorRef.current,
@@ -3817,6 +3839,29 @@ export function ChatPanel({
       cancelPending: false,
     });
   }, [onWorkflowStripChange]);
+
+  useEffect(() => {
+    if (!loading || !healthPhase) return;
+    const steps = [
+      "Leyendo tu idea y preparando la estructura",
+      "Conectando el cerebro IA del proyecto",
+      "Definiendo secciones y estilo visual",
+      "Creando archivos del diseno",
+      "Validando codigo antes del preview",
+      "Preparando el area de trabajo",
+    ];
+    let idx = 0;
+    const timer = window.setInterval(() => {
+      setStreamProgress((current) => {
+        if (current && !steps.includes(current)) return current;
+        idx = Math.min(idx + 1, steps.length - 1);
+        const next = steps[idx];
+        setPipelineStatus(next);
+        return next;
+      });
+    }, 5500);
+    return () => window.clearInterval(timer);
+  }, [loading, healthPhase]);
 
   useEffect(() => {
     return () => {
