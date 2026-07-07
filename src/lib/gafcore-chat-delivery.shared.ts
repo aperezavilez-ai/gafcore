@@ -164,13 +164,13 @@ export default function App() {
     [cart],
   );
 
-  const addToCart = (id) => {
+  const addToCart = (id: string) => {
     setCart((current) => ({ ...current, [id]: (current[id] || 0) + 1 }));
   };
 
   const clearCart = () => setCart({});
 
-  const registerLead = (event) => {
+  const registerLead = (event: React.FormEvent) => {
     event.preventDefault();
     if (!leadEmail.trim()) return;
     setRegistered(true);
@@ -441,7 +441,7 @@ const benefits = [
   ["Soporte 24/7", "Estamos para ti"],
 ];
 
-const money = (value) => "$" + value.toLocaleString("es-MX");
+const money = (value: number) => "$" + value.toLocaleString("es-MX");
 
 export default function App() {
   const [category, setCategory] = useState("Todos");
@@ -470,11 +470,11 @@ export default function App() {
     [cart],
   );
 
-  const addToCart = (id) => {
+  const addToCart = (id: string) => {
     setCart((current) => ({ ...current, [id]: (current[id] || 0) + 1 }));
   };
 
-  const subscribe = (event) => {
+  const subscribe = (event: { preventDefault: () => void }) => {
     event.preventDefault();
     if (!email.trim()) return;
     setSubscribed(true);
@@ -861,6 +861,7 @@ export function shouldBootstrapBuildDelivery(
 
 /**
  * Si la IA metió el JSON entero en `reply` o dejó `files` vacío, extrae reply + files.
+ * También extrae archivos de code fences markdown cuando no hay JSON con `files`.
  */
 export function unwrapGafcoreChatPayload(
   reply: string,
@@ -893,7 +894,55 @@ export function unwrapGafcoreChatPayload(
     tryExtract(outReply);
   }
 
+  // Extraer archivos de code fences markdown cuando el JSON no trajo files
+  if (validateOutputFiles(outFiles).length === 0 && outReply.includes("```")) {
+    const extracted = extractFilesFromMarkdownFences(outReply);
+    if (extracted.files.length > 0) {
+      outFiles = extracted.files;
+      if (extracted.cleanReply.trim()) {
+        outReply = extracted.cleanReply;
+      }
+    }
+  }
+
   return { reply: outReply, files: outFiles };
+}
+
+/**
+ * Extrae archivos de code fences markdown con anotación de nombre (App.tsx, etc.)
+ * Formato: ```tsx:App.tsx ... código ... ``` o ```App.tsx ... código ... ```
+ */
+function extractFilesFromMarkdownFences(
+  reply: string,
+): { files: GafcoreDeliveredFile[]; cleanReply: string } {
+  const files: GafcoreDeliveredFile[] = [];
+  const cleanParts: string[] = [];
+  const fenceBlockRe = /```(\w+)?(?::([^\s`]+))?\s*\n([\s\S]*?)```/g;
+  let lastIndex = 0;
+
+  for (const match of reply.matchAll(fenceBlockRe)) {
+    const [fullMatch, lang, filename, code] = match;
+    if (!code?.trim() || !filename) continue;
+
+    const trimmedName = filename.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+    if (!trimmedName || trimmedName.length > 512) continue;
+
+    const ext = trimmedName.split(".").pop()?.toLowerCase() ?? "";
+    const resolvedLanguage =
+      lang || (ext === "tsx" || ext === "ts" ? "typescript" : ext === "jsx" || ext === "js" ? "javascript" : ext === "css" ? "css" : ext === "html" ? "html" : "typescript");
+
+    files.push({ name: trimmedName, language: resolvedLanguage, content: code.trim() });
+
+    const startIdx = match.index!;
+    const before = reply.slice(lastIndex, startIdx);
+    if (before.trim()) cleanParts.push(before.trim());
+    lastIndex = startIdx + fullMatch.length;
+  }
+
+  const tail = reply.slice(lastIndex);
+  if (tail.trim()) cleanParts.push(tail.trim());
+
+  return { files, cleanReply: cleanParts.join("\n\n") };
 }
 
 /** Repara, bootstrap plantilla y asegura package.json cuando hace falta. */
