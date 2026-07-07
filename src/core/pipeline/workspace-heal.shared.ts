@@ -14,7 +14,7 @@ import {
 } from "@/lib/gafcore-incremental-edit.shared";
 import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace, type PipelineFile } from "@/core/pipeline/file-merge.shared";
-import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
+import { healUntilStable, healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
 export type WorkspaceBuildResult = {
   merged: PipelineFile[];
@@ -29,7 +29,8 @@ export function prepareLoadedProjectFiles<T extends { name: string; content: str
     if (!/\.(tsx|jsx)$/i.test(file.name)) return file;
     return { ...file, content: repairPersistedRootCloserArtifact(file.content) };
   });
-  return ensureReactPackageJson(sanitized);
+  const healed = healUntilStable(sanitized);
+  return ensureReactPackageJson(healed.files);
 }
 
 function repairPersistedRootCloserArtifact(source: string): string {

@@ -1747,10 +1747,13 @@ export function ChatPanel({
         if (looksLikeJsxGlue) {
           const lastUserPrompt =
             [...messagesRef.current].reverse().find((m) => m.role === "user")?.content?.trim() || "";
-          if (isSubstantiveBuildRequest(lastUserPrompt)) {
+          const recoveryInstruction = isSubstantiveBuildRequest(lastUserPrompt)
+            ? lastUserPrompt
+            : `Reconstruye el proyecto ${projectName || "GafCore"} con una pagina funcional visible.`;
+          if (isSubstantiveBuildRequest(recoveryInstruction)) {
             const fallback = ensureReactPackageJson(
               sanitizeProjectJsxFiles(
-                createDeterministicBuildFallbackFiles(lastUserPrompt, filesRef.current),
+                createDeterministicBuildFallbackFiles(recoveryInstruction, filesRef.current),
               ),
             ) as FileItem[];
             setFiles(fallback);
@@ -1778,7 +1781,7 @@ export function ChatPanel({
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [projectId, files, onCodeGenerated]);
+  }, [projectId, projectName, files, onCodeGenerated]);
 
   const callGafcoreChat = useServerFn(gafcoreChat);
   const callPlanAndStartWorkflow = useServerFn(planAndStartGafcoreWorkflow);

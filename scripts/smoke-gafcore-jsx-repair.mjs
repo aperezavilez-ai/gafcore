@@ -2,6 +2,8 @@ import {
   neutralizeCssImportsInSource,
   repairCommonJsxSyntaxErrors,
 } from "../src/lib/gafcore-media.shared.ts";
+import { prepareLoadedProjectFiles } from "../src/core/pipeline/workspace-heal.shared.ts";
+import { auditSyntaxClosure } from "../src/lib/gafcore-integrity-shield.shared.ts";
 
 const cases = [
   {
@@ -69,4 +71,22 @@ if (css.includes("./styles.css") || css.includes("./app.css")) {
   throw new Error("css imports should be neutralized");
 }
 
-console.log("smoke-gafcore-jsx-repair: ok", cases.length + 1, "cases");
+const persistedEofApp = prepareLoadedProjectFiles([
+  {
+    name: "App.tsx",
+    language: "typescript",
+    content: `export default function App() {
+  return (
+    <main>
+      <h1>Venta de insumos deportivos</h1>
+    </main>
+  );
+`,
+  },
+]);
+const persistedSyntax = auditSyntaxClosure(persistedEofApp[0].content);
+if (!persistedSyntax.ok) {
+  throw new Error(`persisted loaded App.tsx was not healed: ${persistedSyntax.messages.join(", ")}`);
+}
+
+console.log("smoke-gafcore-jsx-repair: ok", cases.length + 2, "cases");

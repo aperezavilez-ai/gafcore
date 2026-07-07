@@ -339,7 +339,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
           `Preparando contexto real del proyecto: ${ctxFiles.length} archivos enviados`,
           true,
         );
-        emitProgress("connect", "Conectando con el modelo IA para generar archivos", true);
+        emitProgress("connect", "Analizando la solicitud y preparando la generacion de archivos", true);
 
         const upstream = await streamChatCompletions({ model, messages, json: true, maxTokens: 16000 });
 
