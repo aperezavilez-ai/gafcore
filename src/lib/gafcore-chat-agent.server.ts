@@ -25,6 +25,25 @@ import { validateGafcoreProjectCore } from "@/lib/gafcore-validate.server";
 
 const MAX_ATTEMPTS = 3;
 
+/**
+ * El build de respaldo (createDeterministicBuildFallbackFiles) es una plantilla
+ * fija, no salida del modelo — pero antes se entregaba al preview sin pasar
+ * por el mismo gate de Babel que el camino normal. Si esa plantilla llegara a
+ * tener un error de sintaxis (p. ej. al agregar una variante nueva), el
+ * usuario se quedaba viendo "Construcción fallida" sin ningún reintento
+ * posible. Ahora se valida igual que la salida real de la IA.
+ */
+async function fallbackFilesCompile(
+  contextFiles: ProjFile[],
+  fallbackFiles: Array<{ name: string; content: string }>,
+): Promise<boolean> {
+  const merged = mergeContextWithDelta(contextFiles, fallbackFiles);
+  const transpile = await validateGafcoreProjectCore(
+    merged.map((f) => ({ name: f.name, content: f.content })),
+  );
+  return transpile.ok;
+}
+
 const JSON_RETRY_INSTRUCTION =
   'Tu respuesta no fue JSON válido con archivos. Responde SOLO JSON { "reply": "...", "files": [...] } ' +
   "con el contenido COMPLETO de cada archivo modificado. Sin markdown ni texto fuera del JSON.";
@@ -80,6 +99,10 @@ async function tryFallbackBuild(input: {
   );
   const gate = await gateDeliveredFiles(input.contextFiles, fallbackFiles, input.instruction);
   if (!gate.ok) return null;
+  if (!(await fallbackFilesCompile(input.contextFiles, gate.files))) {
+    logWarn("gafcore_fallback_build_transpile_fail", { instruction: input.instruction.slice(0, 200) });
+    return null;
+  }
   return {
     reply:
       "Construi una base funcional para tu pedido. La IA principal devolvio codigo invalido, asi que aplique un build seguro para que el preview no se quede sin cambios.",
