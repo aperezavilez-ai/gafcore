@@ -3,6 +3,7 @@
  * No modificar salvo bug confirmado en /gafcore/login — probar autofill, Entrar y redirect.
  */
 import type { Session, User } from "@supabase/supabase-js";
+import { getGafcoreSupabaseBrowser } from "@/lib/gafcore-supabase-browser";
 
 const LOGIN_AUTH_TIMEOUT_MS = 30_000;
 const LOGIN_CLIENT_ENV_TIMEOUT_MS = 8_000;
@@ -53,6 +54,27 @@ function persistSupabaseSessionFromGrant(body: GafcorePasswordGrantResponse): Se
   return session as Session;
 }
 
+async function syncSupabaseBrowserSession(session: Session): Promise<void> {
+  try {
+    const client = await getGafcoreSupabaseBrowser();
+    await client.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+  } catch {
+    /* localStorage ya quedo escrito; /gafcore/app rehidrata en reload. */
+  }
+}
+
+export function canonicalizeGafcoreAuthUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  const url = new URL(window.location.href);
+  if (url.hostname !== "gafcore.com") return false;
+  url.hostname = "www.gafcore.com";
+  window.location.replace(url.toString());
+  return true;
+}
+
 async function signInWithPasswordGrant(
   email: string,
   password: string,
@@ -93,6 +115,7 @@ async function signInWithPasswordGrant(
         error: "No se pudo guardar la sesion local del navegador.",
       };
     }
+    await syncSupabaseBrowserSession(session);
     return { session, user: body.user ?? null };
   } catch (err) {
     const aborted = err instanceof DOMException && err.name === "AbortError";

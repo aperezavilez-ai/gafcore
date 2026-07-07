@@ -10,6 +10,7 @@ import {
   stripSecretsFromLoginUrl,
   loginUrlHasForbiddenParams,
   buildSanitizedLoginUrl,
+  canonicalizeGafcoreAuthUrl,
   clearLoginCredentialFieldsDom,
   clearStoredGafcoreSessions,
   isGafcoreAuthServerReady,
@@ -20,6 +21,7 @@ import {
 const LOGIN_SUBMIT_TIMEOUT_MS = 20_000;
 
 if (typeof window !== "undefined") {
+  canonicalizeGafcoreAuthUrl();
   stripSecretsFromLoginUrl();
 }
 
@@ -60,6 +62,7 @@ function GafCoreLoginPage() {
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
+    if (canonicalizeGafcoreAuthUrl()) return;
     const url = new URL(window.location.href);
     if (loginUrlHasForbiddenParams(url)) {
       const target = buildSanitizedLoginUrl(url);
