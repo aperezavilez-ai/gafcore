@@ -26,7 +26,11 @@ import {
   refundAiCredits,
   streamChatCompletions,
 } from "@/lib/gafcore-ai-gateway.server";
-import { runGafcoreAgentChatCompletion } from "@/lib/gafcore-chat-agent.server";
+import {
+  runGafcoreAgentChatCompletion,
+  type GafcoreAutoCorrectAgentEvent,
+  type GafcoreAutoCorrectAgentReport,
+} from "@/lib/gafcore-chat-agent.server";
 import { resolveModelForGafcoreChat } from "@/services/ai/chat-brain.server";
 import type { SafeBuildMeta } from "@/services/ai/safe-build.shared";
 import { shouldBypassGafcoreChatCache } from "@/lib/gafcore-chat-intent.shared";
@@ -71,6 +75,24 @@ const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+}
+
+function buildAutoCorrectAgentReport(
+  events: GafcoreAutoCorrectAgentEvent[],
+  result: { attempts: number; validationBlocked: boolean },
+): GafcoreAutoCorrectAgentReport {
+  const repaired = events.some((event) => event.stage === "repair");
+  const issueCount = events.reduce(
+    (max, event) => Math.max(max, typeof event.issueCount === "number" ? event.issueCount : 0),
+    0,
+  );
+  return {
+    status: result.validationBlocked ? "blocked" : repaired ? "repaired" : "passed",
+    attempts: result.attempts,
+    repaired,
+    issueCount,
+    events: events.slice(-12),
+  };
 }
 
 function persistSnapshotAfterChat(
@@ -280,7 +302,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     }
   }
 
-  const upstream = await streamChatCompletions({ model, messages, json: true });
+  const upstream = await streamChatCompletions({ model, messages, json: true, maxTokens: 16000 });
 
   if (!upstream.ok) {
     if (!skipCredits) {
@@ -361,7 +383,145 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     metadata: { mode: "stream" },
   });
 
-  return new Response(upstream.body, {
+  // Transformador SSE: reemite los deltas de texto al cliente (efecto de
+  // escritura en vivo) y, al cerrar el stream del modelo, corre el pipeline
+  // completo (gate + Babel + reintentos) sobre el content acumulado SIN volver a
+  // generar, emitiendo un evento final con los files YA validados.
+  const reader = upstream.body.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const transformed = new ReadableStream({
+    async start(controller) {
+      let buffer = "";
+      let full = "";
+      let truncated = false;
+      let lastProgressAt = 0;
+      let lastProgressBucket = "";
+      const autoCorrectEvents: GafcoreAutoCorrectAgentEvent[] = [];
+      const emitProgress = (stage: string, message: string, force = false) => {
+        const now = Date.now();
+        const bucket = `${stage}:${message}`;
+        if (!force && bucket === lastProgressBucket && now - lastProgressAt < 2_500) return;
+        lastProgressAt = now;
+        lastProgressBucket = bucket;
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ gafcore: "progress", stage, message })}\n\n`),
+        );
+      };
+      try {
+        emitProgress("planning", "Leyendo tu idea y preparando la estructura", true);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let nl: number;
+          while ((nl = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, nl).trim();
+            buffer = buffer.slice(nl + 1);
+            if (!line.startsWith("data:")) continue;
+            const payload = line.slice(5).trim();
+            if (!payload || payload === "[DONE]") continue;
+            try {
+              const j = JSON.parse(payload) as {
+                choices?: Array<{ delta?: { content?: string }; finish_reason?: string }>;
+              };
+              const piece = j?.choices?.[0]?.delta?.content;
+              if (typeof piece === "string" && piece.length > 0) {
+                full += piece;
+                if (full.length > 10_000) {
+                  emitProgress("finishing", "Terminando archivos para validar el preview");
+                } else if (full.length > 6_000) {
+                  emitProgress("interactions", "Completando interacciones y contenido");
+                } else if (full.length > 2_500) {
+                  emitProgress("design", "Armando diseño, secciones y estilos");
+                } else if (full.length > 500) {
+                  emitProgress("code", "Escribiendo los primeros componentes");
+                }
+                // Passthrough del delta al cliente (mismo shape OpenAI que ya parsea).
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: piece } }] })}\n\n`),
+                );
+              }
+              if (j?.choices?.[0]?.finish_reason === "length") truncated = true;
+            } catch {
+              /* línea SSE parcial */
+            }
+          }
+        }
+      } catch (err) {
+        // Si el upstream falla a media transmisión, intentamos cerrar con lo que haya.
+        logDev("gafcore_chat_stream_read_error", { error: String(err) });
+      }
+
+      // Pipeline de validación sobre el content acumulado (sin segunda generación).
+      try {
+        emitProgress("validating", "Validando archivos antes de actualizar el preview", true);
+        const agentResult = await runGafcoreAgentChatCompletion({
+          model,
+          messages,
+          instruction: data.instruction,
+          contextFiles: projFiles,
+          enrichContext: data.files as ProjFile[],
+          seedFirstContent: full,
+          seedTruncated: truncated,
+          onProgress: (event) => {
+            autoCorrectEvents.push(event);
+            emitProgress(`agent:${event.stage}`, event.message, true);
+          },
+        });
+        const reply = sanitizeUserFacingAiText(
+          softenRoboticReply(data.instruction, agentResult.reply),
+        );
+        const deliveredFiles = agentResult.files;
+        const validationBlocked = agentResult.validationBlocked && deliveredFiles.length === 0;
+        emitProgress(
+          validationBlocked ? "blocked" : "preview",
+          validationBlocked
+            ? "La validacion bloqueo los archivos generados"
+            : "Actualizando el area de trabajo",
+          true,
+        );
+
+        if (shouldWriteGafcoreChatCache(deliveredFiles)) {
+          const payload = { reply, files: deliveredFiles };
+          cacheSet(cacheKey, payload);
+          void setPersistedChatCache(cacheKey, userId, model, payload);
+        }
+        persistSnapshotAfterChat(data.projectId, userId, projFiles, deliveredFiles);
+
+        const balance = await fetchBalance(userId);
+        const autoCorrectAgent = buildAutoCorrectAgentReport(autoCorrectEvents, agentResult);
+        const finalEvent = {
+          gafcore: "final" as const,
+          reply,
+          files: deliveredFiles,
+          validationBlocked,
+          autoCorrectAgent,
+          balance,
+          safeBuild: {
+            phase: "ready" as const,
+            repaired: autoCorrectAgent.repaired,
+            skipped: false,
+          },
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalEvent)}\n\n`));
+      } catch (err) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ gafcore: "final", error: "pipeline_failed", detail: String((err as Error)?.message ?? err).slice(0, 200) })}\n\n`,
+          ),
+        );
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+    cancel() {
+      void reader.cancel();
+    },
+  });
+
+  return new Response(transformed, {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream",
@@ -509,6 +669,7 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   }
 
   let agentResult: Awaited<ReturnType<typeof runGafcoreAgentChatCompletion>>;
+  const autoCorrectEventsComplete: GafcoreAutoCorrectAgentEvent[] = [];
   try {
     agentResult = await runGafcoreAgentChatCompletion({
       model,
@@ -516,6 +677,9 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
       instruction: data.instruction,
       contextFiles: projFilesComplete,
       enrichContext: data.files as ProjFile[],
+      onProgress: (event) => {
+        autoCorrectEventsComplete.push(event);
+      },
     });
   } catch (e: unknown) {
     if (!skipCredits) {
@@ -545,6 +709,7 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     softenRoboticReply(data.instruction, agentResult.reply),
   );
   const deliveredFiles = agentResult.files;
+  const autoCorrectAgent = buildAutoCorrectAgentReport(autoCorrectEventsComplete, agentResult);
 
   const finalPayload = { reply, files: deliveredFiles };
   if (
@@ -567,6 +732,7 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
       mode: "complete",
       agentAttempts: agentResult.attempts,
       agentDelivered: deliveredFiles.length > 0,
+      autoCorrectAgent,
     },
   });
 
@@ -583,7 +749,8 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
     files: deliveredFiles,
     balance: balanceAfterConsume,
     agentDelivered: deliveredFiles.length > 0,
-    safeBuild: { phase: "ready", repaired: false, skipped: true },
+    autoCorrectAgent,
+    safeBuild: { phase: "ready", repaired: autoCorrectAgent.repaired, skipped: false },
     validationBlocked: agentResult.validationBlocked && deliveredFiles.length === 0,
   });
 }

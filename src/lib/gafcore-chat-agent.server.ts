@@ -80,11 +80,34 @@ function logBlockDiagnostic(
   });
 }
 
+export type GafcoreAutoCorrectAgentEvent = {
+  stage:
+    | "inspect"
+    | "normalize"
+    | "repair"
+    | "gate"
+    | "transpile"
+    | "deliver"
+    | "blocked";
+  message: string;
+  attempt: number;
+  issueCount?: number;
+};
+
+export type GafcoreAutoCorrectAgentReport = {
+  status: "passed" | "repaired" | "blocked";
+  attempts: number;
+  repaired: boolean;
+  issueCount: number;
+  events: GafcoreAutoCorrectAgentEvent[];
+};
+
 export type AgentChatRunResult = {
   reply: string;
   files: Array<{ name: string; language?: string; content: string }>;
   attempts: number;
   validationBlocked: boolean;
+  autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
 };
 
 async function tryFallbackBuild(input: {
@@ -118,16 +141,79 @@ export async function runGafcoreAgentChatCompletion(input: {
   instruction: string;
   contextFiles: ProjFile[];
   enrichContext: ProjFile[];
+  // Streaming: content del intento 1 ya obtenido por SSE (evita re-generar). Los
+  // reintentos de corrección (2-3) llaman al modelo normalmente. seedTruncated
+  // indica si ese stream cerró por límite de tokens (stop_reason=max_tokens).
+  seedFirstContent?: string;
+  seedTruncated?: boolean;
+  onProgress?: (event: GafcoreAutoCorrectAgentEvent) => void | Promise<void>;
 }): Promise<AgentChatRunResult> {
   const workingMessages = [...input.messages];
 
+  const emitAgent = async (
+    stage: GafcoreAutoCorrectAgentEvent["stage"],
+    message: string,
+    attempt: number,
+    issueCount?: number,
+  ) => {
+    const event: GafcoreAutoCorrectAgentEvent = { stage, message, attempt, issueCount };
+    await input.onProgress?.(event);
+  };
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const { content } = await completeChatMessage({
-      model: input.model,
-      messages: workingMessages,
-      json: true,
-      temperature: attempt === 1 ? 0.7 : 0.35,
-    });
+    await emitAgent(
+      "inspect",
+      attempt === 1
+        ? "Agente autocorrector: revisando la respuesta de la IA"
+        : `Agente autocorrector: reintento ${attempt} de correccion`,
+      attempt,
+    );
+    let content: string;
+    let truncated: boolean;
+    if (attempt === 1 && typeof input.seedFirstContent === "string") {
+      content = input.seedFirstContent;
+      truncated = input.seedTruncated === true;
+    } else {
+      const res = await completeChatMessage({
+        model: input.model,
+        messages: workingMessages,
+        json: true,
+        temperature: attempt === 1 ? 0.7 : 0.35,
+        // Builds de proyecto devuelven JSON { reply, files:[...] } que supera el
+        // default de 8192 tokens y se cortaba a mitad de archivo (stop_reason=
+        // max_tokens), produciendo TSX truncado. 16000 = mismo techo que siteBuilderV2.
+        maxTokens: 16000,
+      });
+      content = res.content;
+      truncated = res.truncated;
+    }
+
+    // Layer 2: si el modelo cortó por límite de tokens, NO entregamos el JSON
+    // parcial (rompería sintaxis). Reintentamos pidiendo una respuesta más
+    // compacta; si es el último intento, avisamos en vez de entregar basura.
+    if (truncated) {
+      logWarn("gafcore_agent_response_truncated", { attempt, contentLen: content.length });
+      if (attempt < MAX_ATTEMPTS) {
+        await emitAgent(
+          "repair",
+          "Agente autocorrector: respuesta incompleta, pidiendo una version mas compacta",
+          attempt,
+        );
+        workingMessages.push(
+          { role: "assistant", content: content.slice(0, 4000) },
+          { role: "user", content: TRUNCATED_RETRY_INSTRUCTION },
+        );
+        continue;
+      }
+      return {
+        reply:
+          "La respuesta superó el límite de tamaño y quedó incompleta. " +
+          "Pide el proyecto por partes (p. ej. primero la estructura, luego cada sección) o simplifica el alcance.",
+        files: [],
+        attempts: attempt,
+        validationBlocked: true,
+      };
+    }
 
     const { parseJsonLoose } = await import("@/lib/gafcore-json-loose.shared");
     const looseParsed = parseJsonLoose<{ reply?: string; files?: unknown }>(content);
@@ -143,6 +229,11 @@ export async function runGafcoreAgentChatCompletion(input: {
     const parsed = looseParsed ?? { reply: content.slice(0, 500), files: [] };
     const replyRaw = typeof parsed.reply === "string" ? parsed.reply : "Listo.";
     const rawFilesCount = Array.isArray(parsed.files) ? parsed.files.length : 0;
+    await emitAgent(
+      "normalize",
+      "Agente autocorrector: normalizando archivos para el workspace",
+      attempt,
+    );
 
     const delivery = finalizeGafcoreBuildDelivery(
       input.instruction,
@@ -183,6 +274,13 @@ export async function runGafcoreAgentChatCompletion(input: {
           rawFilesCount,
           deliverySource: delivery.source,
         });
+        await emitAgent(
+          "repair",
+          parseFailed
+            ? "Agente autocorrector: JSON invalido, solicitando archivos corregidos"
+            : "Agente autocorrector: no llegaron archivos aplicables, solicitando delta completo",
+          attempt,
+        );
         workingMessages.push(
           { role: "assistant", content: content.slice(0, 12000) },
           {
@@ -234,9 +332,19 @@ export async function runGafcoreAgentChatCompletion(input: {
       };
     }
 
+    await emitAgent(
+      "gate",
+      "Agente autocorrector: auditando sintaxis, imports y estructura",
+      attempt,
+    );
     const gate = await gateDeliveredFiles(input.contextFiles, safeFiles, input.instruction);
     if (gate.ok) {
       const mergedForTranspile = mergeContextWithDelta(input.contextFiles, gate.files);
+      await emitAgent(
+        "transpile",
+        "Agente autocorrector: validando build real antes del preview",
+        attempt,
+      );
       const transpile = await validateGafcoreProjectCore(
         mergedForTranspile.map((f) => ({ name: f.name, content: f.content })),
       );
@@ -267,6 +375,12 @@ export async function runGafcoreAgentChatCompletion(input: {
             validationBlocked: true,
           };
         }
+        await emitAgent(
+          "repair",
+          "Agente autocorrector: corrigiendo errores de compilacion",
+          attempt,
+          syntaxBlocking.length,
+        );
         workingMessages.push(
           { role: "assistant", content: content.slice(0, 12000) },
           {
@@ -286,6 +400,13 @@ export async function runGafcoreAgentChatCompletion(input: {
           validationBlocked: false,
         };
       }
+      await emitAgent(
+        "deliver",
+        attempt > 1
+          ? "Agente autocorrector: archivos reparados y listos para el preview"
+          : "Agente autocorrector: archivos validados y listos para el preview",
+        attempt,
+      );
       return {
         reply: replyRaw,
         files: gate.files,
@@ -321,6 +442,12 @@ export async function runGafcoreAgentChatCompletion(input: {
       };
     }
 
+    await emitAgent(
+      "repair",
+      "Agente autocorrector: aplicando correccion automatica sobre los errores encontrados",
+      attempt,
+      gate.issues.length,
+    );
     workingMessages.push(
       { role: "assistant", content: content.slice(0, 12000) },
       { role: "user", content: gate.fixInstruction },

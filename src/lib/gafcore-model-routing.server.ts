@@ -169,11 +169,25 @@ export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
   const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
   const customKey = process.env.AI_API_KEY?.trim();
   if (customUrl && customKey && !isGptpro4AllUrl(customUrl)) {
+    const proxyProjectKey =
+      process.env.AI_PROJECT_KEY?.trim() ||
+      process.env.GAFCORE_PROXY_PROJECT_KEY?.trim() ||
+      "";
+    const proxyProviderId =
+      process.env.AI_PROVIDER_ID?.trim() ||
+      process.env.GAFCORE_PROXY_PROVIDER_ID?.trim() ||
+      "";
     routes.push({
       provider: "custom",
       url: normalizeChatCompletionsUrl(customUrl),
       apiKey: customKey,
-      extraHeaders: {},
+      extraHeaders:
+        proxyProjectKey && proxyProviderId
+          ? {
+              "x-project-key": proxyProjectKey,
+              "x-provider-id": proxyProviderId,
+            }
+          : {},
       modelSlug: modelForFallbackProvider("custom", modelHint, process.env.AI_MODEL_DEEP),
       wireApi: "chat_completions",
     });

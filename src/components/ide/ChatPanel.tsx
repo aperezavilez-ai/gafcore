@@ -273,6 +273,124 @@ async function readSseJsonPayload(
   return full;
 }
 
+type GafcoreStreamFinalEvent = {
+  gafcore?: "final";
+  reply?: string;
+  files?: Array<{ name: string; language?: string; content: string }>;
+  validationBlocked?: boolean;
+  safeBuild?: SafeBuildMeta;
+  autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
+  error?: string;
+  detail?: string;
+};
+
+type GafcoreStreamProgressEvent = {
+  gafcore?: "progress";
+  message?: string;
+  stage?: string;
+};
+
+type GafcoreAutoCorrectAgentReport = {
+  status?: "passed" | "repaired" | "blocked";
+  attempts?: number;
+  repaired?: boolean;
+  issueCount?: number;
+  events?: Array<{
+    stage?: string;
+    message?: string;
+    attempt?: number;
+    issueCount?: number;
+  }>;
+};
+
+function describeAutoCorrectAgent(report?: GafcoreAutoCorrectAgentReport): string | null {
+  if (!report) return null;
+  const attempts = Math.max(1, Number(report.attempts ?? 1));
+  if (report.status === "blocked") {
+    return `Agente autocorrector: bloqueo la entrega tras ${attempts} intento(s)`;
+  }
+  if (report.repaired || report.status === "repaired") {
+    return `Agente autocorrector: corrigio y valido el proyecto en ${attempts} intento(s)`;
+  }
+  if (report.status === "passed") {
+    return "Agente autocorrector: proyecto validado antes del preview";
+  }
+  return null;
+}
+
+/**
+ * Lee el SSE de /api/gafcore/chat/stream: reenvía el progreso de texto en
+ * vivo (mismo mecanismo que readSseJsonPayload) y además captura el evento
+ * especial `{ gafcore: "final", files, reply, ... }` que manda el servidor
+ * al terminar su pipeline de validación. Si el stream se corta sin llegar a
+ * ese evento final, devuelve null — la llamada debe tratarlo como fallo.
+ */
+async function readGafcoreChatStream(
+  res: Response,
+  signal: AbortSignal | undefined,
+  onTextProgress: (charLen: number) => void,
+  onProgress?: (message: string) => void,
+): Promise<GafcoreStreamFinalEvent | null> {
+  if (!res.body) throw new Error("Sin cuerpo de respuesta");
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let full = "";
+  let buf = "";
+  let finalEvent: GafcoreStreamFinalEvent | null = null;
+
+  const handleLine = (line: string) => {
+    const t = line.trim();
+    if (!t.startsWith("data:")) return;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === "[DONE]") return;
+    try {
+      const j = JSON.parse(payload);
+      if (j?.gafcore === "final") {
+        finalEvent = j as GafcoreStreamFinalEvent;
+        return;
+      }
+      if (j?.gafcore === "progress") {
+        const progress = j as GafcoreStreamProgressEvent;
+        if (typeof progress.message === "string" && progress.message.trim()) {
+          onProgress?.(progress.message.trim());
+        }
+        return;
+      }
+      const piece = j?.choices?.[0]?.delta?.content;
+      if (typeof piece === "string" && piece.length > 0) {
+        full += piece;
+        onTextProgress(full.length);
+      }
+    } catch {
+      /* chunk incompleto */
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (signal?.aborted) throw createAbortError();
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+      for (const line of lines) handleLine(line);
+    }
+    if (buf.trim()) handleLine(buf);
+  } finally {
+    reader.releaseLock();
+  }
+  return finalEvent;
+}
+
+function describeStreamingProgress(charLen: number, previous?: string | null): string {
+  if (charLen < 500) return "Leyendo tu idea y preparando la estructura";
+  if (charLen < 2_500) return "Escribiendo los primeros componentes";
+  if (charLen < 6_000) return "Armando diseño, secciones y estilos";
+  if (charLen < 10_000) return "Completando interacciones y contenido";
+  return previous?.trim() || "Terminando archivos para validar el preview";
+}
+
 /**
  * Mensajes claros para códigos devueltos por POST /api/gafcore/chat/stream.
  * IMPORTANTE: nunca nombrar proveedores externos (OpenAI/OpenRouter/Anthropic/Claude/GPT/Gemini).
@@ -493,6 +611,7 @@ export function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [streamChars, setStreamChars] = useState<number | null>(null);
+  const [streamProgress, setStreamProgress] = useState<string | null>(null);
   const [pinConventionOpen, setPinConventionOpen] = useState(false);
   const [pinConventionBody, setPinConventionBody] = useState("");
   /** Invalida respuestas tardías si el usuario envía otra cosa o pulsa detener. */
@@ -1316,7 +1435,7 @@ export function ChatPanel({
     if (!stickToBottomRef.current) return;
     forceScrollToBottom();
     scrollChatToBottom("auto");
-  }, [messages, loading, streamChars, pipelineStatus, forceScrollToBottom, scrollChatToBottom]);
+  }, [messages, loading, streamChars, streamProgress, pipelineStatus, forceScrollToBottom, scrollChatToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -2011,6 +2130,7 @@ export function ChatPanel({
     files: Array<{ name: string; language?: string; content: string }>;
     safeBuild?: SafeBuildMeta;
     validationBlocked?: boolean;
+    autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
   }> => {
     const res = await fetch("/api/gafcore/chat/complete", {
       method: "POST",
@@ -2056,6 +2176,7 @@ export function ChatPanel({
       files?: Array<{ name: string; language?: string; content: string }>;
       safeBuild?: SafeBuildMeta;
       validationBlocked?: boolean;
+      autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
     };
     if (j.safeBuild?.phase) {
       setHealthPhase(mapSafeBuildToHealthPhase(j.safeBuild.phase));
@@ -2065,6 +2186,108 @@ export function ChatPanel({
       files: Array.isArray(j.files) ? j.files : [],
       safeBuild: j.safeBuild,
       validationBlocked: j.validationBlocked === true,
+      autoCorrectAgent: j.autoCorrectAgent,
+    };
+  };
+
+  /**
+   * Version con streaming: mismo resultado que fetchGafcoreChatComplete, pero
+   * muestra el progreso en vivo (streamChars) mientras Claude va generando.
+   * Si el stream falla o se corta sin evento final, lanza un error — el
+   * llamador (requestGafcoreGeneration) cae a fetchGafcoreChatComplete como
+   * respaldo, para no perder la confiabilidad de los reintentos del agente.
+   */
+  const fetchGafcoreChatStream = async (
+    tok: string,
+    history: ChatMsg[],
+    instruction: string,
+    contextFiles: FileItem[],
+    ac: AbortSignal,
+    userTextForTone: string,
+    opts?: { forceFastModel?: boolean },
+  ): Promise<{
+    reply: string;
+    files: Array<{ name: string; language?: string; content: string }>;
+    safeBuild?: SafeBuildMeta;
+    validationBlocked?: boolean;
+    autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
+  }> => {
+    const res = await fetch("/api/gafcore/chat/stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        Authorization: `Bearer ${tok}`,
+      },
+      body: JSON.stringify({
+        history,
+        instruction,
+        files: contextFiles,
+        ...(activeProjectIdRef.current ? { projectId: activeProjectIdRef.current } : {}),
+        deepMode: opts?.forceFastModel ? false : deepModel,
+      }),
+      signal: ac.signal,
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok || ct.includes("text/html")) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    // El servidor puede responder JSON plano (no SSE) cuando el proveedor de
+    // streaming falla y ya resolvió todo internamente en modo /complete. En
+    // ese caso ya tenemos la respuesta completa — no hay que re-generar de
+    // cero llamando a fetchGafcoreChatComplete otra vez (duplicaría el tiempo).
+    if (!ct.includes("text/event-stream")) {
+      const j = (await res.json()) as {
+        reply?: string;
+        files?: Array<{ name: string; language?: string; content: string }>;
+        safeBuild?: SafeBuildMeta;
+        validationBlocked?: boolean;
+        autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
+      };
+      if (j.safeBuild?.phase) {
+        setHealthPhase(mapSafeBuildToHealthPhase(j.safeBuild.phase));
+      }
+      return {
+        reply: softenRoboticReply(userTextForTone, typeof j.reply === "string" ? j.reply : "Listo."),
+        files: Array.isArray(j.files) ? j.files : [],
+        safeBuild: j.safeBuild,
+        validationBlocked: j.validationBlocked === true,
+        autoCorrectAgent: j.autoCorrectAgent,
+      };
+    }
+
+    let finalEvent: GafcoreStreamFinalEvent | null;
+    try {
+      finalEvent = await readGafcoreChatStream(
+        res,
+        ac.signal,
+        (charLen) => {
+          setStreamChars(charLen);
+          setStreamProgress((current) => describeStreamingProgress(charLen, current));
+        },
+        (message) => setStreamProgress(message),
+      );
+    } finally {
+      setStreamChars(null);
+      setStreamProgress(null);
+    }
+
+    if (!finalEvent || finalEvent.error) {
+      throw new Error(finalEvent?.error ?? "stream_incomplete");
+    }
+    if (finalEvent.safeBuild?.phase) {
+      setHealthPhase(mapSafeBuildToHealthPhase(finalEvent.safeBuild.phase));
+    }
+    return {
+      reply: softenRoboticReply(
+        userTextForTone,
+        typeof finalEvent.reply === "string" ? finalEvent.reply : "Listo.",
+      ),
+      files: Array.isArray(finalEvent.files) ? finalEvent.files : [],
+      safeBuild: finalEvent.safeBuild,
+      validationBlocked: finalEvent.validationBlocked === true,
+      autoCorrectAgent: finalEvent.autoCorrectAgent,
     };
   };
 
@@ -2082,17 +2305,36 @@ export function ChatPanel({
     files: Array<{ name: string; language?: string; content: string }>;
     safeBuild?: SafeBuildMeta;
     validationBlocked?: boolean;
+    autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
   }> => {
-    /** Cerebro: siempre /complete (agente 3 intentos + Safe-Build). El stream no reintenta y dejaba el preview vacío. */
-    return fetchGafcoreChatComplete(
-      tok,
-      history,
-      instruction,
-      contextFiles,
-      ac,
-      userTextForTone,
-      { forceFastModel: _options?.forceFastModel },
-    );
+    /**
+     * Cerebro: intenta streaming primero (progreso en vivo via streamChars),
+     * y si falla o se corta a medias, cae a /complete (agente 3 intentos +
+     * Safe-Build) como respaldo — misma confiabilidad de siempre, nunca peor.
+     */
+    try {
+      return await fetchGafcoreChatStream(
+        tok,
+        history,
+        instruction,
+        contextFiles,
+        ac,
+        userTextForTone,
+        { forceFastModel: _options?.forceFastModel },
+      );
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") throw err;
+      logClientWarn("gafcore-chat-stream-fallback", err);
+      return fetchGafcoreChatComplete(
+        tok,
+        history,
+        instruction,
+        contextFiles,
+        ac,
+        userTextForTone,
+        { forceFastModel: _options?.forceFastModel },
+      );
+    }
   };
 
   const runPreviewAutofixWithAi = useCallback(
@@ -2998,14 +3240,17 @@ export function ChatPanel({
       })();
     }
     setStreamChars(null);
+    setStreamProgress(null);
     const ac = new AbortController();
     abortControllerRef.current = ac;
-    const requestTimeoutMs = CHAT_REQUEST_TIMEOUT_MS;
+    const requestTimeoutMs = fastWelcomeBuild ? 90_000 : CHAT_REQUEST_TIMEOUT_MS;
     const chatTimeoutId = window.setTimeout(() => {
       if (!sendInFlightRef.current) return;
       ac.abort();
       toast.error(
-        "La solicitud tardó demasiado (4 min). Pulsa el cuadrado para detener o envía de nuevo.",
+        fastWelcomeBuild
+          ? "El build tardó más de 90 s. Pulsa Construir de nuevo (un solo intento rápido)."
+          : "La solicitud tardó demasiado (4 min). Pulsa el cuadrado para detener o envía de nuevo.",
         { duration: 8000 },
       );
     }, requestTimeoutMs);
@@ -3042,6 +3287,7 @@ export function ChatPanel({
         files: Array<{ name: string; language?: string; content: string }>;
         safeBuild?: SafeBuildMeta;
         validationBlocked?: boolean;
+        autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
       };
 
       if (effectiveBuild && factoryMode && (activeProjectIdRef.current ?? projectId)) {
@@ -3088,9 +3334,22 @@ export function ChatPanel({
             filesOut: result.files?.length ?? 0,
             validationBlocked: result.validationBlocked === true,
             safeBuildPhase: result.safeBuild?.phase ?? null,
+            autoCorrectStatus: result.autoCorrectAgent?.status ?? null,
+            autoCorrectAttempts: result.autoCorrectAgent?.attempts ?? null,
           },
         ),
       );
+
+      const autoCorrectStatus = describeAutoCorrectAgent(result.autoCorrectAgent);
+      if (autoCorrectStatus) {
+        setPipelineStatus(autoCorrectStatus);
+        if (result.autoCorrectAgent?.repaired) {
+          toast.message("Agente autocorrector aplicado", {
+            description: autoCorrectStatus,
+            duration: 5000,
+          });
+        }
+      }
 
       const unwrappedChat = unwrapGafcoreChatPayload(result.reply ?? "", []);
       result = {
@@ -3117,6 +3376,7 @@ export function ChatPanel({
       chatReplyDelivered = true;
       setLoading(false);
       setStreamChars(null);
+      setStreamProgress(null);
 
       if (effectiveBuild) {
         const sbPhase = result.safeBuild?.phase;
@@ -3420,6 +3680,7 @@ export function ChatPanel({
     } catch (error: any) {
       if (error?.name === "AbortError") {
         setStreamChars(null);
+        setStreamProgress(null);
         setHealthPhase(null);
         setPipelineStatus(null);
         pipelineRunIdRef.current = null;
@@ -3518,6 +3779,7 @@ export function ChatPanel({
       window.clearTimeout(chatTimeoutId);
       abortControllerRef.current = null;
       setStreamChars(null);
+      setStreamProgress(null);
       sendInFlightRef.current = false;
       if (myEpoch === requestEpochRef.current) {
         setLoading(false);
@@ -3722,10 +3984,18 @@ export function ChatPanel({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5 pl-9">
-                    <HealthStatus phase={healthPhase} />
+                    <HealthStatus
+                      phase={healthPhase}
+                      label={streamProgress ?? pipelineStatus ?? undefined}
+                    />
+                    {streamProgress ? (
+                      <p className="max-w-[92%] text-[11px] leading-relaxed text-foreground/80">
+                        {streamProgress}
+                      </p>
+                    ) : null}
                     {streamChars != null && streamChars > 0 && (
-                      <p className="text-[11px] text-foreground/75">
-                        Recibiendo respuesta… ~{Math.max(1, Math.round(streamChars / 1024))} KB texto
+                      <p className="text-[10px] text-muted-foreground">
+                        Generando archivos... ~{Math.max(1, Math.round(streamChars / 1024))} KB recibidos
                       </p>
                     )}
                   </div>
@@ -4317,6 +4587,7 @@ export function ChatPanel({
                     sendInFlightRef.current = false;
                     setLoading(false);
                     setStreamChars(null);
+                    setStreamProgress(null);
                     setPipelineStatus(null);
                     pipelineRunIdRef.current = null;
                     toast.message("Solicitud cancelada — ya puedes escribir de nuevo.");
@@ -4355,5 +4626,3 @@ export function ChatPanel({
     </div>
   );
 }
-
-

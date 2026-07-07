@@ -154,7 +154,14 @@ async function waitForAuthSession(
 export async function listProjects(): Promise<ProjectRow[]> {
   const sb = await getUserSupabaseAsync();
   if (!sb) return [];
-  await waitForAuthSession(sb);
+  const hasSession = await waitForAuthSession(sb);
+  if (!hasSession) {
+    const cachedId = getCurrentProjectId();
+    if (cachedId) {
+      return [{ id: cachedId, name: "Mi proyecto" }];
+    }
+    return [];
+  }
 
   const query = async (select: string, orderCol: string) =>
     sb
@@ -171,6 +178,10 @@ export async function listProjects(): Promise<ProjectRow[]> {
     const fallback = await query("id, name, created_at, updated_at", "created_at");
     if (fallback.error) {
       console.error("[Supabase] list projects fallback error:", fallback.error);
+      const cachedId = getCurrentProjectId();
+      if (cachedId) {
+        return [{ id: cachedId, name: "Mi proyecto" }];
+      }
       return [];
     }
     data = fallback.data;

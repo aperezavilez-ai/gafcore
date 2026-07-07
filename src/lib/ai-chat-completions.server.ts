@@ -141,6 +141,7 @@ function wrapAnthropicStreamResponse(res: Response): Response {
   const stream = new ReadableStream({
     async start(controller) {
       let buffer = "";
+      let stopReason: string | null = null;
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -156,7 +157,7 @@ function wrapAnthropicStreamResponse(res: Response): Response {
             try {
               const parsed = JSON.parse(payload) as {
                 type?: string;
-                delta?: { type?: string; text?: string };
+                delta?: { type?: string; text?: string; stop_reason?: string };
               };
               if (
                 parsed.type === "content_block_delta" &&
@@ -165,11 +166,20 @@ function wrapAnthropicStreamResponse(res: Response): Response {
               ) {
                 const chunk = { choices: [{ delta: { content: parsed.delta.text } }] };
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              } else if (parsed.type === "message_delta" && parsed.delta?.stop_reason) {
+                // Anthropic emite stop_reason en message_delta. Lo propagamos como
+                // finish_reason OpenAI para que el cliente detecte truncación.
+                stopReason = parsed.delta.stop_reason;
               }
             } catch {
               /* línea parcial SSE */
             }
           }
+        }
+        if (stopReason) {
+          const finishReason = stopReason === "max_tokens" ? "length" : stopReason;
+          const tail = { choices: [{ delta: {}, finish_reason: finishReason }] };
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(tail)}\n\n`));
         }
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
