@@ -3784,6 +3784,9 @@ export function ChatPanel({
       if (error?.name === "AbortError") {
         setStreamChars(null);
         pipelineRunIdRef.current = null;
+        if (myEpoch !== requestEpochRef.current) {
+          return;
+        }
         if (
           abortedByTimeout &&
           !workspacePrimedByFallback &&
@@ -3831,6 +3834,13 @@ export function ChatPanel({
           return;
         }
         if (workspacePrimedByFallback) {
+          const currentApp = filesRef.current.find((f) => /^app\.(tsx|jsx)$/i.test(f.name));
+          if (currentApp?.content && isGafcoreDefaultTemplateApp(currentApp.content)) {
+            setStreamProgress(null);
+            setHealthPhase(null);
+            setPipelineStatus(null);
+            return;
+          }
           setBuildProgress("Proyecto inicial aplicado al area de trabajo");
           toast.message("La IA se detuvo, pero el proyecto inicial ya quedo visible en el preview.", {
             duration: 7000,
