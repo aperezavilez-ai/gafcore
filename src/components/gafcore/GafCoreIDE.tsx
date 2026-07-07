@@ -45,7 +45,6 @@ import {
   dispatchVersionRestored,
   prepareFilesForEditorRestore,
 } from "@/lib/gafcore-snapshot-restore.shared";
-import { sanitizeProjectJsxFiles } from "@/lib/gafcore-media.shared";
 import { prepareFreshProjectFiles, prepareLoadedProjectFiles } from "@/core/pipeline/workspace-heal.shared";
 import {
   createWelcomeProjectFiles,
@@ -893,10 +892,12 @@ export function GafCoreIDE() {
     if (!loaded) return;
     if (isWelcomeWorkspace(filesRef.current)) return;
     setFiles((prev) => {
-      const next = sanitizeProjectJsxFiles(prev);
-      return next.some((f, i) => f.content !== prev[i]?.content) ? next : prev;
+      const next = prepareLoadedProjectFiles(prev);
+      const changed = next.some((f, i) => f.content !== prev[i]?.content);
+      if (changed && currentProjectId) void saveProjectFiles(next, currentProjectId);
+      return changed ? next : prev;
     });
-  }, [loaded]);
+  }, [currentProjectId, loaded]);
 
   useEffect(() => {
     const onRepairJsx = () => {
@@ -906,7 +907,7 @@ export function GafCoreIDE() {
           if (currentProjectId) void saveProjectFiles(next, currentProjectId);
           return next;
         }
-        const next = sanitizeProjectJsxFiles(prev);
+        const next = prepareLoadedProjectFiles(prev);
         const changed = next.some((f, i) => f.content !== prev[i]?.content);
         if (changed && currentProjectId) {
           void saveProjectFiles(next, currentProjectId);

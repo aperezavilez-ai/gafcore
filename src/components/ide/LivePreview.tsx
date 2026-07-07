@@ -346,11 +346,24 @@ export function LivePreview({ files, device = "desktop" }: { files: FileItem[]; 
     return code.replace(/="([^"]*)"(https?:\\/\\/[^\\s"'<>]+)\\/?"?/g, '="$1" ');
   }
 
+  function repairPreviewSyntax(code) {
+    var out = repairJsxGlue(code);
+    try {
+      var root = out.match(/return\\s*\\(\\s*<([A-Za-z][\\w.-]*)\\b/);
+      var rootTag = root && root[1];
+      if (rootTag) {
+        var closeRootThenExtraDiv = new RegExp("</" + rootTag + ">\\\\s*</div>(\\\\s*\\\\);)", "m");
+        out = out.replace(closeRootThenExtraDiv, "</" + rootTag + ">$1");
+      }
+    } catch (_) {}
+    return out;
+  }
+
   function transpile(code, filename) {
     try {
       const presets = [["env",{ modules:false, targets:"defaults" }], ["react", { runtime: "automatic", importSource: "react" }]];
       if (/\\.(ts|tsx)$/i.test(filename)) presets.push(["typescript",{ allExtensions:true, isTSX:true }]);
-      return Babel.transform(repairJsxGlue(code), { filename, presets, sourceMaps: "inline" }).code;
+      return Babel.transform(repairPreviewSyntax(code), { filename, presets, sourceMaps: "inline" }).code;
     } catch (e) {
       var msg = (e && e.message) || String(e);
       throw new Error("Transpile error in " + filename + ": " + msg);

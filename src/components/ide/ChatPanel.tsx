@@ -586,6 +586,8 @@ export function ChatPanel({
   const isMobile = useIsMobile();
   const { createProject, projectCreateErrorMessage } = useCreateProject();
   const [messages, setMessages] = useState<Msg[]>([]);
+  const messagesRef = useRef<Msg[]>([]);
+  messagesRef.current = messages;
   const [input, setInput] = useState("");
   // Aplicar prompt pendiente del onboarding cuando llega con un proyecto activo
   useEffect(() => {
@@ -1743,6 +1745,26 @@ export function ChatPanel({
           return;
         }
         if (looksLikeJsxGlue) {
+          const lastUserPrompt =
+            [...messagesRef.current].reverse().find((m) => m.role === "user")?.content?.trim() || "";
+          if (isSubstantiveBuildRequest(lastUserPrompt)) {
+            const fallback = ensureReactPackageJson(
+              sanitizeProjectJsxFiles(
+                createDeterministicBuildFallbackFiles(lastUserPrompt, filesRef.current),
+              ),
+            ) as FileItem[];
+            setFiles(fallback);
+            filesRef.current = fallback;
+            setLastError(null);
+            autoFixAttemptedErrorsRef.current.add(errKey);
+            queueMicrotask(() => {
+              toast.success("Preview recuperado con build seguro");
+              void persistMergedToProjectDb(fallback);
+              onCodeGenerated?.();
+              window.dispatchEvent(new CustomEvent("gafcore:repair-project-jsx"));
+            });
+            return;
+          }
           setLastError(msg);
           if (isPreviewAutofixAiEnabled()) scheduleRuntimeAutofixRef.current(msg);
           return;
