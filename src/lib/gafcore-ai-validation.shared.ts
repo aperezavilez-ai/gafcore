@@ -297,6 +297,32 @@ export function buildValidationFixInstruction(
       `  → Regla: cada { necesita }, cada ( necesita ), cada <Tag> necesita </Tag> o />. ` +
       `Revisa balance antes de emitir. Divide archivos >200 líneas en components/.`,
     );
+
+    const hasAdjacentJsx = byCategory.syntax.some((i) =>
+      /adjacent jsx elements|jsx fragment/i.test(i.message),
+    );
+    if (hasAdjacentJsx) {
+      sections.push(
+        `[SINTAXIS — JSX ADYACENTE]\n` +
+        `  → Este error NO es de llaves/paréntesis: el \`return (...)\` tiene dos o más elementos ` +
+        `JSX hermanos al mismo nivel sin un único padre. Envuélvelos en un solo elemento raíz ` +
+        `(\`<div>...</div>\`) o en un fragmento \`<>...</>\`. Revisa también que no falte una ` +
+        `etiqueta de cierre ANTES del punto marcado — eso hace que el parser cierre el elemento ` +
+        `equivocado y el siguiente cierre quede "suelto" como si fuera adyacente.`,
+      );
+    }
+
+    const hasMismatchedClosingTag = byCategory.syntax.some((i) =>
+      /expected corresponding jsx closing tag/i.test(i.message),
+    );
+    if (hasMismatchedClosingTag) {
+      sections.push(
+        `[SINTAXIS — CIERRE JSX DESALINEADO]\n` +
+        `  → Cuenta las etiquetas abiertas en orden (pila): la ÚLTIMA que abriste debe ser la ` +
+        `PRIMERA que cierras. No agregues ni quites cierres sueltos al final del archivo — ` +
+        `corrige el punto exacto donde falta o sobra un </Tag>.`,
+      );
+    }
   }
 
   if (byCategory.import.length > 0) {
