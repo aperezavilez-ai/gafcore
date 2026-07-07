@@ -302,97 +302,16 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
     }
   }
 
-  const upstream = await streamChatCompletions({ model, messages, json: true, maxTokens: 16000 });
-
-  if (!upstream.ok) {
-    if (!skipCredits) {
-      await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream_refund", {
-        status: upstream.status,
-      });
-    }
-    const fail = await parseUpstreamFailure(upstream);
-    // Stream no disponible: misma petición en modo JSON (créditos ya consumidos).
-    if (fail.status >= 400 && fail.status !== 429) {
-      try {
-        const completed = await completeChatMessage({ model, messages, json: true });
-        const content = completed.content || "{}";
-        const parsedOut = parseJsonLoose<{ reply?: string; files?: unknown }>(content) ?? {};
-        if (!parsedOut.reply && !parsedOut.files) {
-          console.warn("[gafcore-chat] stream-fallback non-JSON content len=" + content.length);
-        }
-        const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
-        const finalized = await finalizeChatDeliveryWithSafeBuild({
-          instruction: data.instruction,
-          contextFiles: data.files as ProjFile[],
-          replyRaw,
-          rawFiles: parsedOut.files,
-          messages,
-          gateway,
-        });
-        const reply = sanitizeUserFacingAiText(
-          softenRoboticReply(data.instruction, finalized.reply),
-        );
-        const payload = { reply, files: finalized.files };
-        if (shouldWriteGafcoreChatCache(finalized.files)) {
-          cacheSet(cacheKey, payload);
-          void setPersistedChatCache(cacheKey, userId, model, payload);
-        }
-        persistSnapshotAfterChat(data.projectId, userId, projFiles, finalized.files);
-        auditAiActionCompleted({
-          userId,
-          action,
-          instruction: data.instruction,
-          projectId: data.projectId,
-          risk: gov.risk,
-          metadata: { fallback: "complete", safeBuild: finalized.safeBuild },
-        });
-        return jsonResponse({
-          reply,
-          files: finalized.files,
-          fallback: "complete",
-          safeBuild: finalized.safeBuild,
-        });
-      } catch {
-        /* sigue con error upstream */
-      }
-    }
-    return jsonResponse(
-      {
-        error: fail.code === "rate_limited" ? "rate_limited" : "upstream",
-        detail: sanitizeApiErrorDetail(fail.detail) ?? "Error temporal del asistente.",
-      },
-      fail.status >= 400 ? fail.status : 502,
-    );
-  }
-
-  if (!upstream.body) {
-    if (!skipCredits) {
-      await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream_refund", {
-        reason: "no_body",
-      });
-    }
-    return jsonResponse({ error: "no_stream_body" }, 502);
-  }
-
-  auditAiActionCompleted({
-    userId,
-    action,
-    instruction: data.instruction,
-    projectId: data.projectId,
-    risk: gov.risk,
-    metadata: { mode: "stream" },
-  });
-
   // Transformador SSE: reemite los deltas de texto al cliente (efecto de
   // escritura en vivo) y, al cerrar el stream del modelo, corre el pipeline
   // completo (gate + Babel + reintentos) sobre el content acumulado SIN volver a
   // generar, emitiendo un evento final con los files YA validados.
-  const reader = upstream.body.getReader();
   const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   const transformed = new ReadableStream({
     async start(controller) {
+      const decoder = new TextDecoder();
       let buffer = "";
       let full = "";
       let truncated = false;
@@ -409,8 +328,122 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
           encoder.encode(`data: ${JSON.stringify({ gafcore: "progress", stage, message })}\n\n`),
         );
       };
+      const closeStream = () => {
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      };
+
       try {
-        emitProgress("request", "Solicitud recibida por la IA", true);
+        emitProgress(
+          "context",
+          `Preparando contexto real del proyecto: ${ctxFiles.length} archivos enviados`,
+          true,
+        );
+        emitProgress("connect", "Conectando con el modelo IA para generar archivos", true);
+
+        const upstream = await streamChatCompletions({ model, messages, json: true, maxTokens: 16000 });
+
+        if (!upstream.ok) {
+          if (!skipCredits) {
+            await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream_refund", {
+              status: upstream.status,
+            });
+          }
+          const fail = await parseUpstreamFailure(upstream);
+          // Stream no disponible: misma petición en modo JSON (créditos ya consumidos),
+          // pero manteniendo SSE para que el chat siga viendo progreso real.
+          if (fail.status >= 400 && fail.status !== 429) {
+            try {
+              emitProgress("fallback", "El stream IA fallo; generando respuesta completa de respaldo", true);
+              const completed = await completeChatMessage({ model, messages, json: true });
+              const content = completed.content || "{}";
+              const parsedOut = parseJsonLoose<{ reply?: string; files?: unknown }>(content) ?? {};
+              if (!parsedOut.reply && !parsedOut.files) {
+                console.warn("[gafcore-chat] stream-fallback non-JSON content len=" + content.length);
+              }
+              const replyRaw = typeof parsedOut.reply === "string" ? parsedOut.reply : "Listo.";
+              emitProgress("validating", "Validando archivos del respaldo antes del preview", true);
+              const finalized = await finalizeChatDeliveryWithSafeBuild({
+                instruction: data.instruction,
+                contextFiles: data.files as ProjFile[],
+                replyRaw,
+                rawFiles: parsedOut.files,
+                messages,
+                gateway,
+              });
+              const reply = sanitizeUserFacingAiText(
+                softenRoboticReply(data.instruction, finalized.reply),
+              );
+              const payload = { reply, files: finalized.files };
+              if (shouldWriteGafcoreChatCache(finalized.files)) {
+                cacheSet(cacheKey, payload);
+                void setPersistedChatCache(cacheKey, userId, model, payload);
+              }
+              persistSnapshotAfterChat(data.projectId, userId, projFiles, finalized.files);
+              auditAiActionCompleted({
+                userId,
+                action,
+                instruction: data.instruction,
+                projectId: data.projectId,
+                risk: gov.risk,
+                metadata: { fallback: "complete", safeBuild: finalized.safeBuild },
+              });
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    gafcore: "final",
+                    reply,
+                    files: finalized.files,
+                    fallback: "complete",
+                    safeBuild: finalized.safeBuild,
+                  })}\n\n`,
+                ),
+              );
+              closeStream();
+              return;
+            } catch {
+              /* sigue con error upstream */
+            }
+          }
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                gafcore: "final",
+                error: fail.code === "rate_limited" ? "rate_limited" : "upstream",
+                detail: sanitizeApiErrorDetail(fail.detail) ?? "Error temporal del asistente.",
+              })}\n\n`,
+            ),
+          );
+          closeStream();
+          return;
+        }
+
+        if (!upstream.body) {
+          if (!skipCredits) {
+            await refundAiCredits(userId, COST_PER_REQUEST, "gafcore_chat_stream_refund", {
+              reason: "no_body",
+            });
+          }
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ gafcore: "final", error: "no_stream_body" })}\n\n`,
+            ),
+          );
+          closeStream();
+          return;
+        }
+
+        auditAiActionCompleted({
+          userId,
+          action,
+          instruction: data.instruction,
+          projectId: data.projectId,
+          risk: gov.risk,
+          metadata: { mode: "stream" },
+        });
+
+        emitProgress("stream", "Stream IA conectado; esperando el primer bloque de codigo", true);
+        reader = upstream.body.getReader();
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -470,6 +503,17 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
         );
         const deliveredFiles = agentResult.files;
         const validationBlocked = agentResult.validationBlocked && deliveredFiles.length === 0;
+        if (deliveredFiles.length > 0) {
+          const fileList = deliveredFiles
+            .slice(0, 4)
+            .map((file) => file.name)
+            .join(", ");
+          emitProgress(
+            "files",
+            `Archivos generados y validados: ${fileList}${deliveredFiles.length > 4 ? "..." : ""}`,
+            true,
+          );
+        }
         emitProgress(
           validationBlocked ? "blocked" : "preview",
           validationBlocked
@@ -508,11 +552,10 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
           ),
         );
       }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      controller.close();
+      closeStream();
     },
     cancel() {
-      void reader.cancel();
+      void reader?.cancel();
     },
   });
 

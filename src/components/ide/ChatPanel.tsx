@@ -2216,6 +2216,9 @@ export function ChatPanel({
     validationBlocked?: boolean;
     autoCorrectAgent?: GafcoreAutoCorrectAgentReport;
   }> => {
+    setBuildProgress(
+      `Enviando al servidor IA: ${contextFiles.length} archivos de contexto`,
+    );
     const res = await fetch("/api/gafcore/chat/stream", {
       method: "POST",
       headers: {
@@ -2233,6 +2236,11 @@ export function ChatPanel({
       signal: ac,
     });
     const ct = res.headers.get("content-type") || "";
+    setBuildProgress(
+      ct.includes("text/event-stream")
+        ? "Servidor conectado; esperando eventos reales de IA"
+        : "Servidor respondio sin stream; leyendo resultado validado",
+    );
     if (!res.ok || ct.includes("text/html")) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -3240,7 +3248,7 @@ export function ChatPanel({
     setStreamChars(null);
     setBuildProgress(
       effectiveBuild
-        ? "Solicitud enviada a la IA"
+        ? `Preparando contexto real: ${buildContextFiles.length} archivos del proyecto`
         : "Preparando respuesta",
     );
     const ac = new AbortController();
@@ -3447,7 +3455,13 @@ export function ChatPanel({
       }
 
       if (filesToApply.length > 0 && effectiveBuild) {
-        setBuildProgress("Aplicando el diseno generado al preview");
+        const applyNames = filesToApply
+          .slice(0, 4)
+          .map((file) => file.name)
+          .join(", ");
+        setBuildProgress(
+          `Aplicando al workspace: ${applyNames}${filesToApply.length > 4 ? "..." : ""}`,
+        );
         const runFunctional = effectiveBuild && !visualEditOn && !fastWelcomeBuild;
         let { merged, issues, blocked: applyBlocked } = await applyGenerationFiles(
           buildContextFiles,
