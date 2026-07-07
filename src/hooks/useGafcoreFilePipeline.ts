@@ -10,7 +10,6 @@ import type { FileItem } from "@/components/ide/CodeEditor";
 import { prepareWorkspaceForPreview } from "@/core/pipeline/apply-build.shared";
 import { healUntilStable } from "@/core/pipeline/syntax-heal.shared";
 import { repairCommonJsxSyntaxErrors } from "@/lib/gafcore-media.shared";
-import { autoFixSyntaxClosure } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace } from "@/core/pipeline/file-merge.shared";
 import { ensureReactPackageJson } from "@/lib/gafcore-project-scaffold.shared";
 import { createDeterministicBuildFallbackFiles } from "@/lib/gafcore-chat-delivery.shared";
@@ -235,6 +234,7 @@ export function useGafcoreFilePipeline({
         deliveredFiles: delivered,
         userInstruction,
         mode: options.serverDelivered ? "server_delivered" : "local_full",
+        skipSyntaxHeal: true,
       });
 
       let merged: FileItem[] = prepared.merged.map((f) => ({
@@ -242,12 +242,6 @@ export function useGafcoreFilePipeline({
         content: f.content,
         language: f.language ?? "typescript",
       }));
-
-      merged = merged.map((f) => {
-        if (!/\.(tsx|jsx)$/i.test(f.name)) return f;
-        const fixed = autoFixSyntaxClosure(f.content);
-        return fixed.fixes.length > 0 ? { ...f, content: fixed.content } : f;
-      });
 
       let transpile = await transpileValidate(merged);
       let usedCleanFallback = false;
@@ -273,19 +267,21 @@ export function useGafcoreFilePipeline({
           const fallbackFiles = ensureReactPackageJson(
             createDeterministicBuildFallbackFiles(fallbackInstruction, baseFiles),
           );
-          const healedFallback = healUntilStable(
-            fallbackFiles.map((f) => ({
-              name: f.name,
-              content: f.content,
-              language: f.language ?? "typescript",
-            })),
-          );
-          const fallbackMerged: FileItem[] = healedFallback.files.map((f) => ({
+          let fallbackMerged: FileItem[] = fallbackFiles.map((f) => ({
             name: f.name,
             content: f.content,
             language: f.language ?? "typescript",
           }));
-          const fallbackTranspile = await transpileValidate(fallbackMerged);
+          let fallbackTranspile = await transpileValidate(fallbackMerged);
+          if (!fallbackTranspile.ok) {
+            const healedFallback = healUntilStable(fallbackMerged);
+            fallbackMerged = healedFallback.files.map((f) => ({
+              name: f.name,
+              content: f.content,
+              language: f.language ?? "typescript",
+            }));
+            fallbackTranspile = await transpileValidate(fallbackMerged);
+          }
           if (fallbackTranspile.ok) {
             merged = fallbackMerged;
             transpile = fallbackTranspile;

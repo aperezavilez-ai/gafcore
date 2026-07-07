@@ -33,6 +33,7 @@ export function prepareWorkspaceForPreview(input: {
   deliveredFiles: PipelineFile[];
   userInstruction: string;
   mode: ApplyBuildMode;
+  skipSyntaxHeal?: boolean;
 }): WorkspacePrepareResult {
   if (input.deliveredFiles.length === 0) {
     return { merged: input.baseFiles, issues: [], healNotes: [] };
@@ -54,9 +55,11 @@ export function prepareWorkspaceForPreview(input: {
     merged = built.merged;
   }
 
-  const healed = healUntilStable(
-    merged.map((f) => ({ name: f.name, content: f.content, language: f.language })),
-  );
+  const healed = input.skipSyntaxHeal
+    ? { files: merged, notes: [] }
+    : healUntilStable(
+        merged.map((f) => ({ name: f.name, content: f.content, language: f.language })),
+      );
   merged = mapHealedFiles(healed.files);
 
   const audit = auditProjectLocally(merged);
