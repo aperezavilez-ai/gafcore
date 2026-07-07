@@ -3733,6 +3733,10 @@ export function ChatPanel({
           } catch (fallbackError) {
             logClientWarn("gafcore-chat timeout fallback failed", fallbackError);
           }
+          toast.error("La IA tardo demasiado y el build seguro no pudo aplicarse.", {
+            duration: 9000,
+          });
+          return;
         }
         setStreamProgress(null);
         setHealthPhase(null);
@@ -4062,15 +4066,6 @@ export function ChatPanel({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5 pl-9">
-                    <HealthStatus
-                      phase={healthPhase}
-                      label={streamProgress ?? pipelineStatus ?? undefined}
-                    />
-                    {streamProgress ? (
-                      <p className="max-w-[92%] text-[11px] leading-relaxed text-foreground/80">
-                        {streamProgress}
-                      </p>
-                    ) : null}
                     {streamChars != null && streamChars > 0 && (
                       <p className="text-[10px] text-muted-foreground">
                         Generando archivos... ~{Math.max(1, Math.round(streamChars / 1024))} KB recibidos

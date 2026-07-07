@@ -44,6 +44,7 @@ export function filesFromBuiltinTemplateByInstruction(
 }
 
 function fallbackTitle(instruction: string): string {
+  if (/ferreter|herramient|materiales? de construccion|materiales? de construcci[oó]n/i.test(instruction)) return "Ferreteria Pro";
   if (/barber|barberia|barbería/i.test(instruction)) return "Barberia Premium";
   if (/restaurante|restaurant|comida/i.test(instruction)) return "Restaurante Premium";
   if (/salon|belleza|spa/i.test(instruction)) return "Estudio de Belleza";
@@ -52,6 +53,9 @@ function fallbackTitle(instruction: string): string {
 }
 
 function fallbackServices(instruction: string): string[] {
+  if (/ferreter|herramient|materiales? de construccion|materiales? de construcci[oó]n/i.test(instruction)) {
+    return ["Herramientas electricas", "Materiales de obra", "Asesoria tecnica"];
+  }
   if (/barber|barberia|barbería/i.test(instruction)) {
     return ["Corte clasico", "Barba premium", "Paquete completo"];
   }

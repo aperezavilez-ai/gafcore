@@ -250,6 +250,7 @@ export function useGafcoreFilePipeline({
       });
 
       let transpile = await transpileValidate(merged);
+      let usedCleanFallback = false;
       if (!transpile.ok) {
         merged = merged.map((f) =>
           /\.(tsx|jsx)$/i.test(f.name)
@@ -288,6 +289,7 @@ export function useGafcoreFilePipeline({
           if (fallbackTranspile.ok) {
             merged = fallbackMerged;
             transpile = fallbackTranspile;
+            usedCleanFallback = true;
             logPipelineEvent(
               "warn",
               "apply.clean-fallback",
@@ -354,7 +356,7 @@ export function useGafcoreFilePipeline({
         offerGenerationRollback("No se guardó en la nube. Puedes deshacer el último cambio.");
       }
 
-      let issues: ProjectValidationIssue[] = prepared.issues;
+      let issues: ProjectValidationIssue[] = usedCleanFallback ? [] : prepared.issues;
       let mergedForReturn = merged;
       if (options.runFunctionalAudit) {
         const validation = await runProjectValidation(merged);
