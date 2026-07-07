@@ -3177,12 +3177,13 @@ export function ChatPanel({
       pendingRef;
     if (!instruction.trim() || loading || sendInFlightRef.current) return;
     orchestration.assignActiveTaskBeforeBuild(effectiveBuild);
+    const workspaceHasBlockingPreviewError = isBlockingPreviewError(lastErrorRef.current);
     const shouldPrimeWorkspacePreview =
       effectiveBuild &&
       !visualEditOn &&
       !factoryMode &&
       !multiAgentMode &&
-      stillOnWelcome &&
+      (stillOnWelcome || workspaceHasBlockingPreviewError) &&
       isSubstantiveBuildRequest(raw || coreText);
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (

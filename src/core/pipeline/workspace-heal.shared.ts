@@ -14,7 +14,7 @@ import {
 } from "@/lib/gafcore-incremental-edit.shared";
 import { runIntegrityShield } from "@/lib/gafcore-integrity-shield.shared";
 import { mergeGeneratedIntoWorkspace, type PipelineFile } from "@/core/pipeline/file-merge.shared";
-import { healUntilStable, healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
+import { healWorkspaceSyntax } from "@/core/pipeline/syntax-heal.shared";
 
 export type WorkspaceBuildResult = {
   merged: PipelineFile[];
@@ -25,8 +25,19 @@ export type WorkspaceBuildResult = {
 export function prepareLoadedProjectFiles<T extends { name: string; content: string; language?: string }>(
   files: T[],
 ): T[] {
-  const healed = healUntilStable(sanitizeProjectJsxFiles(files));
-  return ensureReactPackageJson(healed.files);
+  const sanitized = sanitizeProjectJsxFiles(files).map((file) => {
+    if (!/\.(tsx|jsx)$/i.test(file.name)) return file;
+    return { ...file, content: repairPersistedRootCloserArtifact(file.content) };
+  });
+  return ensureReactPackageJson(sanitized);
+}
+
+function repairPersistedRootCloserArtifact(source: string): string {
+  const root = source.match(/return\s*\(\s*<([A-Za-z][\w.-]*)\b/);
+  const rootTag = root?.[1];
+  if (!rootTag) return source;
+  const closeRootThenExtraDiv = new RegExp(`</${rootTag}>\\s*</div>(\\s*\\);)`, "m");
+  return source.replace(closeRootThenExtraDiv, `</${rootTag}>$1`);
 }
 
 /** Plantilla nueva o recién creada: sin heal agresivo (evita romper welcome con Tailwind `/`). */
