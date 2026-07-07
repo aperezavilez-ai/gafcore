@@ -441,14 +441,9 @@ function GafCoreLoginPage() {
                     </div>
 
                     <button
-                      type="button"
+                      type="submit"
                       disabled={loading}
                       className="auth-grad-btn mt-2 cursor-pointer disabled:cursor-not-allowed"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const form = e.currentTarget.closest("form");
-                        void runLogin(form instanceof HTMLFormElement ? form : null);
-                      }}
                     >
                       {loading ? "Entrando..." : "Entrar"} <ArrowRight size={16} />
                     </button>
