@@ -278,8 +278,8 @@ export default {
     const path = url.pathname;
 
     if (path.includes("/gafcore/login")) {
-      if (request.method === "POST") {
-        return Response.redirect(buildSanitizedLoginUrl(url), 303);
+      if (request.method === "POST" && path === "/gafcore/login") {
+        return gafcoreAuthLogin(request);
       }
       if (loginUrlHasForbiddenParams(url)) {
         return Response.redirect(buildSanitizedLoginUrl(url), 302);
