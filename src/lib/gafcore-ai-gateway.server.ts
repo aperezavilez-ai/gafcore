@@ -43,14 +43,6 @@ export function getGafcoreAiGateway(): GafcoreAiGateway {
   const deep = process.env.AI_MODEL_DEEP?.trim() || defaults.deep;
   const ui = process.env.AI_MODEL_UI?.trim() || defaults.ui;
   const support = process.env.AI_SUPPORT_MODEL?.trim() || fast;
-  console.error(
-    "GAFCORE_DEBUG_GATEWAY",
-    JSON.stringify({
-      defaultConfigUrl: config.url,
-      envAiModelDeep: process.env.AI_MODEL_DEEP ?? null,
-      resolvedModels: { fast, deep, ui, support },
-    }),
-  );
   return { config, models: { fast, deep, support, ui } };
 }
 
@@ -183,13 +175,15 @@ export async function completeChatMessage(input: {
   messages: GafcoreChatMessage[] | Array<{ role: string; content: string }>;
   temperature?: number;
   json?: boolean;
-}): Promise<{ content: string; raw: unknown }> {
+  maxTokens?: number;
+}): Promise<{ content: string; raw: unknown; finishReason: string | null; truncated: boolean }> {
   const body: Record<string, unknown> = {
     model: input.model,
     messages: input.messages,
     temperature: input.temperature ?? 0.7,
   };
   if (input.json) body.response_format = { type: "json_object" };
+  if (typeof input.maxTokens === "number") body.max_tokens = input.maxTokens;
 
   const res = await upstreamChatCompletions(body);
   if (!res.ok) {
@@ -201,16 +195,20 @@ export async function completeChatMessage(input: {
   }
 
   const raw = await res.json();
-  const content: string =
-    (raw as { choices?: Array<{ message?: { content?: string } }> })?.choices?.[0]?.message
-      ?.content ?? "";
-  return { content, raw };
+  const choice = (raw as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }> })
+    ?.choices?.[0];
+  const content: string = choice?.message?.content ?? "";
+  const finishReason = choice?.finish_reason ?? null;
+  // OpenAI: "length"; Anthropic (mapeado en wrapAnthropicResponse): "max_tokens".
+  const truncated = finishReason === "length" || finishReason === "max_tokens";
+  return { content, raw, finishReason, truncated };
 }
 
 export async function streamChatCompletions(input: {
   model: string;
   messages: GafcoreChatMessage[] | Array<{ role: string; content: string }>;
   json?: boolean;
+  maxTokens?: number;
 }): Promise<Response> {
   const body: Record<string, unknown> = {
     model: input.model,
@@ -218,5 +216,8 @@ export async function streamChatCompletions(input: {
     stream: true,
   };
   if (input.json) body.response_format = { type: "json_object" };
+  // Mismo techo que completeChatMessage: el stream de un build (JSON con files)
+  // supera el default 8192 y se cortaría a mitad de archivo.
+  if (typeof input.maxTokens === "number") body.max_tokens = input.maxTokens;
   return upstreamChatCompletions(body);
 }

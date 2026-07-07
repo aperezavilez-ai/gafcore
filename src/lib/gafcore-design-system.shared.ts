@@ -150,10 +150,12 @@ M) **DENSIDAD VISUAL PREMIUM (obligatorio para landings y home pages)**
    4) **Iconos en contenedores con accent** (no iconos sueltos sin marco):
       - \`<div className="inline-flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/20"><Icon className="size-6 text-primary" /></div>\`
 
-   5) **Social proof obligatorio** above-the-fold o justo debajo del hero:
-      - Stats row: 3-4 números grandes (\`text-4xl font-bold\`) + label pequeño (\`text-sm text-muted-foreground uppercase tracking-wider\`). Ej: "10k+ usuarios · 99.9% uptime · 4.9/5 rating · 24/7 soporte".
-      - O logos row: 5-6 nombres de empresas grises (\`text-muted-foreground/60 font-semibold\`) con label "Confían en nosotros".
-      - O ambos.
+   5) **Social proof obligatorio** above-the-fold o justo debajo del hero — la FORMA depende del rubro, no repitas siempre "X+ / X años / 24/7 / X.X rating":
+      - Retail/ecommerce: rating + nº de reseñas reales del rubro, envío/garantía, marcas que vende.
+      - Servicios profesionales (clínica, despacho, taller): años operando, clientes atendidos, certificaciones/garantías específicas del oficio.
+      - Restaurante/local: reseñas con cita textual corta, premios o menciones, no un stats-row genérico.
+      - SaaS/producto digital: usuarios activos, uptime, integraciones, logos de clientes.
+      - Elige 1-2 de estas formas por proyecto, con números y unidades que tengan sentido para ESE negocio específico — nunca copies el mismo cuarteto de cifras de otro proyecto.
 
    6) **Bento grid para features** (no 3 cards iguales repetidas):
       - Grid asimétrico: una card grande 2x1 + dos cards 1x1 + una card ancha 2x1 abajo, etc.
@@ -163,18 +165,17 @@ M) **DENSIDAD VISUAL PREMIUM (obligatorio para landings y home pages)**
       - Sección con background especial: \`relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-violet-600 p-12 md:p-20\` + orbs internos.
       - Título grande blanco, texto white/80, 2 botones (sólido blanco + outline white/30).
 
-N) **ANATOMÍA DE UN HERO PREMIUM (cópialo como template mental)**
-   Estructura recomendada (split o centered), siempre con mockup en lugar de foto random:
+N) **VARIEDAD ESTRUCTURAL OBLIGATORIA — elige el patrón de hero según el rubro, no repitas siempre el mismo**
+   Regla dura: **prohibido usar la misma anatomía de hero para negocios de rubro distinto.** Antes de escribir el hero, decide a cuál de estos patrones pertenece el negocio descrito por el usuario y aplica SOLO ese:
 
-   - Section relative overflow-hidden con orbs blur de fondo (2 orbs con colores del brand).
-   - Grid 2 cols en lg: lado izquierdo texto, lado derecho **mockup del producto**.
-   - Texto: eyebrow pill → h1 grande con palabra clave en gradiente → lead 1-2 líneas → 2 CTAs (primario + ghost) → mini social proof (avatares + "10k+ usuarios").
-   - Mockup del producto: una "card" con frame de browser o phone (3 dots de colores como tráfico) y DENTRO el UI real del producto construido con \`<div>\` + Tailwind. NO uses \`<img>\` con foto.
-     * Para apps de notas: sidebar con items + main con cards/lines como notas.
-     * Para e-commerce: grid de productos con thumbnails de gradiente.
-     * Para dashboards: chart fake con barras de \`<div>\`, KPIs.
-     * Para messaging: bubbles de chat.
-   - El mockup debe estar envuelto en un wrapper con halo: \`<div className="absolute -inset-6 rounded-3xl bg-gradient-to-br from-primary/30 via-violet-500/20 to-fuchsia-500/20 blur-2xl" />\` detrás del frame.
+   - **Producto digital / SaaS / app** → split con mockup de producto (frame browser o phone con UI falsa dentro, \`<div>\` + Tailwind, NO foto). Eyebrow → h1 con palabra en gradiente → lead → 2 CTAs → mini social proof con avatares.
+   - **Retail/tienda física u online con catálogo** (ferretería, boutique, tienda de tenis, etc.) → hero centrado o split con foto de producto real (Unsplash query específica, ver sección I) en vez de mockup de app; el "mockup" aquí son 3-4 productos destacados con precio, no un frame de navegador. Evita el cuarteto de badges genérico — usa 1-2 datos concretos del negocio (categorías que vende, garantía, envío).
+   - **Restaurante/local gastronómico** → hero con foto de plato/ambiente cálida (no mockup de software), tipografía con acento serif/handwritten, CTA de reservar o ver menú, sin stats-row tipo SaaS.
+   - **Servicios profesionales (clínica, despacho, taller, consultoría)** → hero sobrio: foto real de equipo/instalaciones o ilustración simple, énfasis en confianza (años, certificaciones) en vez de gradientes llamativos, CTA de agendar/cotizar.
+   - **Portfolio/creativo** → hero editorial asimétrico, tipografía grande como protagonista, poco o ningún mockup.
+   - **Dashboard/panel interno** → sin "hero" de marketing; va directo a layout de app con sidebar + contenido.
+
+   Estructura común a cualquier patrón elegido: sección \`relative overflow-hidden\` con orbs blur de fondo si aplica al rubro (evita orbs violeta/fucsia genéricos en rubros no-tech: usa colores de marca del negocio). Si el mockup de software no aplica al rubro, NO lo fuerces — usa la alternativa de ese patrón.
 
 O) **ANTI-PATRONES (no hagas esto NUNCA en una landing profesional)**
    - Foto de paisaje / río / montaña / atardecer en el hero de un producto digital. PROHIBIDO.
@@ -184,4 +185,5 @@ O) **ANTI-PATRONES (no hagas esto NUNCA en una landing profesional)**
    - Tipografía monótona: todos los títulos del mismo tamaño y color sólido sin acento gradient.
    - Footer minimal de 1 fila. Footer pro: 4 columnas + newsletter + redes + badges + copyright.
    - Sin scroll: si la landing tiene <3 secciones visibles, falta contenido. Mínimo: hero + social proof + features + cómo funciona + testimonios/precios + FAQ + CTA final + footer.
+   - Reusar la anatomía de hero, el stats-row o la paleta de un negocio de otro rubro (p. ej. tratar una ferretería o tienda de ropa igual que un SaaS). La estructura debe reflejar el rubro real descrito por el usuario, no un molde único de "landing premium".
 `;

@@ -57,7 +57,6 @@ import {
   isRemoteProjectStale,
 } from "@/lib/gafcore-project-stale.shared";
 import {
-  clearPendingMarketplaceTemplate,
   isTruthyNewProjectSearchParam,
 } from "@/lib/gafcore-marketplace-template-pending.shared";
 import {

@@ -19,5 +19,5 @@ export function getAnthropicProviderStatus(): AiProviderStatus {
 }
 
 export function defaultAnthropicDeepModel(): string {
-  return process.env.AI_MODEL_DEEP?.trim() || "claude-sonnet-4-6";
+  return process.env.AI_MODEL_DEEP?.trim() || "claude-sonnet-5";
 }
