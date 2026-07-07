@@ -703,7 +703,7 @@ export function GafCoreIDE() {
       return [{ id: created.id, name: created.name, created_at: created.created_at }, ...prev];
     });
     const source = nextFiles.length ? nextFiles : createWelcomeProjectFiles();
-    const filesOut = applyProjectWorkspace(source, { fresh: true });
+    const filesOut = applyProjectWorkspace(source, { fresh: true, resetChat: false });
     stashPendingProjectFiles(
       created.id,
       filesOut.map((f) => ({ name: f.name, language: f.language, content: f.content })),

@@ -3177,6 +3177,13 @@ export function ChatPanel({
       pendingRef;
     if (!instruction.trim() || loading || sendInFlightRef.current) return;
     orchestration.assignActiveTaskBeforeBuild(effectiveBuild);
+    const shouldPrimeWorkspacePreview =
+      effectiveBuild &&
+      !visualEditOn &&
+      !factoryMode &&
+      !multiAgentMode &&
+      stillOnWelcome &&
+      isSubstantiveBuildRequest(raw || coreText);
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (
       lastUser &&
@@ -3200,6 +3207,7 @@ export function ChatPanel({
       setHealthPhase(null);
     }
     const myEpoch = ++requestEpochRef.current;
+    let workspacePrimedByFallback = false;
     logPipelineEvent(
       "info",
       "chat.request",
@@ -3251,6 +3259,30 @@ export function ChatPanel({
         ? `Preparando contexto real: ${buildContextFiles.length} archivos del proyecto`
         : "Preparando respuesta",
     );
+    if (shouldPrimeWorkspacePreview) {
+      try {
+        setHealthPhase("validating");
+        setBuildProgress("Creando primer proyecto visible en el area de trabajo");
+        const primed = await applyGenerationFiles(
+          buildContextFiles,
+          createDeterministicBuildFallbackFiles(raw || coreText || instruction, buildContextFiles),
+          instruction,
+          raw,
+          {
+            runFunctionalAudit: false,
+            snapshotLabel: `primer-preview: ${raw.slice(0, 60)}`,
+            serverDelivered: true,
+          },
+        );
+        if (!primed.blocked && myEpoch === requestEpochRef.current) {
+          workspacePrimedByFallback = true;
+          buildContextFiles = primed.merged;
+          setBuildProgress("Proyecto inicial aplicado; la IA sigue refinando");
+        }
+      } catch (primeError) {
+        logClientWarn("gafcore-prime-workspace-preview", primeError);
+      }
+    }
     const ac = new AbortController();
     abortControllerRef.current = ac;
     const requestTimeoutMs = fastWelcomeBuild ? 90_000 : CHAT_REQUEST_TIMEOUT_MS;
@@ -3708,6 +3740,7 @@ export function ChatPanel({
         pipelineRunIdRef.current = null;
         if (
           abortedByTimeout &&
+          !workspacePrimedByFallback &&
           effectiveBuild &&
           !reviewOnly &&
           isSubstantiveBuildRequest(raw || coreText || instruction)
@@ -3748,6 +3781,13 @@ export function ChatPanel({
           }
           toast.error("La IA tardo demasiado y el build seguro no pudo aplicarse.", {
             duration: 9000,
+          });
+          return;
+        }
+        if (workspacePrimedByFallback) {
+          setBuildProgress("Proyecto inicial aplicado al area de trabajo");
+          toast.message("La IA se detuvo, pero el proyecto inicial ya quedo visible en el preview.", {
+            duration: 7000,
           });
           return;
         }
