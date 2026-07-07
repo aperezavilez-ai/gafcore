@@ -190,7 +190,7 @@ export default function App() {
             <a href="#contacto" className="hover:text-white">Contacto</a>
           </nav>
           <div className="rounded-full border border-white/15 px-4 py-2 text-sm font-bold">
-            Carrito: {totalItems} pares · \${total.toLocaleString("es-MX")} MXN
+            Carrito: {totalItems} pares · {total.toLocaleString("es-MX")} MXN
           </div>
         </div>
       </header>
@@ -280,7 +280,7 @@ export default function App() {
                     ))}
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-2xl font-black">\${product.price.toLocaleString("es-MX")} MXN</span>
+                    <span className="text-2xl font-black">{product.price.toLocaleString("es-MX")} MXN</span>
                     <button
                       type="button"
                       onClick={() => addToCart(product.id)}
