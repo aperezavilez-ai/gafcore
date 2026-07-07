@@ -781,13 +781,19 @@ export function ChatPanel({
         .order("created_at", { ascending: true })
         .limit(200);
       if (cancelled || error || !data) return;
-      setMessages(
-        data.map((r: any) => ({
-          role: r.role === "assistant" ? "ai" : "user",
-          content: r.content,
-          ts: new Date(r.created_at).getTime(),
-        })),
-      );
+      const loadedMessages = data.map((r: any) => ({
+        role: r.role === "assistant" ? "ai" : "user",
+        content: r.content,
+        ts: new Date(r.created_at).getTime(),
+      })) as Msg[];
+      setMessages(loadedMessages);
+      const persistedPreviewError = [...loadedMessages]
+        .reverse()
+        .find((m) => m.role === "ai" && isBlockingPreviewError(m.content));
+      if (persistedPreviewError) {
+        setLastError(persistedPreviewError.content);
+        lastErrorRef.current = persistedPreviewError.content;
+      }
       stickToBottomRef.current = true;
     })();
     return () => {
