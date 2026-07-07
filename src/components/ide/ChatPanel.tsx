@@ -98,7 +98,6 @@ import {
   FUNCTIONAL_FIRST_BUILD_PREFIX,
   buildPreserveExistingPrefix,
 } from "@/lib/gafcore-functional-first.shared";
-import { buildFastWelcomeBuildPrefix } from "@/lib/gafcore-fast-build.shared";
 import {
   auditProjectLocally,
   buildValidationFixInstruction,
@@ -3117,12 +3116,7 @@ export function ChatPanel({
     const stillOnWelcome = Boolean(
       welcomeApp?.content && isGafcoreDefaultTemplateApp(welcomeApp.content),
     );
-    const fastWelcomeBuild =
-      effectiveBuild &&
-      stillOnWelcome &&
-      !visualEditOn &&
-      !factoryMode &&
-      !multiAgentMode;
+    const fastWelcomeBuild = false;
     const functionalPrefix =
       effectiveBuild && !visualEditOn && !fastWelcomeBuild ? FUNCTIONAL_FIRST_BUILD_PREFIX : "";
     const preservePrefix =
@@ -3132,9 +3126,6 @@ export function ChatPanel({
     const freshProjectPrefix = isFreshProject ? buildFreshProjectInstructionPrefix() : "";
     const conversationalPrefix = conversational ? buildConversationalInstructionPrefix(raw) : "";
     const reviewPrefix = reviewOnly ? buildReviewInstructionPrefix(raw) : "";
-    const fastWelcomePrefix = fastWelcomeBuild
-      ? buildFastWelcomeBuildPrefix(userFacingRaw || coreText)
-      : "";
     const creativePrefix =
       effectiveBuild && !visualEditOn && !fastWelcomeBuild ? buildCreativeBuildPrefix(raw) : "";
     const deepPrefix =
@@ -3162,7 +3153,6 @@ export function ChatPanel({
         : "";
     const instruction =
       freshProjectPrefix +
-      fastWelcomePrefix +
       conversationalPrefix +
       reviewPrefix +
       forceBuildPrefix +
@@ -3257,8 +3247,10 @@ export function ChatPanel({
     const ac = new AbortController();
     abortControllerRef.current = ac;
     const requestTimeoutMs = fastWelcomeBuild ? 90_000 : CHAT_REQUEST_TIMEOUT_MS;
+    let abortedByTimeout = false;
     const chatTimeoutId = window.setTimeout(() => {
       if (!sendInFlightRef.current) return;
+      abortedByTimeout = true;
       ac.abort();
       toast.error(
         fastWelcomeBuild
@@ -3700,10 +3692,51 @@ export function ChatPanel({
     } catch (error: any) {
       if (error?.name === "AbortError") {
         setStreamChars(null);
+        pipelineRunIdRef.current = null;
+        if (
+          abortedByTimeout &&
+          effectiveBuild &&
+          !reviewOnly &&
+          isSubstantiveBuildRequest(raw || coreText || instruction)
+        ) {
+          try {
+            setHealthPhase("validating");
+            setBuildProgress("La IA tardo demasiado; aplicando build seguro al preview");
+            const fallbackBatch = await applyGenerationFiles(
+              buildContextFiles,
+              createDeterministicBuildFallbackFiles(raw || coreText || instruction, buildContextFiles),
+              instruction,
+              raw,
+              {
+                runFunctionalAudit: effectiveBuild && !visualEditOn && !fastWelcomeBuild,
+                snapshotLabel: `timeout-fallback: ${raw.slice(0, 60)}`,
+                serverDelivered: true,
+              },
+            );
+            if (!fallbackBatch.blocked) {
+              const fallbackReply =
+                "La IA tardo demasiado, pero aplique un build seguro para que el area de trabajo no se quede en la bienvenida.";
+              appendMessageDeduped("ai", fallbackReply);
+              scrollChatToBottomSoon("auto");
+              void persistMessage("assistant", fallbackReply);
+              setLastError(
+                fallbackBatch.issues.some((i) => i.severity === "error")
+                  ? formatValidationForUser(fallbackBatch.issues.filter((i) => i.severity === "error"))
+                  : null,
+              );
+              setBuildProgress("Build seguro aplicado al area de trabajo");
+              const buildLabel = (userFacingRaw || raw || coreText || instruction).trim().slice(0, 200);
+              if (buildLabel) onBuildSucceeded?.({ label: buildLabel });
+              toast.success("Build seguro aplicado al preview", { duration: 6000 });
+              return;
+            }
+          } catch (fallbackError) {
+            logClientWarn("gafcore-chat timeout fallback failed", fallbackError);
+          }
+        }
         setStreamProgress(null);
         setHealthPhase(null);
         setPipelineStatus(null);
-        pipelineRunIdRef.current = null;
         toast.message("Solicitud detenida o cancelada por tiempo.");
         return;
       }
