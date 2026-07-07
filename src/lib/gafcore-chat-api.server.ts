@@ -410,7 +410,7 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
         );
       };
       try {
-        emitProgress("planning", "Leyendo tu idea y preparando la estructura", true);
+        emitProgress("request", "Solicitud recibida por la IA", true);
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -429,14 +429,9 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
               const piece = j?.choices?.[0]?.delta?.content;
               if (typeof piece === "string" && piece.length > 0) {
                 full += piece;
-                if (full.length > 10_000) {
-                  emitProgress("finishing", "Terminando archivos para validar el preview");
-                } else if (full.length > 6_000) {
-                  emitProgress("interactions", "Completando interacciones y contenido");
-                } else if (full.length > 2_500) {
-                  emitProgress("design", "Armando diseño, secciones y estilos");
-                } else if (full.length > 500) {
-                  emitProgress("code", "Escribiendo los primeros componentes");
+                if (full.length > 500) {
+                  const kb = Math.max(1, Math.round(full.length / 1024));
+                  emitProgress("stream", `IA generando archivos: ${kb} KB recibidos`);
                 }
                 // Passthrough del delta al cliente (mismo shape OpenAI que ya parsea).
                 controller.enqueue(

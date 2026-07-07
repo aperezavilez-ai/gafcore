@@ -383,11 +383,10 @@ async function readGafcoreChatStream(
 }
 
 function describeStreamingProgress(charLen: number, previous?: string | null): string {
-  if (charLen < 500) return "Leyendo tu idea y preparando la estructura";
-  if (charLen < 2_500) return "Escribiendo los primeros componentes";
-  if (charLen < 6_000) return "Armando diseño, secciones y estilos";
-  if (charLen < 10_000) return "Completando interacciones y contenido";
-  return previous?.trim() || "Terminando archivos para validar el preview";
+  const kb = Math.max(1, Math.round(charLen / 1024));
+  if (charLen < 500) return "IA conectada: recibiendo contenido generado";
+  if (charLen < 10_000) return `IA generando archivos: ${kb} KB recibidos`;
+  return previous?.trim() || `IA generando archivos: ${kb} KB recibidos`;
 }
 
 /**
@@ -3241,7 +3240,7 @@ export function ChatPanel({
     setStreamChars(null);
     setBuildProgress(
       effectiveBuild
-        ? "Leyendo tu idea y preparando la estructura"
+        ? "Solicitud enviada a la IA"
         : "Preparando respuesta",
     );
     const ac = new AbortController();
@@ -3878,29 +3877,6 @@ export function ChatPanel({
   }, [onWorkflowStripChange]);
 
   useEffect(() => {
-    if (!loading || !healthPhase) return;
-    const steps = [
-      "Leyendo tu idea y preparando la estructura",
-      "Conectando el cerebro IA del proyecto",
-      "Definiendo secciones y estilo visual",
-      "Creando archivos del diseno",
-      "Validando codigo antes del preview",
-      "Preparando el area de trabajo",
-    ];
-    let idx = 0;
-    const timer = window.setInterval(() => {
-      setStreamProgress((current) => {
-        if (current && !steps.includes(current)) return current;
-        idx = Math.min(idx + 1, steps.length - 1);
-        const next = steps[idx];
-        setPipelineStatus(next);
-        return next;
-      });
-    }, 5500);
-    return () => window.clearInterval(timer);
-  }, [loading, healthPhase]);
-
-  useEffect(() => {
     return () => {
       onWorkflowStripChange?.({
         visible: false,
@@ -3976,16 +3952,6 @@ export function ChatPanel({
             </span>
           </button>
         </div>
-        {healthPhase && !loading ? (
-          <div className="mt-1.5">
-            <HealthStatus phase={healthPhase} />
-          </div>
-        ) : null}
-        {loading && pipelineStatus ? (
-          <p className="mt-1 truncate text-[10px] text-primary/70 animate-pulse">
-            {pipelineStatus}
-          </p>
-        ) : null}
         {!isAdmin ? (
           <Button
             type="button"
@@ -4066,11 +4032,13 @@ export function ChatPanel({
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5 pl-9">
-                    {streamChars != null && streamChars > 0 && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Generando archivos... ~{Math.max(1, Math.round(streamChars / 1024))} KB recibidos
-                      </p>
-                    )}
+                    <HealthStatus
+                      phase={
+                        healthPhase ??
+                        (streamProgress || pipelineStatus ? "optimizing_design" : null)
+                      }
+                      label={streamProgress ?? pipelineStatus ?? undefined}
+                    />
                   </div>
                 </div>
               )}
