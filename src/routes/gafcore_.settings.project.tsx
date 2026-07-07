@@ -103,7 +103,7 @@ function ProjectSettingsPage() {
   const navigate = useNavigate();
   const { section: sectionFromSearch } = Route.useSearch();
   const { user, loading: authLoading } = useAuth();
-  const { isAdmin } = useSubscription(user?.id);
+  const { isAdmin } = useSubscription(user?.id, user?.email);
   const { balance } = useCredits(user?.id);
   const [projectName, setProjectName] = useState("GafCore");
   const [editingName, setEditingName] = useState(false);
@@ -279,7 +279,7 @@ function SectionPanel(p: PanelProps) {
     case "git": return <GitPanel />;
     case "workspace": return <WorkspacePanel email={p.user.email ?? ""} isAdmin={p.isAdmin} />;
     case "people": return <PeoplePanel isAdmin={p.isAdmin} />;
-    case "plans": return <PlansPanel userId={p.user.id} />;
+    case "plans": return <PlansPanel userId={p.user.id} userEmail={p.user.email} />;
     case "cloud": return <CloudPanel />;
     case "wsdomains": return <DomainsPanel subdomain={p.subdomain} workspace />;
     case "privacy": return <PrivacyPanel />;
@@ -533,8 +533,8 @@ function PeoplePanel({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-function PlansPanel({ userId }: { userId: string }) {
-  const { subscription, planDisplayLabel, loading: subLoading, subActive, isAdmin } = useSubscription(userId);
+function PlansPanel({ userId, userEmail }: { userId: string; userEmail?: string | null }) {
+  const { subscription, planDisplayLabel, loading: subLoading, subActive, isAdmin } = useSubscription(userId, userEmail);
   const { balance, monthlyAllowance, loading: creditsLoading } = useCredits(userId);
   const displayMonthly = displayMonthlyAllowanceForUi({ isAdmin, subActive, monthlyAllowance });
   const stripeEnv = getStripeEnvironment();

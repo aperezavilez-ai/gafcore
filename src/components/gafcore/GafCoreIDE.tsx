@@ -214,7 +214,7 @@ export function GafCoreIDE() {
     isUnlimitedDaily,
     refresh: refreshCredits,
   } = useCredits(user?.id);
-  const { isAdmin, subscription, subActive } = useSubscription(user?.id);
+  const { isAdmin, subscription, subActive } = useSubscription(user?.id, user?.email);
 
   const isFairUseCreadorPlan =
     !isAdmin &&

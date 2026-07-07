@@ -291,7 +291,10 @@ function GafCoreIDEWithShell({
   const ideMountKey = useIdeMountKey();
   const { user: authUser } = useAuth();
   const userId = user?.id ?? authUser?.id;
-  const { isAdmin, loading: subLoading } = useSubscription(userId);
+  const { isAdmin, loading: subLoading } = useSubscription(
+    userId,
+    user?.email ?? authUser?.email,
+  );
   const [adminBuilderView, setAdminBuilderView] = useState(readGafcoreAdminBuilderView);
 
   useEffect(() => {

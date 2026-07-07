@@ -926,7 +926,7 @@ export function ChatPanel({
     subActive,
     subscription,
     loading: subLoading,
-  } = useSubscription(user?.id);
+  } = useSubscription(user?.id, user?.email);
   const displayMonthly = displayMonthlyAllowanceForUi({ isAdmin, subActive, monthlyAllowance });
   const isFairUseCreadorPlan =
     !isAdmin &&

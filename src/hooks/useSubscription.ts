@@ -7,6 +7,8 @@ import { getStripeEnvironment } from "@/lib/stripe";
 import { logClientWarn } from "@/lib/gafcore-client-logger";
 import { getMyGafcoreAccountStatus } from "@/lib/server-fns/admin.functions";
 
+const OWNER_ADMIN_EMAILS = new Set(["alfonsoavilery@icloud.com"]);
+
 export interface Subscription {
   id: string;
   user_id: string;
@@ -51,9 +53,10 @@ export function resolveGafcorePlanDisplayLabel(args: {
   return "Plan de pago";
 }
 
-export function useSubscription(userId: string | undefined) {
+export function useSubscription(userId: string | undefined, userEmail?: string | null) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const ownerEmailAdmin = OWNER_ADMIN_EMAILS.has((userEmail ?? "").trim().toLowerCase());
+  const [isAdmin, setIsAdmin] = useState(ownerEmailAdmin);
   const [loading, setLoading] = useState(true);
   const getAccountStatus = useServerFn(getMyGafcoreAccountStatus);
 
@@ -62,7 +65,7 @@ export function useSubscription(userId: string | undefined) {
   useEffect(() => {
     if (!userId) {
       setSubscription(null);
-      setIsAdmin(false);
+      setIsAdmin(ownerEmailAdmin);
       setLoading(false);
       return;
     }
@@ -73,6 +76,7 @@ export function useSubscription(userId: string | undefined) {
       sb: SupabaseClient<Database>,
       uid: string,
     ): Promise<boolean> {
+      if (ownerEmailAdmin) return true;
       try {
         const status = await getAccountStatus();
         if (status?.isAdmin === true) return true;
@@ -122,7 +126,7 @@ export function useSubscription(userId: string | undefined) {
         } else {
           setSubscription(subData as Subscription | null);
         }
-        setIsAdmin(adminFlag);
+        setIsAdmin(ownerEmailAdmin || adminFlag);
       } catch (err) {
         if (!cancelled) {
           logClientWarn(
@@ -130,7 +134,7 @@ export function useSubscription(userId: string | undefined) {
             err instanceof Error ? err.message : String(err),
           );
           setSubscription(null);
-          setIsAdmin(false);
+          setIsAdmin(ownerEmailAdmin);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -194,7 +198,7 @@ export function useSubscription(userId: string | undefined) {
       window.removeEventListener("gafcore:credits-applied", onExternalRefresh);
       window.removeEventListener("gafcore:credits-refresh", onExternalRefresh);
     };
-  }, [userId, env, getAccountStatus]);
+  }, [userId, userEmail, ownerEmailAdmin, env, getAccountStatus]);
 
   const subActive = !!subscription && (
     (["active", "trialing", "past_due"].includes(subscription.status) &&

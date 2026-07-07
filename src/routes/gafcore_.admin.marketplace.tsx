@@ -13,7 +13,7 @@ export const Route = createFileRoute("/gafcore_/admin/marketplace")({
 
 function AdminMarketplacePage() {
   const { user, loading: authLoading } = useAuth();
-  const { isAdmin, loading: subLoading } = useSubscription(user?.id);
+  const { isAdmin, loading: subLoading } = useSubscription(user?.id, user?.email);
   const navigate = useNavigate();
 
   useEffect(() => {

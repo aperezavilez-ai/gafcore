@@ -172,7 +172,7 @@ function GafCoreLanding() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const { user, loading: authLoading } = useAuth();
-  const { isAdmin, loading: roleLoading } = useSubscription(user?.id);
+  const { isAdmin, loading: roleLoading } = useSubscription(user?.id, user?.email);
   const { plan: planFromUrl } = gafcoreRouteApi.useSearch();
   const assignUserWelcome = useServerFn(assignGafcoreAccountType);
   const { theme, setTheme } = useGafcoreTheme();
