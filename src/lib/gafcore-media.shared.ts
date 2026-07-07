@@ -775,6 +775,35 @@ function fixObjectAsJsxChild(source: string): string {
   );
 
   // `{ {...obj} }` como hijo JSX → null (spread inválido como child).
+  out = out.replace(
+    /(\.map\(\s*\(?(\w+)\)?\s*=>\s*<([A-Za-z][\w.]*)\b[^>]*>)\{\2\}(<\/\3>\s*\))/g,
+    (_m, prefix: string, name: string, _tag: string, suffix: string) =>
+      `${prefix}{String(${name}.title ?? ${name}.label ?? ${name}.name ?? "")}${suffix}`,
+  );
+
+  const fakeElementObjects = new Set<string>();
+  const fakeElementRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*\{\s*type\s*:\s*["']#["'][\s\S]*?props\s*:/g;
+  let fakeElementMatch: RegExpExecArray | null;
+  while ((fakeElementMatch = fakeElementRe.exec(out))) {
+    fakeElementObjects.add(fakeElementMatch[1]);
+  }
+  for (const name of fakeElementObjects) {
+    out = out.replace(new RegExp(`\\{${name}\\}(?![\\w.])`, "g"), `{${name}?.props?.children ?? null}`);
+  }
+
+  const arrayObjects = new Set<string>();
+  const arrayObjectRe = /\b(?:const|let|var)\s+(\w+)\s*=\s*\[\s*\{/g;
+  let arrayObjectMatch: RegExpExecArray | null;
+  while ((arrayObjectMatch = arrayObjectRe.exec(out))) {
+    arrayObjects.add(arrayObjectMatch[1]);
+  }
+  for (const name of arrayObjects) {
+    out = out.replace(
+      new RegExp(`\\{${name}\\}(?![\\w.])`, "g"),
+      `{${name}.map((item, index) => <span key={index}>{String(item.title ?? item.label ?? item.name ?? item.value ?? "")}</span>)}`,
+    );
+  }
+
   out = out.replace(/\{\s*\{\s*\.\.\.\s*(\w+)\s*\}\s*\}/g, "{null}");
 
   out = fixComponentFieldAsJsxChild(out);
@@ -905,9 +934,18 @@ function ensureReactImportInJsxSource(source: string): string {
   return out;
 }
 
+function repairExtraCloserAfterReturnedRoot(source: string): string {
+  const root = source.match(/return\s*\(\s*<([A-Za-z][\w.-]*)\b/);
+  const rootTag = root?.[1];
+  if (!rootTag) return source;
+  const closeRootThenExtraDiv = new RegExp(`</${rootTag}>\\s*</div>(\\s*\\);)`, "m");
+  return source.replace(closeRootThenExtraDiv, `</${rootTag}>$1`);
+}
+
 function repairCommonJsxSyntaxErrorsPass(source: string): string {
   let out = unwrapLegacySafeJsxWrappers(source);
   out = ensureReactImportInJsxSource(out);
+  out = repairExtraCloserAfterReturnedRoot(out);
   out = repairListaProcesadaMap(out);
   out = out.replace(
     /^\s*<\/(?:HTML[A-Za-z0-9]*Element|SVG[A-Za-z0-9]*Element|string|number|boolean|object|array|unknown|Record|Promise)>\s*;?\s*$/gim,

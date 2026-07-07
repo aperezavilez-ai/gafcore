@@ -43,6 +43,19 @@ if (badCloser.includes("</HTMLFormElement>")) {
   throw new Error("bad HTMLFormElement closer survived repair");
 }
 
+const adjacentRootCloser = repairCommonJsxSyntaxErrors(`export default function App() {
+  return (
+    <main>
+      <section>Venta de insumos deportivos</section>
+    </main></div>
+  );
+}
+`);
+
+if (adjacentRootCloser.includes("</main></div>")) {
+  throw new Error("extra root </div> after </main> survived repair");
+}
+
 const validation = await validateGafcoreProjectCore(
   result.files.map((file) => ({ name: file.name, content: file.content })),
 );

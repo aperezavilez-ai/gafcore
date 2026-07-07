@@ -304,6 +304,16 @@ type GafcoreAutoCorrectAgentReport = {
 
 function describeAutoCorrectAgent(report?: GafcoreAutoCorrectAgentReport): string | null {
   if (!report) return null;
+  const lastEvent = [...(report.events ?? [])]
+    .reverse()
+    .find((event) => typeof event.message === "string" && event.message.trim());
+  if (lastEvent?.message) {
+    const issueSuffix =
+      typeof lastEvent.issueCount === "number" && lastEvent.issueCount > 0
+        ? ` (${lastEvent.issueCount} error(es))`
+        : "";
+    return `${lastEvent.message.trim()}${issueSuffix}`;
+  }
   const attempts = Math.max(1, Number(report.attempts ?? 1));
   if (report.status === "blocked") {
     return `Agente autocorrector: bloqueo la entrega tras ${attempts} intento(s)`;
@@ -1644,7 +1654,7 @@ export function ChatPanel({
 
       const errKey = msg.slice(0, 120);
       const looksLikeJsxGlue =
-        /SyntaxError|Unexpected token/i.test(msg) ||
+        /Transpile error|Adjacent JSX elements|must be wrapped in an enclosing tag|SyntaxError|Unexpected token|Expected corresponding JSX closing tag|Unterminated JSX/i.test(msg) ||
         /"[^"]*"(https?:\/\/)/.test(msg);
       const looksLikeObjectChild =
         /Objects are not valid as a React child/i.test(msg) ||
@@ -3432,6 +3442,7 @@ export function ChatPanel({
 
       const autoCorrectStatus = describeAutoCorrectAgent(result.autoCorrectAgent);
       if (autoCorrectStatus) {
+        setBuildProgress(autoCorrectStatus);
         setPipelineStatus(autoCorrectStatus);
         if (result.autoCorrectAgent?.repaired) {
           toast.message("Agente autocorrector aplicado", {
