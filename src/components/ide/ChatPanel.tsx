@@ -1065,7 +1065,34 @@ export function ChatPanel({
     cancelPreviewAutofixInFlight();
     autoFixAttemptedErrorsRef.current.clear();
     autoFixSessionCountRef.current = 0;
+    requestEpochRef.current++;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    sendInFlightRef.current = false;
+    pipelineRunIdRef.current = null;
+    bgWorkflowMetaRef.current = null;
     setLastError(null);
+    lastErrorRef.current = null;
+    setLoading(false);
+    setAutoFixActive(false);
+    setStreamChars(null);
+    setStreamProgress(null);
+    setPipelineStatus(null);
+    setActiveWorkflowRunId(null);
+    setBackgroundWorkflowRunId(null);
+    setWorkflowTasks([]);
+    setWorkflowPlanSummary(null);
+    setWorkflowState(null);
+    setWorkflowMetrics(null);
+    setWorkflowCancelPending(false);
+    setValidationLabel(null);
+    setHealthPhase(null);
+    setPendingComposerImages([]);
+    setMessages([]);
+    localMessageEchoRef.current.clear();
+    const freshGuide = createGuideAutopilotState();
+    guideAutopilotRef.current = freshGuide;
+    setGuideAutopilotUi(freshGuide);
     const blank = ensureReactPackageJson(
       sanitizeProjectJsxFiles(
         GAFCORE_DEFAULT_TEMPLATE_FILES.map((f) => ({
@@ -1083,6 +1110,18 @@ export function ChatPanel({
         toast.message("Canvas reiniciado en el editor", {
           description: "No se pudo guardar en la nube; al reconectar se sincronizará.",
         });
+      }
+    }
+    if (projectId && user?.id) {
+      try {
+        const supabase = await ensureGafcoreSupabaseClient();
+        await supabase
+          .from("chat_messages")
+          .delete()
+          .eq("project_id", projectId)
+          .eq("user_id", user.id);
+      } catch (err) {
+        logClientWarn("gafcore-reset-chat-history", err);
       }
     }
     onCodeGenerated?.();
