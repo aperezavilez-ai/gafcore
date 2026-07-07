@@ -12,6 +12,7 @@ import {
   gafcoreHeadIconLinks,
 } from "@/lib/site-icons.shared";
 import { GAFCORE_WEB_ONLY_HEAD_SCRIPT } from "@/lib/gafcore-web-only.shared";
+import { installStaleChunkRecovery } from "@/lib/stale-chunk-recovery";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import { ClientOnly } from "@/components/ClientOnly";
 import { ClientRootWidgets } from "@/components/ClientRootWidgets";
@@ -25,6 +26,7 @@ import { installServerFnAuth } from "@/lib/server-fn-auth";
 
 if (typeof window !== "undefined") {
   installServerFnAuth();
+  installStaleChunkRecovery();
 }
 
 // Side-effect import: Start manifest gestiona el CSS en SSR (evita hash distinto
