@@ -78,19 +78,29 @@ async function gafcoreAuthLogin(request: Request): Promise<Response> {
     });
   }
 
-  let body: unknown;
+  let body: Record<string, unknown>;
   try {
-    body = await request.json();
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const parsed = await request.json();
+      body = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } else {
+      const form = await request.formData();
+      body = Object.fromEntries(form.entries());
+    }
   } catch {
-    return new Response(JSON.stringify({ ok: false, error: "invalid_json" }), {
+    return new Response(JSON.stringify({ ok: false, error: "invalid_login_payload" }), {
       status: 400,
       headers: { "content-type": "application/json", "cache-control": "no-store" },
     });
   }
 
-  const input = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
-  const password = typeof input.password === "string" ? input.password : "";
+  const rawEmail = body.email ?? body.gafcore_user ?? body.username;
+  const rawPassword = body.password ?? body.gafcore_secret ?? body.pass;
+  const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+  const password = typeof rawPassword === "string" ? rawPassword : "";
   if (!email || !password || !email.includes("@")) {
     return new Response(JSON.stringify({ ok: false, error: "invalid_body" }), {
       status: 400,
