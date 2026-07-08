@@ -729,7 +729,7 @@ export default function App() {
       <section className="mx-auto grid min-h-screen max-w-6xl gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.28em] text-amber-300">Agenda online</p>
-          <h1 className="mt-4 text-5xl font-black leading-tight md:text-7xl">${title}</h1>
+          <h1 className="mt-4 text-5xl font-black leading-tight md:text-7xl">{title}</h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-neutral-300">
             Una experiencia web lista para captar clientes, mostrar servicios y recibir reservas desde el primer dia.
           </p>
