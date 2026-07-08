@@ -72,7 +72,7 @@ export function LandingHeader() {
           ) : (
             <>
               <Button variant="hero" size="sm" asChild>
-                <Link to="/login">{t("nav.login")}</Link>
+                <a href="/gafcore/login?redirect=%2Fgafcore%2Fapp">{t("nav.login")}</a>
               </Button>
             </>
           )}
@@ -119,7 +119,7 @@ export function LandingHeader() {
               ) : (
                 <>
                   <Button variant="hero" size="sm" asChild>
-                    <Link to="/login">{t("nav.login")}</Link>
+                    <a href="/gafcore/login?redirect=%2Fgafcore%2Fapp">{t("nav.login")}</a>
                   </Button>
                 </>
               )}

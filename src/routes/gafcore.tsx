@@ -365,7 +365,7 @@ function GafCoreLanding() {
             ) : (
               <>
                 <Button asChild size="sm" variant="ghost" className="rounded-full px-4">
-                  <Link to="/gafcore/login" search={{ redirect: "/gafcore/app" }}>{t("gc.auth.login")}</Link>
+                  <a href="/gafcore/login?redirect=%2Fgafcore%2Fapp">{t("gc.auth.login")}</a>
                 </Button>
                 <Button asChild size="sm" className="gc-cta rounded-full px-4">
                   <Link to="/gafcore/register" search={{ redirect: "/gafcore#planes" }}>{t("gc.auth.register")}</Link>
@@ -418,7 +418,7 @@ function GafCoreLanding() {
                     </>
                   ) : (
                     <>
-                      <a href="/gafcore/login" className="rounded-md px-2 py-2 hover:opacity-80">
+                      <a href="/gafcore/login?redirect=%2Fgafcore%2Fapp" className="rounded-md px-2 py-2 hover:opacity-80">
                         {t("gc.auth.login")}
                       </a>
                       <a href="/gafcore/register" className="gc-cta rounded-md px-2 py-2 text-center font-semibold">
@@ -469,14 +469,13 @@ function GafCoreLanding() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             ) : (
-              <Link
-                to="/gafcore/login"
-                search={{ redirect: "/gafcore/app" }}
+              <a
+                href="/gafcore/login?redirect=%2Fgafcore%2Fapp"
                 className="gc-cta inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-full px-7 text-base font-semibold sm:w-auto"
               >
                 {t("gc.hero.cta")}
                 <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
+              </a>
             )}
           </div>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
