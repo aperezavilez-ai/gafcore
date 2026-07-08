@@ -7,8 +7,8 @@ import {
   GAFCORE_ANTHROPIC_MODEL_RETIRED,
 } from "@/lib/gafcore-assistant-prompt.shared";
 
-export type ResolvedProvider = "anthropic" | "openai" | "openrouter" | "custom" | "gptpro4all";
-export type AiWireApi = "chat_completions" | "responses";
+export type ResolvedProvider = "anthropic" | "openai" | "openrouter" | "custom" | "gptpro4all" | "gemini";
+export type AiWireApi = "chat_completions" | "responses" | "gemini_generate_content";
 
 export type ResolvedRoute = {
   provider: ResolvedProvider;
@@ -49,6 +49,10 @@ export function normalizeModelSlug(model: string, target: ResolvedProvider): str
     if (/^gpt-|^o\d-/i.test(m)) return `openai/${m}`;
     if (/^gemini/i.test(m)) return `google/${m}`;
     return m;
+  }
+
+  if (target === "gemini") {
+    return m.replace(/^google\//i, "");
   }
 
   return m;

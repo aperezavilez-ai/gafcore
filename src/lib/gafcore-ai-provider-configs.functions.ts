@@ -8,8 +8,8 @@ import {
   testGafcoreAiProviderRoute,
 } from "@/lib/gafcore-ai-provider-configs.server";
 
-const providerSchema = z.enum(["gptpro4all", "anthropic", "openai", "openrouter", "custom"]);
-const wireSchema = z.enum(["chat_completions", "responses"]);
+const providerSchema = z.enum(["gptpro4all", "anthropic", "openai", "openrouter", "custom", "gemini"]);
+const wireSchema = z.enum(["chat_completions", "responses", "gemini_generate_content"]);
 
 const saveSchema = z.object({
   id: z.string().uuid().optional(),

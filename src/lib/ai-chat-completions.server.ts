@@ -39,6 +39,12 @@ import { withTransientUpstreamRetry } from "@/lib/gafcore-ai-upstream-retry.serv
  */
 const AI_UPSTREAM_REQUEST_TIMEOUT_MS = 60_000;
 const AI_UPSTREAM_STREAM_TIMEOUT_MS = 150_000;
+const ALLOWED_AI_HOSTS = new Set([
+  "api.meai.cloud",
+  "api.chatgptpro4all.com",
+  "openrouter.ai",
+  "generativelanguage.googleapis.com",
+]);
 
 export type AiChatConfig = {
   url: string;
@@ -428,7 +434,7 @@ async function fetchWithTimeout(
     const isAbort =
       err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
     logDev("gafcore_ai_upstream_fetch_failed", {
-      url,
+      url: sanitizeAiUrlForLog(url),
       isAbort,
       message: err instanceof Error ? err.message : String(err),
     });
@@ -441,34 +447,191 @@ async function fetchWithTimeout(
   }
 }
 
+function sanitizeAiUrlForLog(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    if (url.searchParams.has("key")) url.searchParams.set("key", "[redacted]");
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function isAllowedAiUrl(rawUrl: string): boolean {
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    return ALLOWED_AI_HOSTS.has(host) || host.endsWith(".aiplatform.googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+function blockedAiUrlResponse(rawUrl: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: "ai_url_not_allowed",
+      detail: `API no permitida para GafCore: ${sanitizeAiUrlForLog(rawUrl)}`,
+    }),
+    { status: 403, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+function geminiTextFromContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const p = part as { text?: string; image_url?: { url?: string } };
+      if (typeof p.text === "string") return p.text;
+      if (p.image_url?.url) return `[imagen: ${p.image_url.url}]`;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function toGeminiBody(body: ChatCompletionsBody): Record<string, unknown> {
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  const systemParts: string[] = [];
+  const contents: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }> = [];
+
+  for (const m of messages as Array<{ role?: string; content?: unknown }>) {
+    if (!m || typeof m !== "object") continue;
+    const text = geminiTextFromContent(m.content);
+    if (!text.trim()) continue;
+    if (m.role === "system") {
+      systemParts.push(text);
+      continue;
+    }
+    if (m.role === "assistant") {
+      contents.push({ role: "model", parts: [{ text }] });
+      continue;
+    }
+    contents.push({ role: "user", parts: [{ text }] });
+  }
+
+  const generationConfig: Record<string, unknown> = {};
+  if (typeof body.temperature === "number") generationConfig.temperature = body.temperature;
+  if (typeof body.max_tokens === "number") generationConfig.maxOutputTokens = body.max_tokens;
+  const rf = body.response_format;
+  if (rf && typeof rf === "object" && (rf as { type?: string }).type === "json_object") {
+    generationConfig.responseMimeType = "application/json";
+  }
+
+  return {
+    contents: contents.length ? contents : [{ role: "user", parts: [{ text: "" }] }],
+    ...(systemParts.length ? { systemInstruction: { parts: [{ text: systemParts.join("\n\n") }] } } : {}),
+    ...(Object.keys(generationConfig).length ? { generationConfig } : {}),
+  };
+}
+
+function extractGeminiText(json: unknown): string {
+  const candidates = (json as { candidates?: unknown } | null)?.candidates;
+  if (!Array.isArray(candidates)) return "";
+  const first = candidates[0] as { content?: { parts?: unknown } } | undefined;
+  const parts = first?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((part) => (typeof (part as { text?: unknown })?.text === "string" ? (part as { text: string }).text : ""))
+    .join("");
+}
+
+async function wrapGeminiResponse(res: Response, model: string): Promise<Response> {
+  if (!res.ok) return res;
+  const json = (await res.json().catch(() => null)) as unknown;
+  if (!json) {
+    return new Response(JSON.stringify({ error: "gemini_invalid_response" }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const text = extractGeminiText(json);
+  const openaiShape = {
+    id: `gemini-${Date.now()}`,
+    object: "chat.completion",
+    model,
+    choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
+    usage: (json as { usageMetadata?: unknown } | null)?.usageMetadata ?? undefined,
+  };
+  return new Response(JSON.stringify(openaiShape), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function wrapGeminiStreamResponse(res: Response): Response {
+  if (!res.ok || !res.body) return res;
+
+  const reader = res.body.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let lineEnd: number;
+          while ((lineEnd = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, lineEnd).trim();
+            buffer = buffer.slice(lineEnd + 1);
+            if (!line.startsWith("data:")) continue;
+            const payload = line.replace(/^data:\s*/, "").trim();
+            if (!payload || payload === "[DONE]") continue;
+            try {
+              const text = extractGeminiText(JSON.parse(payload));
+              if (text) {
+                const chunk = { choices: [{ delta: { content: text } }] };
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              }
+            } catch {
+              /* linea parcial SSE */
+            }
+          }
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: res.status,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 async function executeRouteFetch(
   route: ResolvedRoute,
   body: ChatCompletionsBody,
 ): Promise<Response> {
-  if (route.provider === "anthropic") {
-    const anthropicBody = toAnthropicBody(body, route.modelSlug);
-    const nativeUrl = "https://api.anthropic.com/v1/messages";
-    const timeoutMs = anthropicBody.stream
-      ? AI_UPSTREAM_STREAM_TIMEOUT_MS
-      : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
+  if (route.wireApi === "gemini_generate_content") {
+    const geminiBody = toGeminiBody(body);
+    const operation = body.stream ? "streamGenerateContent" : "generateContent";
+    const url = `${route.url}/models/${encodeURIComponent(route.modelSlug)}:${operation}?key=${encodeURIComponent(route.apiKey)}${body.stream ? "&alt=sse" : ""}`;
+    if (!isAllowedAiUrl(url)) return blockedAiUrlResponse(url);
+    const timeoutMs = body.stream ? AI_UPSTREAM_STREAM_TIMEOUT_MS : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
     const res = await fetchWithTimeout(
-      nativeUrl,
+      url,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": route.apiKey,
-          "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION,
-          ...route.extraHeaders,
-        },
-        body: JSON.stringify(anthropicBody),
+        headers: { "Content-Type": "application/json", ...route.extraHeaders },
+        body: JSON.stringify(geminiBody),
       },
       timeoutMs,
     );
-    if (anthropicBody.stream) {
-      return wrapAnthropicStreamResponse(res);
-    }
-    return wrapAnthropicResponse(res);
+    if (body.stream) return wrapGeminiStreamResponse(res);
+    return wrapGeminiResponse(res, route.modelSlug);
   }
 
   if (route.wireApi === "responses") {
@@ -476,6 +639,7 @@ async function executeRouteFetch(
     const timeoutMs = responsesBody.stream
       ? AI_UPSTREAM_STREAM_TIMEOUT_MS
       : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
+    if (!isAllowedAiUrl(route.url)) return blockedAiUrlResponse(route.url);
     const res = await fetchWithTimeout(
       route.url,
       {
@@ -496,6 +660,7 @@ async function executeRouteFetch(
   const outBody: Record<string, unknown> = { ...body };
   if (route.modelSlug) outBody.model = route.modelSlug;
   const timeoutMs = outBody.stream ? AI_UPSTREAM_STREAM_TIMEOUT_MS : AI_UPSTREAM_REQUEST_TIMEOUT_MS;
+  if (!isAllowedAiUrl(route.url)) return blockedAiUrlResponse(route.url);
 
   return fetchWithTimeout(
     route.url,

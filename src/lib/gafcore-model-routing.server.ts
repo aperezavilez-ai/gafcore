@@ -1,31 +1,41 @@
 /**
- * Resolución de rutas IA con secretos — solo servidor.
- * Tipos y normalización de slugs: gafcore-model-routing.shared.ts
+ * Resolucion de rutas IA con secretos — solo servidor.
+ * Orden permitido para GafCore:
+ * 1) api.meai.cloud
+ * 2) api.chatgptpro4all.com
+ * 3) openrouter.ai
+ * 4) Gemini directo en Google APIs
  */
-import { GAFCORE_ANTHROPIC_API_VERSION, GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
+import { GPTPRO4ALL_API_DEFAULT_MODEL } from "@/lib/gafcore-chat.shared";
 import {
   detectModelFamily,
   normalizeModelSlug,
   type ResolvedProvider,
   type ResolvedRoute,
 } from "@/lib/gafcore-model-routing.shared";
-import { GPTPRO4ALL_API_DEFAULT_MODEL } from "@/lib/gafcore-chat.shared";
-import { listActiveGafcoreAiProviderRoutes } from "@/lib/gafcore-ai-provider-configs.server";
 
 export type { ResolvedProvider, ResolvedRoute };
+
+const MEAI_DEFAULT_BASE_URL = "https://api.meai.cloud/v1";
+const GPTPRO4ALL_DEFAULT_BASE_URL = "https://api.chatgptpro4all.com/v1";
+const OPENROUTER_DEFAULT_URL = "https://openrouter.ai/api/v1/chat/completions";
+const GEMINI_DEFAULT_MODEL = "gemini-2.0-flash";
+
+function envFirst(...names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return "";
+}
 
 function normalizeChatCompletionsUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) return trimmed;
-
   try {
     const url = new URL(trimmed);
     const path = url.pathname.replace(/\/+$/g, "");
-    if (!path || path === "/") {
-      url.pathname = "/v1/chat/completions";
-      return url.toString();
-    }
-    if (path === "/v1") {
+    if (!path || path === "/" || path === "/v1") {
       url.pathname = "/v1/chat/completions";
       return url.toString();
     }
@@ -38,7 +48,6 @@ function normalizeChatCompletionsUrl(rawUrl: string): string {
 function normalizeResponsesUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
   if (!trimmed) return trimmed;
-
   try {
     const url = new URL(trimmed);
     const path = url.pathname.replace(/\/+$/g, "");
@@ -52,210 +61,140 @@ function normalizeResponsesUrl(rawUrl: string): string {
   }
 }
 
-function isGptpro4AllUrl(rawUrl: string | undefined): boolean {
-  return Boolean(rawUrl?.toLowerCase().includes("api.chatgptpro4all.com"));
+function urlHost(rawUrl: string | undefined): string {
+  if (!rawUrl?.trim()) return "";
+  try {
+    return new URL(rawUrl.trim()).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
-function isGptpro4AllModel(model: string | undefined): boolean {
-  const m = model?.trim().toLowerCase();
-  return Boolean(
-    m &&
-      (m === GPTPRO4ALL_API_DEFAULT_MODEL.toLowerCase() ||
-        m.startsWith("gptpro4all/") ||
-        /^gpt-5(?:\.|-)5\b/.test(m)),
+function isHost(rawUrl: string | undefined, host: string): boolean {
+  return urlHost(rawUrl) === host;
+}
+
+function modelForOpenRouter(modelHint?: string): string {
+  const requested = modelHint?.trim();
+  if (!requested) return process.env.AI_MODEL_DEEP?.trim() || "google/gemini-2.5-pro";
+  return normalizeModelSlug(requested, "openrouter");
+}
+
+function modelForGemini(modelHint?: string): string {
+  const requested = modelHint?.trim();
+  if (!requested) {
+    return (
+      process.env.GEMINI_MODEL?.trim() ||
+      process.env.GOOGLE_AI_MODEL?.trim() ||
+      process.env.AI_MODEL_FAST?.trim()?.replace(/^google\//i, "") ||
+      GEMINI_DEFAULT_MODEL
+    );
+  }
+  if (detectModelFamily(requested) === "gemini") return normalizeModelSlug(requested, "gemini");
+  return (
+    process.env.GEMINI_MODEL?.trim() ||
+    process.env.GOOGLE_AI_MODEL?.trim() ||
+    process.env.AI_MODEL_FAST?.trim()?.replace(/^google\//i, "") ||
+    GEMINI_DEFAULT_MODEL
   );
 }
 
-function providerDefaultModel(provider: ResolvedProvider): string {
-  if (provider === "anthropic") return GAFCORE_ANTHROPIC_MODEL_DEFAULT;
-  if (provider === "openai") return "gpt-4o-mini";
-  if (provider === "openrouter") return "openai/gpt-4o-mini";
-  if (provider === "gptpro4all") return GPTPRO4ALL_API_DEFAULT_MODEL;
-  return "";
-}
-
-function modelForFallbackProvider(
-  provider: ResolvedProvider,
-  modelHint: string | undefined,
-  configuredDefault?: string,
-): string {
-  const requested = modelHint?.trim();
-  const fallback = configuredDefault?.trim() || providerDefaultModel(provider);
-  if (!requested) return fallback;
-
-  const family = detectModelFamily(requested);
-
-  if (provider === "gptpro4all") {
-    return family === "claude" ? fallback : normalizeModelSlug(requested, "gptpro4all");
-  }
-
-  if (provider === "anthropic") {
-    return family === "claude" ? normalizeModelSlug(requested, "anthropic") : fallback;
-  }
-
-  if (provider === "openai") {
-    if (family === "openai" && !isGptpro4AllModel(requested)) {
-      return normalizeModelSlug(requested, "openai");
-    }
-    return fallback || "gpt-4o-mini";
-  }
-
-  if (provider === "openrouter") {
-    if (isGptpro4AllModel(requested)) return fallback || "openai/gpt-4o-mini";
-    if (family === "openai" || family === "claude" || family === "gemini") {
-      return normalizeModelSlug(requested, "openrouter");
-    }
-    return fallback || "openai/gpt-4o-mini";
-  }
-
-  return fallback || requested;
-}
-
-function resolveGptpro4AllRoute(
-  modelHint: string | undefined,
-  family: ReturnType<typeof detectModelFamily>,
-): ResolvedRoute | null {
-  const explicitBase = process.env.GPTPRO4ALL_BASE_URL?.trim();
+function makeMeaiRoute(modelHint?: string): ResolvedRoute | null {
   const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
+  const explicitUrl = envFirst("MEAI_CHAT_COMPLETIONS_URL", "GAFCORE_MEAI_CHAT_COMPLETIONS_URL");
+  const explicitBase = envFirst("MEAI_BASE_URL", "GAFCORE_MEAI_BASE_URL");
+  const baseUrl =
+    explicitUrl ||
+    explicitBase ||
+    (isHost(customUrl, "api.meai.cloud") ? customUrl || "" : "") ||
+    (envFirst("MEAI_API_KEY", "GAFCORE_MEAI_API_KEY") ? MEAI_DEFAULT_BASE_URL : "");
+  const apiKey =
+    envFirst("MEAI_API_KEY", "GAFCORE_MEAI_API_KEY") ||
+    (isHost(customUrl, "api.meai.cloud") ? process.env.AI_API_KEY?.trim() || "" : "");
+  if (!baseUrl || !apiKey) return null;
+  return {
+    provider: "custom",
+    url: normalizeChatCompletionsUrl(baseUrl),
+    apiKey,
+    extraHeaders: {},
+    modelSlug: modelHint?.trim() || process.env.AI_MODEL_DEEP?.trim() || "gpt-5.5",
+    wireApi: "chat_completions",
+  };
+}
+
+function makeGptpro4AllRoute(modelHint?: string): ResolvedRoute | null {
+  const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
+  const explicitBase = process.env.GPTPRO4ALL_BASE_URL?.trim();
   const baseUrl =
     explicitBase ||
-    (isGptpro4AllUrl(customUrl) ? customUrl : "") ||
-    (process.env.GPTPRO4ALL_API_KEY?.trim() ? "https://api.chatgptpro4all.com/v1" : "");
+    (isHost(customUrl, "api.chatgptpro4all.com") ? customUrl || "" : "") ||
+    (process.env.GPTPRO4ALL_API_KEY?.trim() ? GPTPRO4ALL_DEFAULT_BASE_URL : "");
   const apiKey =
     process.env.GPTPRO4ALL_API_KEY?.trim() ||
-    (baseUrl ? process.env.AI_API_KEY?.trim() : "");
-
+    (isHost(customUrl, "api.chatgptpro4all.com") ? process.env.AI_API_KEY?.trim() || "" : "");
   if (!baseUrl || !apiKey) return null;
-
-  const requested = modelHint?.trim();
-  const modelSlug =
-    requested && family !== "claude"
-      ? modelForFallbackProvider("gptpro4all", requested, process.env.AI_MODEL_DEEP)
-      : (process.env.AI_MODEL_DEEP?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL);
-
   return {
     provider: "gptpro4all",
     url: normalizeResponsesUrl(baseUrl),
     apiKey,
     extraHeaders: {},
-    modelSlug,
+    modelSlug: modelHint?.trim() || process.env.AI_MODEL_DEEP?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL,
     wireApi: "responses",
   };
 }
 
-function makeAnthropicRoute(modelSlug: string, apiKey: string): ResolvedRoute {
+function makeOpenRouterRoute(modelHint?: string): ResolvedRoute | null {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) return null;
+  const url = process.env.OPENROUTER_CHAT_COMPLETIONS_URL?.trim() || OPENROUTER_DEFAULT_URL;
+  if (!isHost(url, "openrouter.ai")) return null;
   return {
-    provider: "anthropic",
-    url: "https://api.anthropic.com/v1/messages",
+    provider: "openrouter",
+    url,
     apiKey,
-    extraHeaders: { "anthropic-version": GAFCORE_ANTHROPIC_API_VERSION },
-    modelSlug,
+    extraHeaders: {
+      "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER?.trim() || "https://gafcore.com",
+      "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() || "GafCore",
+    },
+    modelSlug: modelForOpenRouter(modelHint),
     wireApi: "chat_completions",
   };
 }
 
+function makeGeminiRoute(modelHint?: string): ResolvedRoute | null {
+  const apiKey = envFirst("GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "GOOGLE_API_KEY");
+  if (!apiKey) return null;
+  const modelSlug = modelForGemini(modelHint);
+  const base = envFirst("GEMINI_API_BASE_URL", "GOOGLE_AI_BASE_URL") || "https://generativelanguage.googleapis.com/v1beta";
+  return {
+    provider: "gemini",
+    url: base.replace(/\/+$/g, ""),
+    apiKey,
+    extraHeaders: {},
+    modelSlug,
+    wireApi: "gemini_generate_content",
+  };
+}
+
 export function resolveAllAiRoutes(modelHint?: string): ResolvedRoute[] {
-  const routes: ResolvedRoute[] = [];
-  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const family = modelHint ? detectModelFamily(modelHint) : "other";
-
-  const gptpro4allRoute = resolveGptpro4AllRoute(modelHint, family);
-  if (gptpro4allRoute && family !== "claude") {
-    routes.push(gptpro4allRoute);
-  }
-
-  const customUrl = process.env.AI_CHAT_COMPLETIONS_URL?.trim();
-  const customKey = process.env.AI_API_KEY?.trim();
-  if (customUrl && customKey && !isGptpro4AllUrl(customUrl)) {
-    const proxyProjectKey =
-      process.env.AI_PROJECT_KEY?.trim() ||
-      process.env.GAFCORE_PROXY_PROJECT_KEY?.trim() ||
-      "";
-    const proxyProviderId =
-      process.env.AI_PROVIDER_ID?.trim() ||
-      process.env.GAFCORE_PROXY_PROVIDER_ID?.trim() ||
-      "";
-    routes.push({
-      provider: "custom",
-      url: normalizeChatCompletionsUrl(customUrl),
-      apiKey: customKey,
-      extraHeaders:
-        proxyProjectKey && proxyProviderId
-          ? {
-              "x-project-key": proxyProjectKey,
-              "x-provider-id": proxyProviderId,
-            }
-          : {},
-      modelSlug: modelForFallbackProvider("custom", modelHint, process.env.AI_MODEL_DEEP),
-      wireApi: "chat_completions",
-    });
-  }
-
-  if (anthropicKey && (family === "claude" || (!modelHint && !gptpro4allRoute))) {
-    const slug = family === "claude"
-      ? normalizeModelSlug(modelHint?.trim() || GAFCORE_ANTHROPIC_MODEL_DEFAULT, "anthropic")
-      : GAFCORE_ANTHROPIC_MODEL_DEFAULT;
-    routes.push(makeAnthropicRoute(slug, anthropicKey));
-  }
-
-  if (gptpro4allRoute && family === "claude") {
-    routes.push(gptpro4allRoute);
-  }
-
-  if (anthropicKey && gptpro4allRoute && family !== "claude") {
-    routes.push(makeAnthropicRoute(GAFCORE_ANTHROPIC_MODEL_DEFAULT, anthropicKey));
-  }
-
-  if (openrouterKey) {
-    const openrouterUrl = process.env.OPENROUTER_CHAT_COMPLETIONS_URL?.trim() || "https://openrouter.ai/api/v1/chat/completions";
-    routes.push({
-      provider: "openrouter",
-      url: openrouterUrl,
-      apiKey: openrouterKey,
-      extraHeaders: {
-        "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER?.trim() || "https://gafcore.com",
-        "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() || "GafCore",
-      },
-      modelSlug: modelForFallbackProvider("openrouter", modelHint),
-      wireApi: "chat_completions",
-    });
-  }
-
-  if (openaiKey) {
-    const openaiUrl = process.env.OPENAI_CHAT_COMPLETIONS_URL?.trim() || "https://api.openai.com/v1/chat/completions";
-    const openaiSlug = modelForFallbackProvider("openai", modelHint);
-    routes.push({
-      provider: "openai",
-      url: openaiUrl,
-      apiKey: openaiKey,
-      extraHeaders: {},
-      modelSlug: openaiSlug,
-      wireApi: "chat_completions",
-    });
-  }
-
-  if (anthropicKey && routes.length === 0) {
-    routes.push(makeAnthropicRoute(GAFCORE_ANTHROPIC_MODEL_DEFAULT, anthropicKey));
-  }
-
-  return routes;
+  return [
+    makeMeaiRoute(modelHint),
+    makeGptpro4AllRoute(modelHint),
+    makeOpenRouterRoute(modelHint),
+    makeGeminiRoute(modelHint),
+  ].filter((route): route is ResolvedRoute => Boolean(route));
 }
 
 export function resolveAiRoute(modelHint?: string): ResolvedRoute {
   const all = resolveAllAiRoutes(modelHint);
   if (all.length === 0) {
     throw new Error(
-      "AI no configurado: define GPTPRO4ALL_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY, o AI_CHAT_COMPLETIONS_URL+AI_API_KEY.",
+      "AI no configurado: define MEAI_API_KEY, GPTPRO4ALL_API_KEY, OPENROUTER_API_KEY o GEMINI_API_KEY/GOOGLE_AI_API_KEY. Solo se permiten api.meai.cloud, api.chatgptpro4all.com, openrouter.ai y Google Gemini.",
     );
   }
   return all[0];
 }
 
 export async function resolveAllAiRoutesForRequest(modelHint?: string): Promise<ResolvedRoute[]> {
-  const configuredRoutes = await listActiveGafcoreAiProviderRoutes(modelHint);
-  const envRoutes = resolveAllAiRoutes(modelHint);
-  if (configuredRoutes.length === 0) return envRoutes;
-  return [...configuredRoutes, ...envRoutes];
+  return resolveAllAiRoutes(modelHint);
 }

@@ -69,6 +69,11 @@ const providerDefaults: Record<ResolvedProvider, { baseUrl: string; model: strin
     model: "openai/gpt-4o-mini",
     wireApi: "chat_completions",
   },
+  gemini: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-2.0-flash",
+    wireApi: "gemini_generate_content",
+  },
   custom: {
     baseUrl: "",
     model: "",
@@ -169,6 +174,7 @@ function routeUrlForProvider(row: ProviderConfigRow): string {
   const base = row.base_url?.trim() || providerDefaults[row.provider].baseUrl;
   const wireApi = row.wire_api || providerDefaults[row.provider].wireApi;
   if (row.provider === "anthropic") return "https://api.anthropic.com/v1/messages";
+  if (row.provider === "gemini") return base.replace(/\/+$/g, "");
   if (wireApi === "responses") return normalizeResponsesUrl(base);
   return normalizeChatCompletionsUrl(base);
 }
@@ -355,6 +361,23 @@ async function fetchProviderProbe(
           ...(model ? { model } : {}),
           input: "Responde solo OK.",
           max_output_tokens: 8,
+        }),
+      });
+      return { ok: res.ok, status: res.status };
+    }
+
+    if (route.wireApi === "gemini_generate_content") {
+      const url = `${route.url.replace(/\/+$/g, "")}/models/${encodeURIComponent(model || "gemini-2.0-flash")}:generateContent?key=${encodeURIComponent(route.apiKey)}`;
+      const res = await fetch(url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...route.extraHeaders,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: "Responde solo OK." }] }],
+          generationConfig: { maxOutputTokens: 8 },
         }),
       });
       return { ok: res.ok, status: res.status };

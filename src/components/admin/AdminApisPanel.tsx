@@ -54,6 +54,12 @@ const providerDefaults: Record<ResolvedProvider, Omit<ApiFormState, "provider" |
     defaultModel: "openai/gpt-4o-mini",
     wireApi: "chat_completions",
   },
+  gemini: {
+    label: "Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    defaultModel: "gemini-2.0-flash",
+    wireApi: "gemini_generate_content",
+  },
   custom: {
     label: "Custom",
     baseUrl: "",
@@ -293,6 +299,7 @@ export function AdminApisPanel() {
                 <option value="anthropic">Claude / Anthropic</option>
                 <option value="openai">OpenAI</option>
                 <option value="openrouter">OpenRouter</option>
+                <option value="gemini">Gemini</option>
                 <option value="custom">Custom</option>
               </select>
             </div>
@@ -317,6 +324,7 @@ export function AdminApisPanel() {
               >
                 <option value="responses">Responses</option>
                 <option value="chat_completions">Chat completions</option>
+                <option value="gemini_generate_content">Gemini generateContent</option>
               </select>
             </div>
             <div className="space-y-2">

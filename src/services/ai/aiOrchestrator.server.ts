@@ -31,6 +31,7 @@ function mapResolvedProvider(p: ResolvedProvider): AiBrainProviderId {
   if (p === "openai") return "openai";
   if (p === "anthropic") return "anthropic";
   if (p === "gptpro4all") return "gptpro4all";
+  if (p === "gemini") return "gemini";
   return "custom";
 }
 

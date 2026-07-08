@@ -1,133 +1,130 @@
 #!/usr/bin/env node
 /**
- * Smoke local del router multi-proveedor.
- * Verifica que el modelo se enrute a Anthropic, OpenRouter, OpenAI, custom
- * o GPTPRO4ALL segun envs.
- *
- *   npm run gafcore:smoke-routing
+ * Smoke local del router IA GafCore.
+ * Permitidos:
+ * 1) api.meai.cloud
+ * 2) api.chatgptpro4all.com
+ * 3) openrouter.ai
+ * 4) Gemini directo en Google APIs
  */
-import { existsSync, readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const envKeys = [
+  "AI_CHAT_COMPLETIONS_URL",
+  "AI_API_KEY",
+  "AI_MODEL_FAST",
+  "AI_MODEL_DEEP",
+  "AI_MODEL_UI",
+  "MEAI_API_KEY",
+  "MEAI_BASE_URL",
+  "MEAI_CHAT_COMPLETIONS_URL",
+  "GAFCORE_MEAI_API_KEY",
+  "GAFCORE_MEAI_BASE_URL",
+  "GAFCORE_MEAI_CHAT_COMPLETIONS_URL",
+  "GPTPRO4ALL_BASE_URL",
+  "GPTPRO4ALL_API_KEY",
+  "OPENROUTER_API_KEY",
+  "OPENROUTER_CHAT_COMPLETIONS_URL",
+  "GEMINI_API_KEY",
+  "GOOGLE_AI_API_KEY",
+  "GOOGLE_API_KEY",
+  "GEMINI_MODEL",
+  "GOOGLE_AI_MODEL",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "OPENAI_CHAT_COMPLETIONS_URL",
+];
 
-for (const name of [".env", ".env.local"]) {
-  const p = resolve(root, name);
-  if (!existsSync(p)) continue;
-  for (const line of readFileSync(p, "utf8").split("\n")) {
-    const t = line.trim();
-    if (!t || t.startsWith("#")) continue;
-    const eq = t.indexOf("=");
-    if (eq < 1) continue;
-    const k = t.slice(0, eq).trim();
-    let v = t.slice(eq + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-    if (!process.env[k]?.trim()) process.env[k] = v;
+const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+
+function clearEnv() {
+  for (const key of envKeys) delete process.env[key];
+}
+
+function restoreEnv() {
+  for (const [key, value] of Object.entries(previousEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
   }
 }
 
-// Dummies para probar logica de routing sin exponer keys reales.
-process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY?.trim() || "sk-ant-test-dummy";
-process.env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY?.trim() || "sk-or-v1-test-dummy";
+function check(label, condition, detail = "") {
+  if (condition) {
+    console.log(`OK   ${label}${detail ? ` ${detail}` : ""}`);
+    return 0;
+  }
+  console.log(`FAIL ${label}${detail ? ` ${detail}` : ""}`);
+  return 1;
+}
 
-const { normalizeModelSlug, detectModelFamily } = await import(
-  "../src/lib/gafcore-model-routing.shared.ts"
-);
 const { resolveAiRoute, resolveAllAiRoutes } = await import("../src/lib/gafcore-model-routing.server.ts");
-const { resolveGafcoreModelDefaults } = await import("../src/lib/gafcore-chat.shared.ts");
-
-const cases = [
-  { input: "anthropic/claude-sonnet-4.5", expectedFamily: "claude", expectedProvider: "anthropic" },
-  { input: "claude-sonnet-4-5", expectedFamily: "claude", expectedProvider: "anthropic" },
-  { input: "openai/gpt-4o-mini", expectedFamily: "openai", expectedProvider: "openrouter" },
-  { input: "gpt-4o", expectedFamily: "openai", expectedProvider: "openrouter" },
-  { input: "google/gemini-2.5-flash", expectedFamily: "gemini", expectedProvider: "openrouter" },
-];
 
 let fail = 0;
-console.log("\n=== Router GafCore - pruebas ===\n");
-for (const c of cases) {
-  const fam = detectModelFamily(c.input);
-  const route = resolveAiRoute(c.input);
-  const okFamily = fam === c.expectedFamily;
-  const okProvider = route.provider === c.expectedProvider;
-  const ok = okFamily && okProvider;
-  if (!ok) fail += 1;
-  console.log(
-    `${ok ? "OK " : "FAIL"} ${c.input.padEnd(34)} family=${fam.padEnd(7)} -> provider=${route.provider.padEnd(11)} slug=${route.modelSlug}`,
+console.log("\n=== Router GafCore allowlist ===\n");
+
+clearEnv();
+process.env.OPENAI_API_KEY = "sk-openai-test";
+process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+fail += check(
+  "ignora OpenAI/Anthropic directos",
+  resolveAllAiRoutes("openai/gpt-4o").length === 0,
+);
+
+let threwAllowedConfig = false;
+try {
+  resolveAiRoute("openai/gpt-4o");
+} catch (err) {
+  threwAllowedConfig = /api\.meai\.cloud|api\.chatgptpro4all\.com|openrouter\.ai|Gemini/i.test(
+    String(err instanceof Error ? err.message : err),
   );
 }
+fail += check("sin API permitida falla claro", threwAllowedConfig);
 
-console.log("\n=== Normalizacion slugs ===");
-console.log("anthropic/claude-sonnet-4.5 -> anthropic:", normalizeModelSlug("anthropic/claude-sonnet-4.5", "anthropic"));
-console.log("claude-sonnet-4-5           -> openrouter:", normalizeModelSlug("claude-sonnet-4-5", "openrouter"));
-console.log("gpt-4o-mini                 -> openrouter:", normalizeModelSlug("gpt-4o-mini", "openrouter"));
-console.log("openai/gpt-4o-mini          -> openai:", normalizeModelSlug("openai/gpt-4o-mini", "openai"));
+clearEnv();
+process.env.MEAI_API_KEY = "meai-test";
+process.env.GPTPRO4ALL_API_KEY = "gptpro-test";
+process.env.OPENROUTER_API_KEY = "or-test";
+process.env.GEMINI_API_KEY = "gemini-test";
+const priorityRoutes = resolveAllAiRoutes("google/gemini-2.5-pro");
+fail += check("MeAI es primario", priorityRoutes[0]?.url === "https://api.meai.cloud/v1/chat/completions", `url=${priorityRoutes[0]?.url}`);
+fail += check("ChatGPTPro4All es secundario", priorityRoutes[1]?.url === "https://api.chatgptpro4all.com/v1/responses", `url=${priorityRoutes[1]?.url}`);
+fail += check("OpenRouter es tercero", priorityRoutes[2]?.provider === "openrouter", `provider=${priorityRoutes[2]?.provider}`);
+fail += check("Gemini directo es cuarto", priorityRoutes[3]?.provider === "gemini", `provider=${priorityRoutes[3]?.provider}`);
 
-const previousEnv = {
-  AI_CHAT_COMPLETIONS_URL: process.env.AI_CHAT_COMPLETIONS_URL,
-  GPTPRO4ALL_BASE_URL: process.env.GPTPRO4ALL_BASE_URL,
-  GPTPRO4ALL_API_KEY: process.env.GPTPRO4ALL_API_KEY,
-  AI_API_KEY: process.env.AI_API_KEY,
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  AI_MODEL_FAST: process.env.AI_MODEL_FAST,
-  AI_MODEL_DEEP: process.env.AI_MODEL_DEEP,
-  AI_MODEL_UI: process.env.AI_MODEL_UI,
-};
+clearEnv();
+process.env.AI_CHAT_COMPLETIONS_URL = "https://api.meai.cloud/v1";
+process.env.AI_API_KEY = "meai-ai-key";
+const meaiRoute = resolveAiRoute("gpt-5.5");
+fail += check("AI_CHAT_COMPLETIONS_URL acepta MeAI", meaiRoute.url === "https://api.meai.cloud/v1/chat/completions", `url=${meaiRoute.url}`);
 
-for (const key of Object.keys(previousEnv)) delete process.env[key];
+clearEnv();
 process.env.AI_CHAT_COMPLETIONS_URL = "https://api.chatgptpro4all.com/v1";
-process.env.AI_API_KEY = "sk-test-gptpro4all";
-process.env.ANTHROPIC_API_KEY = "sk-ant-test-dummy";
-process.env.OPENROUTER_API_KEY = "sk-or-test-dummy";
-process.env.OPENAI_API_KEY = "sk-openai-test-dummy";
+process.env.AI_API_KEY = "gptpro-ai-key";
+const gptproRoute = resolveAiRoute("gpt-5.5");
+fail += check("AI_CHAT_COMPLETIONS_URL acepta ChatGPTPro4All", gptproRoute.url === "https://api.chatgptpro4all.com/v1/responses", `url=${gptproRoute.url}`);
+fail += check("ChatGPTPro4All usa Responses API", gptproRoute.wireApi === "responses", `wire=${gptproRoute.wireApi}`);
 
-const customRoute = resolveAiRoute("gpt-5.5");
-const defaultRoute = resolveAiRoute();
-const customDefaults = resolveGafcoreModelDefaults(customRoute.url);
-const okCustom =
-  customRoute.provider === "gptpro4all" &&
-  defaultRoute.provider === "gptpro4all" &&
-  customRoute.wireApi === "responses" &&
-  customRoute.url === "https://api.chatgptpro4all.com/v1/responses" &&
-  customDefaults.fast === "gpt-5.5" &&
-  customDefaults.deep === "gpt-5.5" &&
-  customDefaults.ui === "gpt-5.5";
-if (!okCustom) fail += 1;
-console.log(
-  `\n${okCustom ? "OK " : "FAIL"} chatgptpro4all responses -> provider=${customRoute.provider} url=${customRoute.url} model=${customDefaults.deep}`,
-);
-console.log(
-  `${defaultRoute.provider === "gptpro4all" ? "OK " : "FAIL"} default with Claude configured -> provider=${defaultRoute.provider}`,
-);
+clearEnv();
+process.env.OPENROUTER_API_KEY = "or-test";
+const openRouterRoute = resolveAiRoute("claude-sonnet-4-5");
+fail += check("OpenRouter permitido", openRouterRoute.url === "https://openrouter.ai/api/v1/chat/completions", `url=${openRouterRoute.url}`);
+fail += check("OpenRouter normaliza modelos Claude", openRouterRoute.modelSlug.startsWith("anthropic/"), `model=${openRouterRoute.modelSlug}`);
 
-const claudeRoute = resolveAiRoute("claude-sonnet-4-5");
-const okClaudePriority =
-  claudeRoute.provider === "anthropic" &&
-  claudeRoute.modelSlug === "claude-sonnet-4-5";
-if (!okClaudePriority) fail += 1;
-console.log(
-  `${okClaudePriority ? "OK " : "FAIL"} claude with GPTPRO4ALL configured -> provider=${claudeRoute.provider} slug=${claudeRoute.modelSlug}`,
+clearEnv();
+process.env.GOOGLE_AI_API_KEY = "google-test";
+const geminiRoute = resolveAiRoute("google/gemini-2.5-flash");
+fail += check("Gemini directo permitido", geminiRoute.provider === "gemini", `provider=${geminiRoute.provider}`);
+fail += check("Gemini usa wire API propia", geminiRoute.wireApi === "gemini_generate_content", `wire=${geminiRoute.wireApi}`);
+fail += check("Gemini quita prefijo google/", geminiRoute.modelSlug === "gemini-2.5-flash", `model=${geminiRoute.modelSlug}`);
+
+clearEnv();
+process.env.AI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
+process.env.AI_API_KEY = "sk-openai-test";
+fail += check(
+  "AI_CHAT_COMPLETIONS_URL bloquea OpenAI directo",
+  resolveAllAiRoutes("gpt-4o").length === 0,
 );
 
-const fallbackRoutes = resolveAllAiRoutes("gpt-5.5");
-const openRouterFallback = fallbackRoutes.find((route) => route.provider === "openrouter");
-const openAiFallback = fallbackRoutes.find((route) => route.provider === "openai");
-const okSafeFallback =
-  openRouterFallback?.modelSlug === "openai/gpt-4o-mini" &&
-  openAiFallback?.modelSlug === "gpt-4o-mini";
-if (!okSafeFallback) fail += 1;
-console.log(
-  `${okSafeFallback ? "OK " : "FAIL"} gptpro4all model fallback -> openrouter=${openRouterFallback?.modelSlug} openai=${openAiFallback?.modelSlug}`,
-);
-
-for (const [key, value] of Object.entries(previousEnv)) {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-}
+restoreEnv();
 
 console.log(`\n${fail === 0 ? "[smoke-routing] OK" : `[smoke-routing] FAIL (${fail})`}`);
 process.exit(fail === 0 ? 0 : 1);
