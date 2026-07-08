@@ -62,6 +62,7 @@ for (const [label, cond] of [
   ["sin mensaje de timeout artificial Supabase", !loginShared.includes("La conexion con Supabase tardo demasiado")],
   ["login usa API local de auth", loginShared.includes("/api/gafcore/auth-login")],
   ["API local usa password grant", serverEntry.includes("grant_type=password")],
+  ["POST directo /gafcore/login no devuelve tokens", serverEntry.includes("redirectToSafeLogin") && !serverEntry.includes('path === "/gafcore/login") {\n        return gafcoreAuthLogin')],
   ["login web no depende de signInWithPassword", !loginShared.includes(".signInWithPassword(")],
   ["login page no inicializa SDK Supabase", !loginPage.includes("getGafcoreSupabaseBrowser") && !loginPage.includes("initAuthOnce")],
   ["login page usa readiness via API", loginPage.includes("isGafcoreAuthServerReady")],

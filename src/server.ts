@@ -70,6 +70,17 @@ function supabaseStorageKey(url: string): string {
   }
 }
 
+function redirectToSafeLogin(request: Request): Response {
+  const url = new URL(request.url);
+  const clean = new URL("/gafcore/login", url.origin);
+  const redirectTo = url.searchParams.get("redirect");
+  if (redirectTo?.startsWith("/") && !redirectTo.startsWith("//")) {
+    clean.searchParams.set("redirect", redirectTo);
+  }
+  clean.searchParams.set("loginError", "client_required");
+  return Response.redirect(clean.toString(), 303);
+}
+
 async function gafcoreAuthLogin(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ ok: false, error: "method_not_allowed" }), {
@@ -290,7 +301,7 @@ export default {
 
     if (path.includes("/gafcore/login")) {
       if (request.method === "POST" && path === "/gafcore/login") {
-        return gafcoreAuthLogin(request);
+        return redirectToSafeLogin(request);
       }
       if (loginUrlHasForbiddenParams(url)) {
         return Response.redirect(buildSanitizedLoginUrl(url), 302);

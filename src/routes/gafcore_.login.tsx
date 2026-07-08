@@ -28,7 +28,7 @@ if (typeof window !== "undefined") {
 export const Route = createFileRoute("/gafcore_/login")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { redirect?: string; signedOut?: boolean } => {
+  ): { redirect?: string; signedOut?: boolean; loginError?: "client_required" } => {
     const redirect =
       typeof search.redirect === "string" && search.redirect.startsWith("/") && !search.redirect.startsWith("//")
         ? search.redirect
@@ -36,9 +36,10 @@ export const Route = createFileRoute("/gafcore_/login")({
     const raw = search.signedOut;
     const signedOut =
       raw === true || raw === "true" || raw === "1" || raw === 1 || raw === "yes";
-    const out: { redirect?: string; signedOut?: boolean } = {};
+    const out: { redirect?: string; signedOut?: boolean; loginError?: "client_required" } = {};
     if (redirect) out.redirect = redirect;
     if (signedOut) out.signedOut = true;
+    if (search.loginError === "client_required") out.loginError = "client_required";
     return out;
   },
   beforeLoad: ({ search }) => {
@@ -92,7 +93,7 @@ function GafCoreLoginPage() {
   const [activeSessionEmail, setActiveSessionEmail] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
   const light = false;
-  const { redirect, signedOut } = search;
+  const { redirect, signedOut, loginError } = search;
   const redirectTo = redirect || "/gafcore/app";
   const [urlPasswordWarning, setUrlPasswordWarning] = useState(false);
   const [supabaseReady, setSupabaseReady] = useState<boolean | null>(null);
@@ -130,6 +131,17 @@ function GafCoreLoginPage() {
       search: redirect ? { redirect } : {},
     });
   }, [signedOut, redirect, navigate]);
+
+  useEffect(() => {
+    if (loginError === "client_required") {
+      setError("Por seguridad, vuelve a presionar Entrar. No se mostraron datos de sesion.");
+      navigate({
+        to: "/gafcore/login",
+        replace: true,
+        search: redirect ? { redirect } : {},
+      });
+    }
+  }, [loginError, redirect, navigate]);
 
   useEffect(() => {
     const session = readStoredGafcoreSessionInfo();
