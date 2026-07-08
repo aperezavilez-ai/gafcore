@@ -1,11 +1,11 @@
 /**
- * Bucle agente: generar → validar → reintentar (máx. 3 correcciones).
- * 3 intentos = 1 generación + 2 rondas de auto-corrección. Una página
- * completa suele necesitar 2 correcciones de sintaxis/JSX; con solo 2
- * intentos el gate bloqueaba la entrega ("No se aplicaron cambios").
- * Caso realista: 3 × timeout por llamada (~60 s) ≈ 180 s, bajo el
- * maxDuration=300 s de Vercel. El caso degenerado (reintentos de red por
- * 5xx en cada intento) queda acotado por ese maxDuration.
+ * Bucle agente: generar → validar → reintentar (máx. 4 correcciones).
+ * 4 intentos = 1 generación + 3 rondas de auto-corrección. Builds de varias
+ * páginas suelen necesitar 3 correcciones (sintaxis, imports, edge cases);
+ * con solo 3 intentos el gate bloqueaba la entrega ("No se aplicaron cambios").
+ * Caso realista: 4 × timeout por llamada (~60 s) ≈ 240 s, bajo el
+ * maxDuration=300 s de Vercel. Para builds grandes se eleva maxTokens a 24k
+ * para evitar truncado a mitad de archivo.
  * Ver nota de timeouts en `ai-chat-completions.server.ts`.
  */
 import type { GafcoreChatMessage } from "@/lib/gafcore-media.shared";
@@ -23,7 +23,21 @@ import { enrichGafcoreOutputFiles } from "@/lib/gafcore-media.server";
 import { logDev, logWarn } from "@/lib/gafcore-logger.server";
 import { validateGafcoreProjectCore } from "@/lib/gafcore-validate.server";
 
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 4;
+const MAX_TOKENS_DEFAULT = 16000;
+const MAX_TOKENS_BIG_BUILD = 24000;
+
+/** Detecta pedidos multi-página / multi-sección que justifican más tokens de salida. */
+function isMultiFileBuildInstruction(instruction: string): boolean {
+  const text = instruction.toLowerCase();
+  const hasMultiSignals =
+    /(landing|tienda|app|aplicacion|sitio|web|dashboard|portal|marketplace|saas|ecommerce|e-commerce|catalogo|sistema|plataforma)/.test(text);
+  const hasManySections =
+    /(y|con|incluye|incluir|tambien|ademas).*\b(seccion|secciones|pagina|paginas|producto|productos|secciones|pasos|cards|features|modulos|componentes|landing|home|contacto|servicios|nosotros|hero|pricing|testimonios|faq|blog|carrito|checkout|registro|login|menu|footer|header|galeria|portafolio|testimonials|pricing|cta|newsletter)\b/.test(
+      text,
+    ) || (text.match(/\b(producto|productos|item|items|servicio|servicios|seccion|secciones|pagina|paginas|card|cards|feature|features|modulo|modulos|componente|componentes)\b/g) ?? []).length >= 2;
+  return hasMultiSignals && hasManySections;
+}
 
 /**
  * El build de respaldo (createDeterministicBuildFallbackFiles) es una plantilla
@@ -179,10 +193,7 @@ export async function runGafcoreAgentChatCompletion(input: {
         messages: workingMessages,
         json: true,
         temperature: attempt === 1 ? 0.7 : 0.35,
-        // Builds de proyecto devuelven JSON { reply, files:[...] } que supera el
-        // default de 8192 tokens y se cortaba a mitad de archivo (stop_reason=
-        // max_tokens), produciendo TSX truncado. 16000 = mismo techo que siteBuilderV2.
-        maxTokens: 16000,
+        maxTokens: isMultiFileBuildInstruction(input.instruction) ? MAX_TOKENS_BIG_BUILD : MAX_TOKENS_DEFAULT,
       });
       content = res.content;
       truncated = res.truncated;
@@ -369,7 +380,7 @@ export async function runGafcoreAgentChatCompletion(input: {
           });
           if (fallback) return fallback;
           return {
-            reply: `${replyRaw}\n\nNo se aplicaron cambios: el código no compila.`,
+            reply: `${replyRaw}\n\nEl código no compila tras ${attempt} intentos. Intenta dividir el proyecto en partes más pequeñas o describe la sección que quieres primero.`,
             files: [],
             attempts: attempt,
             validationBlocked: true,
@@ -435,7 +446,7 @@ export async function runGafcoreAgentChatCompletion(input: {
       });
       if (fallback) return fallback;
       return {
-        reply: `${replyRaw}\n\nNo se aplicaron cambios: ${gate.userMessage}`,
+        reply: `${replyRaw}\n\nNo se pudo construir el proyecto: ${gate.userMessage}\n\nIntenta simplificar el pedido o describir qué sección quieres primero (hero, catálogo, contacto, etc.).`,
         files: [],
         attempts: attempt,
         validationBlocked: true,

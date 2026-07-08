@@ -22,9 +22,11 @@ import {
   completeChatMessage,
   consumeAiCredits,
   getGafcoreAiGateway,
+  isGafcoreProxyAiGateway,
   parseUpstreamFailure,
   refundAiCredits,
   streamChatCompletions,
+  tryGetGafcoreAiGateway,
 } from "@/lib/gafcore-ai-gateway.server";
 import {
   runGafcoreAgentChatCompletion,
@@ -196,7 +198,8 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   }
   const data = parsed.data;
 
-  const skipCredits = await isGafcoreAdminUser(userId);
+  const initialGateway = tryGetGafcoreAiGateway();
+  const skipCredits = (await isGafcoreAdminUser(userId)) || isGafcoreProxyAiGateway(initialGateway);
   if (!skipCredits) {
     const limited = await enforceGafcoreChatRateLimit(userId);
     if (limited) return limited;
@@ -213,10 +216,8 @@ export async function handleGafcoreChatStreamPost(request: Request): Promise<Res
   if (govResult instanceof Response) return govResult;
   const { gov, action } = govResult;
 
-  let gateway: ReturnType<typeof getGafcoreAiGateway>;
-  try {
-    gateway = getGafcoreAiGateway();
-  } catch {
+  const gateway = initialGateway;
+  if (!gateway) {
     return jsonResponse({ error: "ai_not_configured" }, 500);
   }
 
@@ -588,7 +589,8 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   }
   const data = parsed.data;
 
-  const skipCredits = await isGafcoreAdminUser(userId);
+  const initialGateway = tryGetGafcoreAiGateway();
+  const skipCredits = (await isGafcoreAdminUser(userId)) || isGafcoreProxyAiGateway(initialGateway);
   if (!skipCredits) {
     const limited = await enforceGafcoreChatRateLimit(userId);
     if (limited) return limited;
@@ -605,10 +607,8 @@ export async function handleGafcoreChatCompletePost(request: Request): Promise<R
   if (govResult instanceof Response) return govResult;
   const { gov, action } = govResult;
 
-  let gateway: ReturnType<typeof getGafcoreAiGateway>;
-  try {
-    gateway = getGafcoreAiGateway();
-  } catch {
+  const gateway = initialGateway;
+  if (!gateway) {
     return jsonResponse({ error: "ai_not_configured" }, 500);
   }
 

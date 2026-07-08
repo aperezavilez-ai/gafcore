@@ -54,6 +54,16 @@ export function tryGetGafcoreAiGateway(): GafcoreAiGateway | null {
   }
 }
 
+export function isGafcoreProxyAiGateway(gateway: GafcoreAiGateway | null | undefined): boolean {
+  if (!gateway) return false;
+  const url = gateway.config.url.toLowerCase();
+  return (
+    /\/api\/proxy(?:\/|$)/i.test(url) &&
+    Boolean(gateway.config.extraHeaders["x-project-key"]) &&
+    Boolean(gateway.config.extraHeaders["x-provider-id"])
+  );
+}
+
 export function resolveGatewayModel(
   gateway: GafcoreAiGateway,
   opts: {
