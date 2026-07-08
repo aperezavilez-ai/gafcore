@@ -1,12 +1,11 @@
 /**
- * Chat con Claude (Anthropic) — capa de servicio para UI y rutas API.
- * La implementación HTTP vive en `ai-chat-completions.server.ts` (API nativa + headers).
+ * Compatibilidad para llamadas antiguas del chat general.
+ * La ejecución real pasa por el gateway permitido de GafCore.
  */
 import { postChatCompletions } from "@/lib/ai-chat-completions.server";
-import {
-  GAFCORE_ANTHROPIC_MODEL_DEFAULT,
-  GAFCORE_ASSISTANT_SYSTEM_PROMPT,
-} from "@/lib/gafcore-assistant-prompt.shared";
+import { GAFCORE_ASSISTANT_SYSTEM_PROMPT } from "@/lib/gafcore-assistant-prompt.shared";
+
+const DEFAULT_COMPAT_MODEL = "anthropic/claude-sonnet-4.5";
 
 export type ClaudeChatMessage = {
   role: "user" | "assistant" | "system";
@@ -21,14 +20,14 @@ export type ClaudeChatOptions = {
 };
 
 /**
- * Envía mensajes a Claude y devuelve el texto de la respuesta (sin stream).
+ * Envía mensajes al gateway de IA y devuelve el texto de la respuesta.
  */
 export async function completeClaudeChat(
   messages: ClaudeChatMessage[],
   options: ClaudeChatOptions = {},
 ): Promise<{ text: string; model: string }> {
   const systemPrompt = options.systemPrompt ?? GAFCORE_ASSISTANT_SYSTEM_PROMPT;
-  const model = options.model ?? GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+  const model = options.model ?? DEFAULT_COMPAT_MODEL;
 
   const conversation = messages.filter((m) => m.role !== "system");
   const res = await postChatCompletions({
@@ -41,7 +40,7 @@ export async function completeClaudeChat(
 
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).slice(0, 400);
-    throw new Error(detail || `Claude API error (${res.status})`);
+    throw new Error(detail || `GafCore AI error (${res.status})`);
   }
 
   const json = (await res.json()) as {
@@ -53,14 +52,14 @@ export async function completeClaudeChat(
 }
 
 /**
- * Stream SSE compatible con OpenAI (para `/api/chat` y el widget flotante).
+ * Stream SSE compatible con el chat general.
  */
 export async function streamClaudeChat(
   messages: ClaudeChatMessage[],
   options: ClaudeChatOptions = {},
 ): Promise<Response> {
   const systemPrompt = options.systemPrompt ?? GAFCORE_ASSISTANT_SYSTEM_PROMPT;
-  const model = options.model ?? GAFCORE_ANTHROPIC_MODEL_DEFAULT;
+  const model = options.model ?? DEFAULT_COMPAT_MODEL;
   const conversation = messages.filter((m) => m.role !== "system");
 
   return postChatCompletions({

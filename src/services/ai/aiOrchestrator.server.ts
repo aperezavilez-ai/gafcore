@@ -9,9 +9,7 @@ import {
   resolveGatewayModel,
   tryGetGafcoreAiGateway,
 } from "@/lib/gafcore-ai-gateway.server";
-import { getOpenAiProviderStatus } from "@/services/ai/providers/openai.provider.server";
 import { getGeminiProviderStatus } from "@/services/ai/providers/gemini.provider.server";
-import { getAnthropicProviderStatus } from "@/services/ai/providers/anthropic.provider.server";
 import { getElevenLabsProviderStatus } from "@/services/ai/providers/elevenlabs.provider.server";
 import {
   buildDesignMotorPromptAppend,
@@ -28,8 +26,6 @@ import type {
 
 function mapResolvedProvider(p: ResolvedProvider): AiBrainProviderId {
   if (p === "openrouter") return "openrouter";
-  if (p === "openai") return "openai";
-  if (p === "anthropic") return "anthropic";
   if (p === "gptpro4all") return "gptpro4all";
   if (p === "gemini") return "gemini";
   return "custom";
@@ -62,8 +58,7 @@ function getGptpro4AllProviderStatus() {
 function inferProviderFromModel(model: string): AiBrainProviderId {
   const family = detectModelFamily(model);
   if (family === "gemini") return "gemini";
-  if (family === "claude") return "anthropic";
-  if (family === "openai") return "openai";
+  if (family === "claude" || family === "openai") return mapResolvedProvider(resolveAiRoute(model).provider);
   return mapResolvedProvider(resolveAiRoute(model).provider);
 }
 
@@ -95,7 +90,7 @@ export function resolveBrainRoute(request: AiBrainRequest): AiBrainRoute {
     return {
       task,
       model: "",
-      provider: "openai",
+      provider: "custom",
       tier: "fast",
       usesChatCompletions: false,
       note: "IA no configurada.",
@@ -157,9 +152,7 @@ export function resolveBrainRoute(request: AiBrainRequest): AiBrainRoute {
 export function listBrainProviderStatuses() {
   return [
     getGptpro4AllProviderStatus(),
-    getOpenAiProviderStatus(),
     getGeminiProviderStatus(),
-    getAnthropicProviderStatus(),
     getElevenLabsProviderStatus(),
   ];
 }

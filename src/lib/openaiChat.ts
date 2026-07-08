@@ -1,4 +1,5 @@
 import type { FileItem } from "@/components/ide/CodeEditor";
+import { completeChatMessage } from "@/lib/gafcore-ai-gateway.server";
 
 export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 
@@ -20,7 +21,7 @@ Reglas:
 - No incluyas markdown, no envuelvas en \`\`\`. Solo JSON válido.`;
 
 export async function chatEditCode(
-  apiKey: string,
+  _apiKey: string,
   model: string,
   history: ChatMsg[],
   userInstruction: string,
@@ -36,26 +37,13 @@ export async function chatEditCode(
     },
   ];
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      response_format: { type: "json_object" },
-      temperature: 0.2,
-    }),
+  const completed = await completeChatMessage({
+    model,
+    messages,
+    json: true,
+    temperature: 0.2,
   });
-
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenAI ${res.status}: ${t.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  const content: string = data.choices?.[0]?.message?.content ?? "{}";
+  const content = completed.content || "{}";
   let parsed: CodeEditResult;
   try {
     parsed = JSON.parse(content);

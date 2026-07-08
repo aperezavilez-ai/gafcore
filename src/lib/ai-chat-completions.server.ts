@@ -2,17 +2,12 @@
  * Cliente OpenAI-compatible (`/v1/chat/completions`) con router multi-proveedor.
  * Enruta cada llamada al proveedor más adecuado según el modelo solicitado.
  *
- * Configurable:
- * - `ANTHROPIC_API_KEY` → Claude directo (preferido para modelos claude-*).
- * - `OPENROUTER_API_KEY` → OpenRouter (cubre todos los modelos).
- * - `OPENAI_API_KEY` → OpenAI directo.
- * - `AI_CHAT_COMPLETIONS_URL` + `AI_API_KEY` → endpoint custom (máxima prioridad).
+ * Proveedores permitidos:
+ * - api.meai.cloud
+ * - api.chatgptpro4all.com
+ * - openrouter.ai
+ * - Google Gemini directo
  */
-import {
-  GAFCORE_ANTHROPIC_API_VERSION,
-  GAFCORE_ANTHROPIC_MODEL_DEFAULT,
-  GAFCORE_ANTHROPIC_MODEL_RETIRED,
-} from "@/lib/gafcore-assistant-prompt.shared";
 import {
   resolveAiRoute,
   resolveAllAiRoutesForRequest,
@@ -65,145 +60,6 @@ export type ChatCompletionsBody = {
   model?: string;
   [key: string]: unknown;
 };
-
-/**
- * Convierte un body OpenAI-style a `messages.create` nativo de Anthropic.
- * El endpoint OpenAI-compat de Anthropic aún no cubre todos los casos en estable,
- * así que enviamos en el formato nativo para máxima compatibilidad.
- */
-function toAnthropicBody(body: ChatCompletionsBody, modelSlug: string): Record<string, unknown> {
-  const messages = Array.isArray(body.messages) ? body.messages : [];
-  const systemParts: string[] = [];
-  const conversation: Array<{ role: "user" | "assistant"; content: unknown }> = [];
-
-  for (const m of messages as Array<{ role: string; content: unknown }>) {
-    if (!m || typeof m !== "object") continue;
-    if (m.role === "system") {
-      if (typeof m.content === "string") systemParts.push(m.content);
-      continue;
-    }
-    if (m.role !== "user" && m.role !== "assistant") continue;
-    if (typeof m.content === "string") {
-      conversation.push({ role: m.role, content: m.content });
-      continue;
-    }
-    if (Array.isArray(m.content)) {
-      const parts = m.content
-        .map((p) => {
-          if (!p || typeof p !== "object") return null;
-          const part = p as { type?: string; text?: string; image_url?: { url?: string } };
-          if (part.type === "text" && typeof part.text === "string") {
-            return { type: "text", text: part.text };
-          }
-          if (part.type === "image_url" && part.image_url?.url) {
-            return {
-              type: "image",
-              source: { type: "url", url: part.image_url.url },
-            };
-          }
-          return null;
-        })
-        .filter(Boolean);
-      conversation.push({ role: m.role, content: parts });
-      continue;
-    }
-  }
-
-  const rf = body.response_format;
-  const wantsJson =
-    rf &&
-    typeof rf === "object" &&
-    (rf as { type?: string }).type === "json_object";
-  if (wantsJson) {
-    systemParts.push(
-      "Responde con un único objeto JSON válido. Sin markdown, sin texto antes ni después del JSON.",
-    );
-  }
-
-  const anthropicModel = GAFCORE_ANTHROPIC_MODEL_RETIRED.has(modelSlug)
-    ? GAFCORE_ANTHROPIC_MODEL_DEFAULT
-    : modelSlug;
-
-  const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : 8192;
-  const out: Record<string, unknown> = {
-    model: anthropicModel,
-    messages: conversation,
-    max_tokens: maxTokens,
-  };
-  if (systemParts.length) out.system = systemParts.join("\n\n");
-  if (typeof body.temperature === "number") out.temperature = body.temperature;
-  if (body.stream) out.stream = body.stream;
-  return out;
-}
-
-/** Convierte SSE de Anthropic Messages API a formato OpenAI (widget `/api/chat`). */
-function wrapAnthropicStreamResponse(res: Response): Response {
-  if (!res.ok || !res.body) return res;
-
-  const reader = res.body.getReader();
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      let buffer = "";
-      let stopReason: string | null = null;
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          let lineEnd: number;
-          while ((lineEnd = buffer.indexOf("\n")) !== -1) {
-            const line = buffer.slice(0, lineEnd).trim();
-            buffer = buffer.slice(lineEnd + 1);
-            if (!line.startsWith("data:")) continue;
-            const payload = line.replace(/^data:\s*/, "").trim();
-            if (!payload || payload === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(payload) as {
-                type?: string;
-                delta?: { type?: string; text?: string; stop_reason?: string };
-              };
-              if (
-                parsed.type === "content_block_delta" &&
-                parsed.delta?.type === "text_delta" &&
-                parsed.delta.text
-              ) {
-                const chunk = { choices: [{ delta: { content: parsed.delta.text } }] };
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-              } else if (parsed.type === "message_delta" && parsed.delta?.stop_reason) {
-                // Anthropic emite stop_reason en message_delta. Lo propagamos como
-                // finish_reason OpenAI para que el cliente detecte truncación.
-                stopReason = parsed.delta.stop_reason;
-              }
-            } catch {
-              /* línea parcial SSE */
-            }
-          }
-        }
-        if (stopReason) {
-          const finishReason = stopReason === "max_tokens" ? "length" : stopReason;
-          const tail = { choices: [{ delta: {}, finish_reason: finishReason }] };
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(tail)}\n\n`));
-        }
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-  });
-
-  return new Response(stream, {
-    status: res.status,
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
-}
 
 function messageContentToText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -357,55 +213,6 @@ function wrapResponsesApiStreamResponse(res: Response): Response {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     },
-  });
-}
-
-/** Envuelve una respuesta nativa de Anthropic como si fuera OpenAI chat-completions. */
-async function wrapAnthropicResponse(res: Response): Promise<Response> {
-  if (!res.ok) return res;
-  const json = (await res.json().catch(() => null)) as
-    | {
-        id?: string;
-        model?: string;
-        content?: Array<{ type?: string; text?: string }>;
-        stop_reason?: string;
-        usage?: { input_tokens?: number; output_tokens?: number };
-      }
-    | null;
-
-  if (!json) {
-    return new Response(JSON.stringify({ error: "anthropic_invalid_response" }), {
-      status: 502,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const text = (json.content ?? [])
-    .filter((c) => c?.type === "text" && typeof c.text === "string")
-    .map((c) => c.text)
-    .join("");
-
-  const openaiShape = {
-    id: json.id ?? `anthropic-${Date.now()}`,
-    object: "chat.completion",
-    model: json.model ?? "claude",
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content: text },
-        finish_reason: json.stop_reason ?? "stop",
-      },
-    ],
-    usage: {
-      prompt_tokens: json.usage?.input_tokens ?? 0,
-      completion_tokens: json.usage?.output_tokens ?? 0,
-      total_tokens: (json.usage?.input_tokens ?? 0) + (json.usage?.output_tokens ?? 0),
-    },
-  };
-
-  return new Response(JSON.stringify(openaiShape), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
   });
 }
 

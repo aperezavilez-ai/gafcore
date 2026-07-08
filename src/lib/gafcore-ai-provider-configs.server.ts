@@ -7,7 +7,6 @@ import {
   type ResolvedRoute,
 } from "@/lib/gafcore-model-routing.shared";
 import { GPTPRO4ALL_API_DEFAULT_MODEL } from "@/lib/gafcore-chat.shared";
-import { GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
 import { logDev } from "@/lib/gafcore-logger.server";
 
 type ProviderConfigRow = {
@@ -48,21 +47,13 @@ type ProviderConfigQueryResult = {
   error: { code?: string; message: string } | null;
 };
 
-const providerDefaults: Record<ResolvedProvider, { baseUrl: string; model: string; wireApi: AiWireApi }> = {
+type AdminAllowedProvider = Exclude<ResolvedProvider, "anthropic" | "openai">;
+
+const providerDefaults: Record<AdminAllowedProvider, { baseUrl: string; model: string; wireApi: AiWireApi }> = {
   gptpro4all: {
     baseUrl: "https://api.chatgptpro4all.com/v1",
     model: GPTPRO4ALL_API_DEFAULT_MODEL,
     wireApi: "responses",
-  },
-  anthropic: {
-    baseUrl: "https://api.anthropic.com/v1/messages",
-    model: GAFCORE_ANTHROPIC_MODEL_DEFAULT,
-    wireApi: "chat_completions",
-  },
-  openai: {
-    baseUrl: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o-mini",
-    wireApi: "chat_completions",
   },
   openrouter: {
     baseUrl: "https://openrouter.ai/api/v1/chat/completions",
@@ -80,6 +71,10 @@ const providerDefaults: Record<ResolvedProvider, { baseUrl: string; model: strin
     wireApi: "chat_completions",
   },
 };
+
+function isAdminAllowedProvider(provider: ResolvedProvider): provider is AdminAllowedProvider {
+  return provider !== "anthropic" && provider !== "openai";
+}
 
 function db(): ProviderConfigDb {
   return supabaseAdmin as unknown as ProviderConfigDb;
@@ -148,17 +143,6 @@ function modelForProvider(row: ProviderConfigRow, modelHint?: string): string {
     return family === "claude" ? fallback : normalizeModelSlug(requested, "gptpro4all");
   }
 
-  if (provider === "anthropic") {
-    return family === "claude" ? normalizeModelSlug(requested, "anthropic") : fallback;
-  }
-
-  if (provider === "openai") {
-    if (family === "openai" && !isGptpro4AllModel(requested)) {
-      return normalizeModelSlug(requested, "openai");
-    }
-    return fallback || "gpt-4o-mini";
-  }
-
   if (provider === "openrouter") {
     if (isGptpro4AllModel(requested)) return fallback || "openai/gpt-4o-mini";
     if (family === "openai" || family === "claude" || family === "gemini") {
@@ -171,9 +155,9 @@ function modelForProvider(row: ProviderConfigRow, modelHint?: string): string {
 }
 
 function routeUrlForProvider(row: ProviderConfigRow): string {
+  if (!isAdminAllowedProvider(row.provider)) return "";
   const base = row.base_url?.trim() || providerDefaults[row.provider].baseUrl;
   const wireApi = row.wire_api || providerDefaults[row.provider].wireApi;
-  if (row.provider === "anthropic") return "https://api.anthropic.com/v1/messages";
   if (row.provider === "gemini") return base.replace(/\/+$/g, "");
   if (wireApi === "responses") return normalizeResponsesUrl(base);
   return normalizeChatCompletionsUrl(base);
@@ -209,19 +193,21 @@ export async function listGafcoreAiProviderConfigs(): Promise<AdminAiProviderCon
     if (isMissingConfigStorage(error)) return [];
     throw new Error(error.message);
   }
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    provider: row.provider,
-    label: row.label?.trim() || row.provider,
-    baseUrl: row.base_url?.trim() || providerDefaults[row.provider].baseUrl,
-    defaultModel: row.default_model?.trim() || providerDefaults[row.provider].model,
-    wireApi: row.wire_api || providerDefaults[row.provider].wireApi,
-    priority: row.priority ?? 100,
-    isActive: row.is_active ?? true,
-    apiKeyHint: row.api_key_hint?.trim() || "",
-    createdAt: row.created_at ?? "",
-    updatedAt: row.updated_at ?? "",
-  }));
+  return (data ?? [])
+    .filter((row) => isAdminAllowedProvider(row.provider))
+    .map((row) => ({
+      id: row.id,
+      provider: row.provider,
+      label: row.label?.trim() || row.provider,
+      baseUrl: row.base_url?.trim() || providerDefaults[row.provider].baseUrl,
+      defaultModel: row.default_model?.trim() || providerDefaults[row.provider].model,
+      wireApi: row.wire_api || providerDefaults[row.provider].wireApi,
+      priority: row.priority ?? 100,
+      isActive: row.is_active ?? true,
+      apiKeyHint: row.api_key_hint?.trim() || "",
+      createdAt: row.created_at ?? "",
+      updatedAt: row.updated_at ?? "",
+    }));
 }
 
 export async function listActiveGafcoreAiProviderRoutes(modelHint?: string): Promise<ResolvedRoute[]> {
@@ -248,6 +234,10 @@ export async function listActiveGafcoreAiProviderRoutes(modelHint?: string): Pro
 
   const routes: ResolvedRoute[] = [];
   for (const row of data ?? []) {
+    if (!isAdminAllowedProvider(row.provider)) {
+      logDev("gafcore_ai_provider_config_ignored", { provider: row.provider });
+      continue;
+    }
     const { data: apiKey, error: keyError } = await db().rpc("decrypt_gafcore_ai_provider_key", {
       p_config_id: row.id,
     });
@@ -291,6 +281,9 @@ export async function saveGafcoreAiProviderConfig(input: {
   userId: string;
 }): Promise<void> {
   const provider = input.provider;
+  if (!isAdminAllowedProvider(provider)) {
+    throw new Error("Proveedor no permitido para GafCore.");
+  }
   const values: Record<string, unknown> = {
     provider,
     label: input.label?.trim() || provider,
@@ -329,25 +322,6 @@ async function fetchProviderProbe(
   const model = route.modelSlug?.trim();
 
   try {
-    if (route.provider === "anthropic") {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": route.apiKey,
-          "anthropic-version": "2023-06-01",
-          ...route.extraHeaders,
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 8,
-          messages: [{ role: "user", content: "Responde solo OK." }],
-        }),
-      });
-      return { ok: res.ok, status: res.status };
-    }
-
     if (route.wireApi === "responses") {
       const res = await fetch(route.url, {
         method: "POST",

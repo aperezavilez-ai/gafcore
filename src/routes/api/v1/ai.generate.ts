@@ -54,7 +54,11 @@ export const Route = createFileRoute("/api/v1/ai/generate")({
         try {
           gateway = getGafcoreAiGateway();
         } catch {
-          return jsonError(500, "ai_not_configured", "AI is not configured (set OPENROUTER_API_KEY or OPENAI_API_KEY).");
+          return jsonError(
+            500,
+            "ai_not_configured",
+            "AI is not configured (set MEAI_API_KEY, GPTPRO4ALL_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY/GOOGLE_AI_API_KEY, or an allowed AI_CHAT_COMPLETIONS_URL).",
+          );
         }
 
         const resolvedModel = resolveGatewayModel(gateway, {

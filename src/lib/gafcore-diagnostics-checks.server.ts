@@ -17,11 +17,12 @@ function hasEnv(key: string): boolean {
 }
 
 function aiConfigured(): boolean {
+  if (hasEnv("MEAI_API_KEY") || hasEnv("GAFCORE_MEAI_API_KEY")) return true;
   if (hasEnv("GPTPRO4ALL_API_KEY")) return true;
   if (hasEnv("GPTPRO4ALL_BASE_URL") && hasEnv("AI_API_KEY")) return true;
   if (hasEnv("AI_CHAT_COMPLETIONS_URL") && hasEnv("AI_API_KEY")) return true;
   if (hasEnv("OPENROUTER_API_KEY")) return true;
-  if (hasEnv("OPENAI_API_KEY")) return true;
+  if (hasEnv("GEMINI_API_KEY") || hasEnv("GOOGLE_AI_API_KEY") || hasEnv("GOOGLE_API_KEY")) return true;
   return false;
 }
 
@@ -88,7 +89,8 @@ export function runEnvDoctorChecks(): DiagnosticFinding[] {
     add({
       module: "integration",
       title: "IA no configurada",
-      description: "Falta GPTPRO4ALL_API_KEY, OPENROUTER_API_KEY, OPENAI_API_KEY o AI_CHAT_COMPLETIONS_URL+AI_API_KEY.",
+      description:
+        "Falta MEAI_API_KEY, GPTPRO4ALL_API_KEY, OPENROUTER_API_KEY, GEMINI_API_KEY/GOOGLE_AI_API_KEY o AI_CHAT_COMPLETIONS_URL+AI_API_KEY hacia un host permitido.",
       impact: "Chat del IDE y generación no disponibles",
       severity: "high",
       source: "doctor",

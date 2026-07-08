@@ -24,7 +24,6 @@ import {
 } from "@/services/ai/design-engine.shared";
 import { prepareIncrementalEditSession } from "@/lib/gafcore-incremental-edit.shared";
 import { buildIntegrityShieldPromptAppend, GAFCORE_INTEGRITY_SHIELD_RULE } from "@/lib/gafcore-integrity-shield.shared";
-import { GAFCORE_ANTHROPIC_MODEL_DEFAULT } from "@/lib/gafcore-assistant-prompt.shared";
 import {
   buildProfessionalAgentPromptAppend,
   buildPromptMasterPromptAppend,
@@ -140,34 +139,21 @@ Reglas de **archivos (eficiencia)**:
 export const COST_PER_REQUEST = 1;
 
 /**
- * Slugs OpenRouter — cerebro multi-proveedor (competir con Lovable/v0):
- * - Fast: Gemini Flash → chat y respuestas rápidas.
- * - Deep: GPT-4o → generación de código React/Tailwind (calidad tipo v0).
- * - UI: Gemini Pro → diseño visual, layout y auditoría estética.
+ * Slugs de modelo para proveedores permitidos. Los prefijos `openai/` y
+ * `anthropic/` son nombres de modelo usados por OpenRouter, no rutas HTTP
+ * directas a proveedores externos.
  * Sobrescribibles: AI_MODEL_FAST / AI_MODEL_DEEP / AI_MODEL_UI.
  */
 export const MODEL_FAST = "google/gemini-2.0-flash-001";
 export const MODEL_DEEP = "openai/gpt-4o";
 export const MODEL_UI = "google/gemini-2.5-pro";
 
-/** Defaults con API nativa Anthropic (ANTHROPIC_API_KEY en Vercel). */
-export const ANTHROPIC_API_DEFAULT_FAST = GAFCORE_ANTHROPIC_MODEL_DEFAULT;
-export const ANTHROPIC_API_DEFAULT_DEEP = GAFCORE_ANTHROPIC_MODEL_DEFAULT;
-export const ANTHROPIC_API_DEFAULT_UI = GAFCORE_ANTHROPIC_MODEL_DEFAULT;
-
-/** IDs por defecto en API nativa OpenAI (sin OpenRouter). */
-export const OPENAI_API_DEFAULT_FAST = "gpt-4o-mini";
-export const OPENAI_API_DEFAULT_DEEP = "gpt-4o";
-export const OPENAI_API_DEFAULT_UI = "gpt-4o";
-
 /** Defaults para GPTPRO4ALL / ChatGPTPro4All (endpoint OpenAI-compatible). */
 export const GPTPRO4ALL_API_DEFAULT_MODEL = "gpt-5.5";
 
 /**
  * Elige defaults de modelo según el host del endpoint.
- * Con el router multi-proveedor (ANTHROPIC_API_KEY + OPENROUTER_API_KEY) los
- * slugs estilo OpenRouter (`anthropic/claude-sonnet-4.5`, `openai/gpt-4o-mini`)
- * son válidos en cualquier ruta: el router normaliza al formato del proveedor.
+ * El router solo permite MeAI, ChatGPTPro4All, OpenRouter y Gemini directo.
  */
 export function resolveGafcoreModelDefaults(chatCompletionsUrl?: string): {
   fast: string;
@@ -175,7 +161,7 @@ export function resolveGafcoreModelDefaults(chatCompletionsUrl?: string): {
   ui: string;
 } {
   const u = (chatCompletionsUrl ?? "").toLowerCase();
-  const isGptpro4All = u.includes("api.chatgptpro4all.com");
+  const isGptpro4All = u.includes("api.chatgptpro4all.com") || u.includes("api.meai.cloud");
   if (isGptpro4All) {
     return {
       fast: process.env.AI_MODEL_FAST?.trim() || GPTPRO4ALL_API_DEFAULT_MODEL,
@@ -184,32 +170,18 @@ export function resolveGafcoreModelDefaults(chatCompletionsUrl?: string): {
     };
   }
 
-  const isOpenAiNative =
-    u.includes("api.openai.com") && !u.includes("openrouter") && !u.includes("anthropic");
-  const isCustomOpenAiCompatible =
-    Boolean(u) && !u.includes("openrouter.ai") && !u.includes("anthropic.com");
-  if (isOpenAiNative || isCustomOpenAiCompatible) {
+  if (u.includes("generativelanguage.googleapis.com") || u.includes(".aiplatform.googleapis.com")) {
     return {
-      fast: process.env.AI_MODEL_FAST?.trim() || OPENAI_API_DEFAULT_FAST,
-      deep: process.env.AI_MODEL_DEEP?.trim() || OPENAI_API_DEFAULT_DEEP,
-      ui: process.env.AI_MODEL_UI?.trim() || OPENAI_API_DEFAULT_UI,
-    };
-  }
-
-  const hasAnthropic =
-    typeof process !== "undefined" && Boolean(process.env.ANTHROPIC_API_KEY?.trim());
-  if (hasAnthropic) {
-    return {
-      fast: process.env.AI_MODEL_FAST?.trim() || ANTHROPIC_API_DEFAULT_FAST,
-      deep: process.env.AI_MODEL_DEEP?.trim() || ANTHROPIC_API_DEFAULT_DEEP,
-      ui: process.env.AI_MODEL_UI?.trim() || ANTHROPIC_API_DEFAULT_UI,
+      fast: process.env.AI_MODEL_FAST?.trim() || "gemini-2.0-flash",
+      deep: process.env.AI_MODEL_DEEP?.trim() || "gemini-2.5-pro",
+      ui: process.env.AI_MODEL_UI?.trim() || "gemini-2.5-pro",
     };
   }
 
   return {
-    fast: isOpenAiNative ? OPENAI_API_DEFAULT_FAST : MODEL_FAST,
-    deep: isOpenAiNative ? OPENAI_API_DEFAULT_DEEP : MODEL_DEEP,
-    ui: isOpenAiNative ? OPENAI_API_DEFAULT_UI : MODEL_UI,
+    fast: MODEL_FAST,
+    deep: MODEL_DEEP,
+    ui: MODEL_UI,
   };
 }
 

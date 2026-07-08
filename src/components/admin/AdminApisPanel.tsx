@@ -36,18 +36,6 @@ const providerDefaults: Record<ResolvedProvider, Omit<ApiFormState, "provider" |
     defaultModel: "gpt-5.5",
     wireApi: "responses",
   },
-  anthropic: {
-    label: "Claude",
-    baseUrl: "https://api.anthropic.com/v1/messages",
-    defaultModel: "claude-3-5-sonnet-latest",
-    wireApi: "chat_completions",
-  },
-  openai: {
-    label: "OpenAI",
-    baseUrl: "https://api.openai.com/v1/chat/completions",
-    defaultModel: "gpt-4o-mini",
-    wireApi: "chat_completions",
-  },
   openrouter: {
     label: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1/chat/completions",
@@ -296,8 +284,6 @@ export function AdminApisPanel() {
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="gptpro4all">GPTPRO4ALL</option>
-                <option value="anthropic">Claude / Anthropic</option>
-                <option value="openai">OpenAI</option>
                 <option value="openrouter">OpenRouter</option>
                 <option value="gemini">Gemini</option>
                 <option value="custom">Custom</option>

@@ -1,7 +1,7 @@
 /**
- * GafCore Builder V2 — generador de sitios HTML autónomos con Claude.
+ * GafCore Builder V2 — generador de sitios HTML autónomos con gateway IA.
  *
- * Diseño deliberadamente simple: una sola llamada a Claude, un solo archivo
+ * Diseño deliberadamente simple: una sola llamada al gateway, un solo archivo
  * HTML de salida (con CSS/JS embebidos). Sin multi-proveedor, sin pipeline
  * de varios pasos. Esto existe para tener una ruta confiable y depurable,
  * separada del builder legado (GafCoreIDE.tsx) que no se toca.
